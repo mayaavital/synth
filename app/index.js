@@ -8,7 +8,7 @@ import {
   Dimensions,
   require,
 } from "react-native";
-import { colors } from "./assets/colors";
+//import { colors } from "./assets/colors";
 import { useRouter } from "expo-router";
 
 const windowWidth = Dimensions.get("window").width;
@@ -27,7 +27,7 @@ export default function App() {
         onPress={() => router.push("home")}
       >
         <Image
-          source={"./assets/spotify-logo.png"}
+          source={"../assets/spotify-logo.png"}
           style={styles.spotifyLogo}
         />
         <Text style={styles.text}>Login with Spotify</Text>
@@ -48,40 +48,44 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    //backgroundColor: colors.background,
+    backgroundColor: "#1E1E1E",
     alignItems: "center",
     justifyContent: "center",
   },
   connectSpotify: {
-    backgroundColor: colors.spotify,
+    // backgroundColor: colors.spotify,
+    backgroundColor: "#C6E1B8",
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
     borderRadius: (windowHeight * 0.1) / 2,
-    height: windowHeight * 0.05,
-    width: windowWidth * 0.6,
+    height: windowHeight * 0.08,
+    width: windowWidth * 0.7,
   },
   connectApple: {
-    backgroundColor: colors.apple,
+    // backgroundColor: colors.apple,
+    backgroundColor: "#F1D5EE",
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
     borderRadius: (windowHeight * 0.1) / 2,
-    height: windowHeight * 0.05,
-    width: windowWidth * 0.6,
+    height: windowHeight * 0.08,
+    width: windowWidth * 0.7,
   },
   spotifyLogo: {
-    height: windowWidth * 0.08,
-    width: windowWidth * 0.08,
+    height: windowWidth * 0.05,
+    width: windowWidth * 0.05,
+    resizeMode: "contain",
   },
   synth_container: {
     backgroundColor: "#C6B6DD",
-    height: windowWidth * 0.5,
+    height: windowWidth * 0.3,
     width: windowWidth * 0.6,
     justifyContent: "center",
     alignItems: "center",
     position: "absolute",
-    top: windowWidth * 0.25,
+    top: windowWidth * 0.15,
     borderRadius: 20,
   },
   synth_text: {
