@@ -85,6 +85,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     padding: 20,
+    shadowColor: "#C6B6DD", // light purple (#c084fc is Tailwind's purple-400)
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
   },
   iconContainer: {
     backgroundColor: "#523676",
