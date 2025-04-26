@@ -7,20 +7,26 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "expo-router";
+import { useEffect } from "react";
 
 export default function home() {
   const navigation = useNavigation();
-  navigation.setOptions({
-    headerLeft: () => (
-      <TouchableOpacity
-        onPress={() => {
-          alert("implement logout");
-        }}
-      >
-        <Ionicons name="menu" size={32} color="white" />
-      </TouchableOpacity>
-    ),
-  });
+  
+  // Move navigation.setOptions to a useEffect hook
+  useEffect(() => {
+    navigation.setOptions({
+      headerLeft: () => (
+        <TouchableOpacity
+          onPress={() => {
+            alert("implement logout");
+          }}
+        >
+          <Ionicons name="menu" size={32} color="white" />
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation]); // Only re-run if navigation changes
+  
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.cardContainer}>

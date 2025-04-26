@@ -1,90 +1,34 @@
-import { StatusBar } from "expo-status-bar";
-import {
-  StyleSheet,
-  Text,
-  View,
-  Pressable,
-  Image,
-  Dimensions,
-  require,
-} from "react-native";
-import { colors } from "./assets/colors";
-import { useRouter } from "expo-router";
+import { View, Text } from 'react-native';
+import { useFonts } from 'expo-font';
+import { useCallback } from 'react';
+import { Stack } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 
-const windowWidth = Dimensions.get("window").width;
-const windowHeight = Dimensions.get("window").height;
+// Prevent the splash screen from auto-hiding
+SplashScreen.preventAutoHideAsync();
 
 export default function App() {
-  const router = useRouter();
+  // Load fonts if needed
+  const [fontsLoaded] = useFonts({
+    // You can add custom fonts here if needed
+    // 'MyFont': require('./assets/fonts/MyFont.ttf'),
+  });
 
+  const onLayoutRootView = useCallback(async () => {
+    if (fontsLoaded) {
+      // Hide the splash screen
+      await SplashScreen.hideAsync();
+    }
+  }, [fontsLoaded]);
+
+  if (!fontsLoaded) {
+    return null;
+  }
+
+  // Return a wrapper that renders the Expo Router
   return (
-    <View style={styles.container}>
-      <View style={styles.synth_container}>
-        <Text style={styles.synth_text}>SYNTH</Text>
-      </View>
-      <Pressable
-        style={styles.connectSpotify}
-        onPress={() => router.push("home")}
-      >
-        <Image
-          source={"./assets/spotify-logo.png"}
-          style={styles.spotifyLogo}
-        />
-        <Text style={styles.text}>Login with Spotify</Text>
-      </Pressable>
-
-      <Pressable
-        style={styles.connectApple}
-        marginTop={windowHeight * 0.01}
-        onPress={() => getSpotifyAuth()}
-      >
-        <Image source={"./assets/apple-music.png"} style={styles.spotifyLogo} />
-        <Text style={styles.text}>Login with Apple Music</Text>
-      </Pressable>
+    <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
+      <Stack />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  connectSpotify: {
-    backgroundColor: colors.spotify,
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    borderRadius: (windowHeight * 0.1) / 2,
-    height: windowHeight * 0.05,
-    width: windowWidth * 0.6,
-  },
-  connectApple: {
-    backgroundColor: colors.apple,
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    borderRadius: (windowHeight * 0.1) / 2,
-    height: windowHeight * 0.05,
-    width: windowWidth * 0.6,
-  },
-  spotifyLogo: {
-    height: windowWidth * 0.08,
-    width: windowWidth * 0.08,
-  },
-  synth_container: {
-    backgroundColor: "#C6B6DD",
-    height: windowWidth * 0.5,
-    width: windowWidth * 0.6,
-    justifyContent: "center",
-    alignItems: "center",
-    position: "absolute",
-    top: windowWidth * 0.25,
-    borderRadius: 20,
-  },
-  synth_text: {
-    fontFamily: "",
-  },
-});
