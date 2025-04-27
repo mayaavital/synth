@@ -25,7 +25,7 @@ export default function App() {
   const router = useRouter();
   const { token, authError, getSpotifyAuth } = useSpotifyAuth();
   const [isAuthenticating, setIsAuthenticating] = useState(false);
-  
+
   // Font loading
   const [fontsLoaded] = useFonts({
     // we can add custom fonts here
@@ -51,7 +51,7 @@ export default function App() {
   useEffect(() => {
     if (token) {
       console.log("Authentication successful, navigating to home");
-      router.push("home");
+      router.push("/inGame");
     }
   }, [token, router]);
 
@@ -63,10 +63,8 @@ export default function App() {
   // Conditional rendering
   let contentDisplayed = (
     <View style={styles.container} onLayout={onLayoutRootView}>
-      <View style={styles.synth_container}>
-        <Text style={styles.synth_text}>SYNTH</Text>
-      </View>
-      
+      <Image source={require("../assets/logo.png")} marginBottom={60} />
+
       {isAuthenticating ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#C6E1B8" />
@@ -81,7 +79,7 @@ export default function App() {
           >
             <Text style={styles.text}>Login with Spotify</Text>
             <Image
-              source={require('../assets/spotify-logo.png')}
+              source={require("../assets/spotify-logo.png")}
               style={styles.spotifyLogo}
             />
           </Pressable>
@@ -93,11 +91,14 @@ export default function App() {
             disabled={isAuthenticating}
           >
             <Text style={styles.text}>Login with Apple Music</Text>
-            <Image source={require('../assets/apple-music.png')} style={styles.spotifyLogo} />
+            <Image
+              source={require("../assets/apple-music.png")}
+              style={styles.spotifyLogo}
+            />
           </Pressable>
         </>
       )}
-      
+
       {authError && (
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>
@@ -128,23 +129,23 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   loadingContainer: {
-    alignItems: 'center',
+    alignItems: "center",
     marginVertical: 20,
   },
   loadingText: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     marginTop: 10,
     fontSize: 16,
   },
   errorContainer: {
     marginTop: 20,
     padding: 10,
-    backgroundColor: 'rgba(255, 0, 0, 0.1)',
+    backgroundColor: "rgba(255, 0, 0, 0.1)",
     borderRadius: 5,
   },
   errorText: {
-    color: '#FF6B6B',
-    textAlign: 'center',
+    color: "#FF6B6B",
+    textAlign: "center",
   },
   connectSpotify: {
     backgroundColor: "#C6E1B8",
@@ -155,6 +156,7 @@ const styles = StyleSheet.create({
     height: windowHeight * 0.08,
     width: windowWidth * 0.7,
     paddingHorizontal: windowWidth * 0.05,
+    elevation: 5,
   },
   connectApple: {
     backgroundColor: "#F1D5EE",
@@ -165,6 +167,7 @@ const styles = StyleSheet.create({
     height: windowHeight * 0.08,
     width: windowWidth * 0.7,
     paddingHorizontal: windowWidth * 0.05,
+    elevation: 5,
   },
   spotifyLogo: {
     height: windowWidth * 0.08,
