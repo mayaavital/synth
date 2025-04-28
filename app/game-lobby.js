@@ -18,11 +18,11 @@ export default function GameLobby() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { token } = useSpotifyAuth();
-  
+
   // Get game details from params
   const gameName = params.gameName || "Game Name";
   const playerCount = parseInt(params.playerCount) || 4;
-  
+
   // Placeholder player data (would come from your backend)
   const [players, setPlayers] = useState([
     {
@@ -89,7 +89,7 @@ export default function GameLobby() {
   const handleStartGame = () => {
     // For MVP demo, we'll bypass the token check
     // Check if all expected players are connected
-    const connectedPlayers = players.filter(p => p.isConnected);
+    const connectedPlayers = players.filter((p) => p.isConnected);
     if (connectedPlayers.length < 2) {
       Alert.alert(
         "Not Enough Players",
@@ -98,10 +98,10 @@ export default function GameLobby() {
       );
       return;
     }
-    
+
     // In a real app, you would probably make an API call here to initialize the game
     // and then listen for a confirmation before navigating
-    
+
     // Navigate to the game play screen with parameters
     router.push({
       pathname: "/game-play",
@@ -110,8 +110,8 @@ export default function GameLobby() {
         playerCount: connectedPlayers.length,
         gameId: `game-${Date.now()}`, // Generate a unique game ID
         // You could also serialize the players array if needed
-        players: JSON.stringify(connectedPlayers.map(p => p.username))
-      }
+        players: JSON.stringify(connectedPlayers.map((p) => p.username)),
+      },
     });
   };
 
@@ -119,7 +119,7 @@ export default function GameLobby() {
     <SafeAreaView style={styles.container}>
       {/* Custom header */}
       <View style={styles.header}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.menuButton}
           onPress={() => navigation.goBack()}
         >
@@ -128,15 +128,17 @@ export default function GameLobby() {
         <Text style={styles.logoText}>SYNTH</Text>
         <View style={styles.placeholder} />
       </View>
-      
+
       {/* Player grid */}
       <View style={styles.playerGrid}>
         {players.map((player, index) => (
-          <View 
-            key={player.id} 
+          <View
+            key={player.id}
             style={[
-              styles.playerCard, 
-              { borderColor: getCardBorderColor(index) }
+              styles.playerCard,
+              {
+                shadowColor: getCardBorderColor(index),
+              },
             ]}
           >
             {/* {player.isHost && ( // will include this once backend is connected
@@ -144,14 +146,14 @@ export default function GameLobby() {
                 <Ionicons name="crown" size={32} color="white" />
               </View>
             )} */}
-            
+
             {player.isConnected ? (
               <>
                 <View style={styles.profileImageContainer}>
                   <View style={styles.profileBackground}>
-                    <Image 
-                      source={require('../assets/pfp.png')} 
-                      style={styles.profileImage} 
+                    <Image
+                      source={require("../assets/pfp.png")}
+                      style={styles.profileImage}
                     />
                   </View>
                 </View>
@@ -159,8 +161,8 @@ export default function GameLobby() {
                 <View style={styles.platformContainer}>
                   <Text style={styles.listeningText}>Listening on</Text>
                   <View style={styles.spotifyIcon}>
-                    <Image 
-                      source={require('../assets/white-spotify-logo.png')} 
+                    <Image
+                      source={require("../assets/white-spotify-logo.png")}
                       style={styles.spotifyLogoImage}
                     />
                   </View>
@@ -168,20 +170,24 @@ export default function GameLobby() {
               </>
             ) : (
               <View style={styles.waitingContainer}>
-                <Ionicons name="person-circle-outline" size={80} color="white" />
+                <Ionicons
+                  name="person-circle-outline"
+                  size={80}
+                  color="white"
+                />
                 <Text style={styles.waitingText}>Waiting to join...</Text>
               </View>
             )}
           </View>
         ))}
       </View>
-      
+
       {/* Start Game Button */}
       <View style={styles.startButtonContainer}>
         <Pressable
           style={[
             styles.startButton,
-            !isEveryoneReady && styles.startButtonDisabled
+            !isEveryoneReady && styles.startButtonDisabled,
           ]}
           onPress={handleStartGame}
         >
@@ -231,7 +237,7 @@ const styles = StyleSheet.create({
     // flex: 1
   },
   playerCard: {
-    width: '47%',
+    width: "47%",
     aspectRatio: 1,
     backgroundColor: "#242424",
     borderRadius: 16,
@@ -239,8 +245,11 @@ const styles = StyleSheet.create({
     padding: 12,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 4,
+    borderWidth: 1,
     position: "relative",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.4,
+    shadowRadius: 5,
   },
   crownContainer: {
     position: "absolute",
@@ -253,22 +262,22 @@ const styles = StyleSheet.create({
     borderRadius: 50,
     overflow: "hidden",
     marginBottom: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   profileBackground: {
     width: 90,
     height: 90,
     borderRadius: 45,
-    backgroundColor: 'white',
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
+    backgroundColor: "white",
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden",
   },
   profileImage: {
     width: "100%",
     height: "100%",
-    resizeMode: 'cover',
+    resizeMode: "cover",
   },
   username: {
     color: "white",
@@ -290,13 +299,13 @@ const styles = StyleSheet.create({
     padding: 4,
     width: 28,
     height: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   spotifyLogoImage: {
     width: 20,
     height: 20,
-    resizeMode: 'contain',
+    resizeMode: "contain",
   },
   waitingContainer: {
     alignItems: "center",
@@ -324,4 +333,4 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "bold",
   },
-}); 
+});

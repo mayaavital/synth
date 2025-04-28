@@ -6,7 +6,7 @@ import {
   SafeAreaView,
   Image,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRouter } from "expo-router";
@@ -16,9 +16,10 @@ import { useSpotifyAuth } from "../utils";
 export default function home() {
   const navigation = useNavigation();
   const router = useRouter();
-  const { token, authError, getSpotifyAuth, logout, isInitialized } = useSpotifyAuth();
+  const { token, authError, getSpotifyAuth, logout, isInitialized } =
+    useSpotifyAuth();
   const [isAuthenticating, setIsAuthenticating] = useState(false);
-  
+
   // Hide default header and use our custom one
   useEffect(() => {
     navigation.setOptions({
@@ -29,7 +30,10 @@ export default function home() {
   // Check if we have an auth error
   useEffect(() => {
     if (authError) {
-      Alert.alert("Authentication Error", "There was an error connecting to Spotify. Please try again.");
+      Alert.alert(
+        "Authentication Error",
+        "There was an error connecting to Spotify. Please try again."
+      );
       console.error("Spotify auth error:", authError);
     }
   }, [authError]);
@@ -52,7 +56,7 @@ export default function home() {
       setIsAuthenticating(false);
     }
   };
-  
+
   // Handle logout
   const handleLogout = async () => {
     try {
@@ -62,21 +66,25 @@ export default function home() {
       console.error("Error logging out:", error);
     }
   };
-  
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Custom header */}
       <View style={styles.header}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.menuButton}
           onPress={() => {
             if (token) {
               Alert.alert(
-                "Spotify Connected", 
+                "Spotify Connected",
                 "Do you want to disconnect from Spotify?",
                 [
                   { text: "Cancel", style: "cancel" },
-                  { text: "Disconnect", onPress: handleLogout, style: "destructive" }
+                  {
+                    text: "Disconnect",
+                    onPress: handleLogout,
+                    style: "destructive",
+                  },
                 ]
               );
             } else {
@@ -89,7 +97,7 @@ export default function home() {
         <Text style={styles.logoText}>SYNTH</Text>
         <View style={styles.placeholder} />
       </View>
-      
+
       {/* Spotify Connection Status */}
       <View style={styles.spotifyStatus}>
         {!isInitialized ? (
@@ -97,40 +105,45 @@ export default function home() {
         ) : (
           <>
             <View style={styles.statusLine}>
-              <View style={[styles.statusDot, token ? styles.statusConnected : styles.statusDisconnected]} />
+              <View
+                style={[
+                  styles.statusDot,
+                  token ? styles.statusConnected : styles.statusDisconnected,
+                ]}
+              />
               <Text style={styles.spotifyStatusText}>
-                {token ? 'Connected to Spotify' : 'Not connected to Spotify'}
+                {token ? "Connected to Spotify" : "Not connected to Spotify"}
               </Text>
             </View>
-            
+
             {token ? (
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.spotifyDisconnectButton}
                 onPress={handleLogout}
               >
                 <Text style={styles.disconnectText}>Disconnect</Text>
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.spotifyConnectButton}
                 onPress={handleConnectSpotify}
                 disabled={isAuthenticating}
               >
-                <Image 
-                  source={require('../assets/white-spotify-logo.png')} 
+                <Image
+                  source={require("../assets/white-spotify-logo.png")}
                   style={styles.spotifyIcon}
                 />
                 <Text style={styles.spotifyConnectText}>
-                  {isAuthenticating ? 'Connecting...' : 'Connect to Spotify'}
+                  {isAuthenticating ? "Connecting..." : "Connect to Spotify"}
                 </Text>
               </TouchableOpacity>
             )}
           </>
         )}
       </View>
-      
+
       <View style={styles.cardContainer}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.card}
           onPress={() => router.push("/create-game")}
         >
@@ -145,7 +158,10 @@ export default function home() {
           </View>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.card}>
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => router.push("/join-game")}
+        >
           <View style={styles.iconContainer}>
             <Ionicons name="people" size={32} color="white" />
           </View>
@@ -158,7 +174,10 @@ export default function home() {
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.card}>
-          <View style={styles.iconContainer}>
+          <View
+            style={styles.iconContainer}
+            onPress={() => alert("sorry this feature isn't available yet!")}
+          >
             <Ionicons name="play-back-circle-outline" size={32} color="white" />
           </View>
           <View style={styles.textContainer}>
@@ -276,7 +295,7 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
   },
   iconContainer: {
-    backgroundColor: "#523676",
+    backgroundColor: "#8E44AD",
     borderRadius: 16,
     padding: 10,
     marginRight: 20,

@@ -13,7 +13,7 @@ import { useNavigation } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 
-export default function CreateGame() {
+export default function JoinGame() {
   const navigation = useNavigation();
   const router = useRouter();
   const [gameName, setGameName] = useState("");
@@ -49,44 +49,8 @@ export default function CreateGame() {
           placeholderTextColor="#888"
         />
 
-        <Text style={styles.sectionTitle}>Player Count</Text>
-        <View style={styles.playerCountContainer}>
-          <TouchableOpacity
-            style={[
-              styles.countOption,
-              playerCount === 2 && styles.selectedCount,
-            ]}
-            onPress={() => setPlayerCount(2)}
-          >
-            <Text style={styles.countText}>2</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.countOption,
-              playerCount === 3 && styles.selectedCount,
-            ]}
-            onPress={() => setPlayerCount(3)}
-          >
-            <Text style={styles.countText}>3</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.countOption,
-              playerCount === 4 && styles.selectedCount,
-            ]}
-            onPress={() => setPlayerCount(4)}
-          >
-            <Text style={styles.countText}>4</Text>
-          </TouchableOpacity>
-        </View>
-
         <Pressable
-          style={[
-            styles.createButton,
-            !gameName && styles.createButtonDisabled,
-          ]}
+          style={[styles.joinButton, !gameName && styles.joinButtonDisabled]}
           onPress={() => {
             if (!gameName.trim()) {
               alert("Please enter a game name");
@@ -94,16 +58,18 @@ export default function CreateGame() {
             }
 
             // Here you would typically send this data to your backend
-            console.log("Creating game:", { gameName, playerCount });
+            //fetch game from backend - if no game return error message
+            console.log("Joining Game:", { gameName });
 
             // Navigate to the game lobby with game details
+            //player count hard coded here but would get from the backend
             router.push({
               pathname: "/game-lobby",
               params: { gameName, playerCount },
             });
           }}
         >
-          <Text style={styles.createButtonText}>CREATE GAME</Text>
+          <Text style={styles.joinButtonText}>Join Game</Text>
         </Pressable>
       </View>
     </SafeAreaView>
@@ -155,27 +121,14 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 24,
   },
-  playerCountContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 8,
-    marginBottom: 40,
-  },
-  countOption: {
-    width: "30%",
-    paddingVertical: 16,
-    borderBottomWidth: 2,
-    borderBottomColor: "#333",
-    alignItems: "center",
-  },
   selectedCount: {
-    borderBottomColor: "#8E44AD",
+    borderBottomColor: "#00A9FF",
   },
   countText: {
     color: "white",
     fontSize: 32,
   },
-  createButton: {
+  joinButton: {
     backgroundColor: "#8E44AD",
     borderRadius: 50,
     paddingVertical: 16,
@@ -184,11 +137,11 @@ const styles = StyleSheet.create({
     marginTop: "auto",
     marginBottom: 24,
   },
-  createButtonDisabled: {
+  joinButtonDisabled: {
     backgroundColor: "#888",
     opacity: 0.7,
   },
-  createButtonText: {
+  joinButtonText: {
     color: "white",
     fontSize: 24,
     fontWeight: "bold",
