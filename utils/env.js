@@ -42,9 +42,9 @@ const ENV = {
       authorizationEndpoint: "https://accounts.spotify.com/authorize",
       tokenEndpoint: "https://accounts.spotify.com/api/token",
     },
-    // ***** TODO: Fill this in ***** //
-    TOP_TRACKS_API: "https://api.spotify.com/v1/me/shows?offset=0&limit=20",
-    // ***** TODO: Or fill this in ***** //
+    // Fixed endpoint for top tracks
+    TOP_TRACKS_API: "https://api.spotify.com/v1/me/top/tracks?limit=50",
+    // Album endpoint remains the same
     ALBUM_TRACK_API_GETTER: (albumId) => `https://api.spotify.com/v1/albums/${albumId}`,
   },
 };

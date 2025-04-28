@@ -4,27 +4,136 @@ import {
   TouchableOpacity,
   StyleSheet,
   SafeAreaView,
+  Image,
+  Alert,
+  ActivityIndicator
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "expo-router";
+import { useNavigation, useRouter } from "expo-router";
+import { useEffect, useState } from "react";
+import { useSpotifyAuth } from "../utils";
 
 export default function waitingRoom() {
   const navigation = useNavigation();
-  navigation.setOptions({
-    headerLeft: () => (
-      <TouchableOpacity
-        onPress={() => {
-          alert("implement logout");
-        }}
-      >
-        <Ionicons name="menu" size={32} color="white" />
-      </TouchableOpacity>
-    ),
-  });
+  const router = useRouter();
+  const { token, authError, getSpotifyAuth, logout, isInitialized } = useSpotifyAuth();
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
+  
+  // Hide default header and use our custom one
+  useEffect(() => {
+    navigation.setOptions({
+      headerShown: false,
+    });
+  }, [navigation]);
+
+  // Check if we have an auth error
+  useEffect(() => {
+    if (authError) {
+      Alert.alert("Authentication Error", "There was an error connecting to Spotify. Please try again.");
+      console.error("Spotify auth error:", authError);
+    }
+  }, [authError]);
+
+  // Handle authentication status changes
+  useEffect(() => {
+    if (token) {
+      console.log("User is authenticated with Spotify");
+      setIsAuthenticating(false);
+    }
+  }, [token]);
+
+  // Start Spotify authentication
+  const handleConnectSpotify = async () => {
+    setIsAuthenticating(true);
+    try {
+      await getSpotifyAuth();
+    } catch (error) {
+      console.error("Error starting auth:", error);
+      setIsAuthenticating(false);
+    }
+  };
+  
+  // Handle logout
+  const handleLogout = async () => {
+    try {
+      await logout();
+      Alert.alert("Logged Out", "You have been disconnected from Spotify.");
+    } catch (error) {
+      console.error("Error logging out:", error);
+    }
+  };
+  
   return (
     <SafeAreaView style={styles.container}>
+      {/* Custom header */}
+      <View style={styles.header}>
+        <TouchableOpacity 
+          style={styles.menuButton}
+          onPress={() => {
+            if (token) {
+              Alert.alert(
+                "Spotify Connected", 
+                "Do you want to disconnect from Spotify?",
+                [
+                  { text: "Cancel", style: "cancel" },
+                  { text: "Disconnect", onPress: handleLogout, style: "destructive" }
+                ]
+              );
+            } else {
+              Alert.alert("Not Connected", "You are not connected to Spotify.");
+            }
+          }}
+        >
+          <Ionicons name="menu" size={28} color="white" />
+        </TouchableOpacity>
+        <Text style={styles.logoText}>SYNTH</Text>
+        <View style={styles.placeholder} />
+      </View>
+      
+      {/* Spotify Connection Status */}
+      <View style={styles.spotifyStatus}>
+        {!isInitialized ? (
+          <ActivityIndicator size="small" color="#1DB954" />
+        ) : (
+          <>
+            <View style={styles.statusLine}>
+              <View style={[styles.statusDot, token ? styles.statusConnected : styles.statusDisconnected]} />
+              <Text style={styles.spotifyStatusText}>
+                {token ? 'Connected to Spotify' : 'Not connected to Spotify'}
+              </Text>
+            </View>
+            
+            {token ? (
+              <TouchableOpacity 
+                style={styles.spotifyDisconnectButton}
+                onPress={handleLogout}
+              >
+                <Text style={styles.disconnectText}>Disconnect</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity 
+                style={styles.spotifyConnectButton}
+                onPress={handleConnectSpotify}
+                disabled={isAuthenticating}
+              >
+                <Image 
+                  source={require('../assets/white-spotify-logo.png')} 
+                  style={styles.spotifyIcon}
+                />
+                <Text style={styles.spotifyConnectText}>
+                  {isAuthenticating ? 'Connecting...' : 'Connect to Spotify'}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </>
+        )}
+      </View>
+      
       <View style={styles.cardContainer}>
-        <TouchableOpacity style={styles.card}>
+        <TouchableOpacity 
+          style={styles.card}
+          onPress={() => router.push("/create-game")}
+        >
           <View style={styles.iconContainer}>
             <Ionicons name="add-circle" size={32} color="white" />
           </View>
@@ -68,7 +177,83 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#1E1E1E",
-    paddingTop: 40,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#8E44AD", // Purple background for header
+    paddingVertical: 15,
+    paddingHorizontal: 16,
+  },
+  menuButton: {
+    padding: 8,
+  },
+  logoText: {
+    color: "#FFC857", // Golden yellow color
+    fontSize: 28,
+    fontWeight: "bold",
+    letterSpacing: 2,
+  },
+  placeholder: {
+    width: 44, // Same width as menu button for balanced layout
+  },
+  spotifyStatus: {
+    margin: 20,
+    padding: 15,
+    backgroundColor: "#282828",
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  statusLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 15,
+  },
+  statusDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 10,
+  },
+  statusConnected: {
+    backgroundColor: "#1DB954", // Spotify green
+  },
+  statusDisconnected: {
+    backgroundColor: "#e74c3c", // Red
+  },
+  spotifyStatusText: {
+    color: "white",
+    fontSize: 16,
+  },
+  spotifyConnectButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#1DB954", // Spotify green
+    padding: 12,
+    borderRadius: 25,
+    paddingHorizontal: 20,
+  },
+  spotifyDisconnectButton: {
+    backgroundColor: "#333",
+    padding: 10,
+    borderRadius: 25,
+    paddingHorizontal: 20,
+    borderWidth: 1,
+    borderColor: "#666",
+  },
+  disconnectText: {
+    color: "#e74c3c",
+    fontWeight: "bold",
+  },
+  spotifyIcon: {
+    width: 24,
+    height: 24,
+    marginRight: 10,
+  },
+  spotifyConnectText: {
+    color: "white",
+    fontWeight: "bold",
   },
   title: {
     color: "white",

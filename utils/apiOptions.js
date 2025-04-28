@@ -5,6 +5,9 @@ const {
   SPOTIFY_API: { TOP_TRACKS_API, ALBUM_TRACK_API_GETTER },
 } = getEnv();
 
+// Add Spotify Recently Played API endpoint
+const RECENTLY_PLAYED_API = "https://api.spotify.com/v1/me/player/recently-played?limit=50";
+
 const ERROR_ALERT = new Error(
   "Oh no! Something went wrong; probably a malformed request or a network error.\nCheck console for more details."
 );
@@ -16,7 +19,7 @@ const formatter = (data) =>
     // returning undefined for now to not confuse students, ideally a fix would be a hosted version of this
     return {
       songTitle: val.name,
-      songArtists: artists,
+      songArtists: artists.map(artist => artist.name),
       albumName: val.album?.name,
       imageUrl: val.album?.images[0]?.url ?? undefined,
       duration: val.duration_ms,
@@ -67,6 +70,28 @@ export const getAlbumTracks = async (albumId, token) => {
     return formatter(transformedResponse);
   } catch (e) {
     console.error(e);
+    alert(ERROR_ALERT);
+    return null;
+  }
+};
+
+/* Fetches your recently played tracks from the Spotify API. */
+export const getMyRecentlyPlayedTracks = async (token) => {
+  try {
+    const res = await fetcher(RECENTLY_PLAYED_API, token);
+    
+    // The recently played API returns a different format than the top tracks API
+    // We need to extract the track from each item
+    const tracks = res.data?.items?.map(item => item.track);
+    
+    if (!tracks || tracks.length === 0) {
+      console.warn("No recently played tracks found");
+      return [];
+    }
+    
+    return formatter(tracks);
+  } catch (e) {
+    console.error("Error fetching recently played tracks:", e);
     alert(ERROR_ALERT);
     return null;
   }
