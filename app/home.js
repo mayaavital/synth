@@ -13,7 +13,7 @@ import { useNavigation, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { useSpotifyAuth } from "../utils";
 
-export default function waitingRoom() {
+export default function home() {
   const navigation = useNavigation();
   const router = useRouter();
   const { token, authError, getSpotifyAuth, logout, isInitialized } = useSpotifyAuth();
