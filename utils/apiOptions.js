@@ -25,6 +25,12 @@ const formatter = (data) =>
       duration: val.duration_ms,
       externalUrl: val.external_urls?.spotify ?? undefined,
       previewUrl: val.preview_url ?? undefined,
+      // Add additional fields required by the specifications
+      uri: val.uri ?? undefined,
+      // Including additional useful fields
+      trackId: val.id ?? undefined,
+      popularity: val.popularity ?? undefined,
+      albumReleaseDate: val.album?.release_date ?? undefined,
     };
   });
 
