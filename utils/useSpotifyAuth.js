@@ -6,7 +6,7 @@ import {
   makeRedirectUri,
   exchangeCodeAsync,
 } from "expo-auth-session";
-
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as WebBrowser from "expo-web-browser";
 import { ResponseError } from "expo-auth-session/build/Errors";
 
@@ -25,12 +25,16 @@ console.log("Auth Configuration:", {
   SCOPES: SCOPES?.length,
 });
 
+// Token storage key
+const TOKEN_STORAGE_KEY = 'spotify_access_token';
+
 // needed so that the browser closes the modal after auth token
 WebBrowser.maybeCompleteAuthSession();
 
 const useSpotifyAuth = () => {
   const [token, setToken] = useState(null);
   const [authError, setAuthError] = useState(null);
+  const [isInitialized, setIsInitialized] = useState(false);
   
   const [request, response, promptAsync] = useAuthRequest(
     {
@@ -43,6 +47,45 @@ const useSpotifyAuth = () => {
     },
     DISCOVERY
   );
+
+  // Load token from storage on mount
+  useEffect(() => {
+    const loadToken = async () => {
+      try {
+        const storedToken = await AsyncStorage.getItem(TOKEN_STORAGE_KEY);
+        if (storedToken) {
+          console.log("Loaded token from storage");
+          setToken(storedToken);
+        } else {
+          console.log("No stored token found");
+        }
+      } catch (error) {
+        console.error("Error loading token from storage:", error);
+      } finally {
+        setIsInitialized(true);
+      }
+    };
+    
+    loadToken();
+  }, []);
+
+  // Save token to storage when it changes
+  useEffect(() => {
+    const saveToken = async () => {
+      if (token) {
+        try {
+          await AsyncStorage.setItem(TOKEN_STORAGE_KEY, token);
+          console.log("Token saved to storage");
+        } catch (error) {
+          console.error("Error saving token to storage:", error);
+        }
+      }
+    };
+    
+    if (isInitialized && token) {
+      saveToken();
+    }
+  }, [token, isInitialized]);
 
   useEffect(() => {
     const getTokenAsync = async () => {
@@ -94,7 +137,17 @@ const useSpotifyAuth = () => {
     }
   };
 
-  return { token, authError, getSpotifyAuth: startAuth };
+  const logout = async () => {
+    try {
+      await AsyncStorage.removeItem(TOKEN_STORAGE_KEY);
+      setToken(null);
+      console.log("User logged out");
+    } catch (error) {
+      console.error("Error logging out:", error);
+    }
+  };
+
+  return { token, authError, getSpotifyAuth: startAuth, logout, isInitialized };
 };
 
 export default useSpotifyAuth;

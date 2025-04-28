@@ -6,15 +6,18 @@ import {
   Image,
   TouchableOpacity,
   Pressable,
+  Alert,
 } from "react-native";
 import { useNavigation, useRouter, useLocalSearchParams } from "expo-router";
 import { useState, useEffect } from "react";
 import { Ionicons } from "@expo/vector-icons";
+import { useSpotifyAuth } from "../utils";
 
 export default function GameLobby() {
   const navigation = useNavigation();
   const router = useRouter();
   const params = useLocalSearchParams();
+  const { token } = useSpotifyAuth();
   
   // Get game details from params
   const gameName = params.gameName || "Game Name";
@@ -45,6 +48,9 @@ export default function GameLobby() {
     },
     // Empty slots will be filled based on playerCount
   ]);
+
+  // Track if everyone is ready to start
+  const [isEveryoneReady, setIsEveryoneReady] = useState(true);
 
   // Set header options
   useEffect(() => {
@@ -77,6 +83,36 @@ export default function GameLobby() {
   const getCardBorderColor = (index) => {
     const colors = ["#FF6B6B", "#00A8E8", "#A44200", "#747474"]; // Red, Blue, Orange, Gray
     return colors[index % colors.length];
+  };
+
+  // Handle starting the game
+  const handleStartGame = () => {
+    // For MVP demo, we'll bypass the token check
+    // Check if all expected players are connected
+    const connectedPlayers = players.filter(p => p.isConnected);
+    if (connectedPlayers.length < 2) {
+      Alert.alert(
+        "Not Enough Players",
+        "You need at least 2 players to start the game.",
+        [{ text: "OK" }]
+      );
+      return;
+    }
+    
+    // In a real app, you would probably make an API call here to initialize the game
+    // and then listen for a confirmation before navigating
+    
+    // Navigate to the game play screen with parameters
+    router.push({
+      pathname: "/game-play",
+      params: {
+        gameName,
+        playerCount: connectedPlayers.length,
+        gameId: `game-${Date.now()}`, // Generate a unique game ID
+        // You could also serialize the players array if needed
+        players: JSON.stringify(connectedPlayers.map(p => p.username))
+      }
+    });
   };
 
   return (
@@ -141,15 +177,17 @@ export default function GameLobby() {
       </View>
       
       {/* Start Game Button */}
-      <Pressable
-        style={styles.startButton}
-        onPress={() => {
-          // Would connect to your backend to start the game
-          alert("Game starting! This would connect to your backend.");
-        }}
-      >
-        <Text style={styles.startButtonText}>START GAME</Text>
-      </Pressable>
+      <View style={styles.startButtonContainer}>
+        <Pressable
+          style={[
+            styles.startButton,
+            !isEveryoneReady && styles.startButtonDisabled
+          ]}
+          onPress={handleStartGame}
+        >
+          <Text style={styles.startButtonText}>START GAME</Text>
+        </Pressable>
+      </View>
     </SafeAreaView>
   );
 }
@@ -158,6 +196,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#1E1E1E",
+  },
+  startButtonContainer: {
+    position: "absolute",
+    bottom: 0,
+    width: "100%",
   },
   header: {
     flexDirection: "row",
@@ -185,6 +228,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     padding: 16,
     marginTop: 20,
+    // flex: 1
   },
   playerCard: {
     width: '47%',
@@ -270,6 +314,10 @@ const styles = StyleSheet.create({
     borderRadius: 50,
     paddingVertical: 16,
     alignItems: "center",
+  },
+  startButtonDisabled: {
+    backgroundColor: "#674C70",
+    opacity: 0.7,
   },
   startButtonText: {
     color: "white",
