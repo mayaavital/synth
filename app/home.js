@@ -6,31 +6,41 @@ import {
   SafeAreaView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "expo-router";
+import { useNavigation, useRouter } from "expo-router";
 import { useEffect } from "react";
 
 export default function home() {
   const navigation = useNavigation();
+  const router = useRouter();
   
-  // Move navigation.setOptions to a useEffect hook
+  // Hide default header and use our custom one
   useEffect(() => {
     navigation.setOptions({
-      headerLeft: () => (
-        <TouchableOpacity
+      headerShown: false,
+    });
+  }, [navigation]);
+  
+  return (
+    <SafeAreaView style={styles.container}>
+      {/* Custom header matching create-game.js */}
+      <View style={styles.header}>
+        <TouchableOpacity 
+          style={styles.menuButton}
           onPress={() => {
             alert("implement logout");
           }}
         >
-          <Ionicons name="menu" size={32} color="white" />
+          <Ionicons name="menu" size={28} color="white" />
         </TouchableOpacity>
-      ),
-    });
-  }, [navigation]); // Only re-run if navigation changes
-  
-  return (
-    <SafeAreaView style={styles.container}>
+        <Text style={styles.logoText}>SYNTH</Text>
+        <View style={styles.placeholder} />
+      </View>
+      
       <View style={styles.cardContainer}>
-        <TouchableOpacity style={styles.card}>
+        <TouchableOpacity 
+          style={styles.card}
+          onPress={() => router.push("/create-game")}
+        >
           <View style={styles.iconContainer}>
             <Ionicons name="add-circle" size={32} color="white" />
           </View>
@@ -74,7 +84,26 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#1E1E1E",
-    paddingTop: 40,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#8E44AD", // Purple background for header
+    paddingVertical: 15,
+    paddingHorizontal: 16,
+  },
+  menuButton: {
+    padding: 8,
+  },
+  logoText: {
+    color: "#FFC857", // Golden yellow color
+    fontSize: 28,
+    fontWeight: "bold",
+    letterSpacing: 2,
+  },
+  placeholder: {
+    width: 44, // Same width as menu button for balanced layout
   },
   title: {
     color: "white",
@@ -84,6 +113,7 @@ const styles = StyleSheet.create({
   cardContainer: {
     padding: 20,
     gap: 20,
+    paddingTop: 30,
   },
   card: {
     backgroundColor: "#000000",
