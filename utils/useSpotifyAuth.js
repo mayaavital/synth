@@ -4,7 +4,6 @@ import {
   ResponseType,
   useAuthRequest,
   makeRedirectUri,
-  exchangeCodeAsync,
 } from "expo-auth-session";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as WebBrowser from "expo-web-browser";
@@ -33,20 +32,25 @@ WebBrowser.maybeCompleteAuthSession();
 
 const useSpotifyAuth = () => {
   const [token, setToken] = useState(null);
-  const [authError, setAuthError] = useState(null);
-  const [isInitialized, setIsInitialized] = useState(false);
-  
   const [request, response, promptAsync] = useAuthRequest(
     {
-      responseType: ResponseType.Code, // Use authorization code flow
+      responseType: ResponseType.Token,
       clientId: CLIENT_ID,
       scopes: SCOPES,
-      // Enable PKCE for more secure authorization code flow
+      // In order to follow the "Authorization Code Flow" to fetch token after authorizationEndpoint
+      // this must be set to false
       usePKCE: true,
       redirectUri: REDIRECT_URI,
     },
     DISCOVERY
   );
+
+  useEffect(() => {
+    if (response?.type === 'success' && response.params?.access_token) {
+      setToken(response.params.access_token);
+      console.log("Authenticated", JSON.stringify(response.params, null, 2));
+    }
+  }, [response]);
 
   // Load token from storage on mount
   useEffect(() => {
@@ -61,8 +65,6 @@ const useSpotifyAuth = () => {
         }
       } catch (error) {
         console.error("Error loading token from storage:", error);
-      } finally {
-        setIsInitialized(true);
       }
     };
     
@@ -82,72 +84,16 @@ const useSpotifyAuth = () => {
       }
     };
     
-    if (isInitialized && token) {
-      saveToken();
-    }
-  }, [token, isInitialized]);
+    saveToken();
+  }, [token]);
 
-  useEffect(() => {
-    const getTokenAsync = async () => {
-      if (response?.type === 'success' && response.params?.code) {
-        try {
-          // Exchange the authorization code for an access token
-          console.log("Got authorization code, exchanging for token...");
-          const tokenResult = await exchangeCodeAsync(
-            {
-              code: response.params.code,
-              clientId: CLIENT_ID,
-              redirectUri: REDIRECT_URI,
-              extraParams: {
-                code_verifier: request?.codeVerifier || '',
-              },
-            },
-            DISCOVERY
-          );
-          
-          setToken(tokenResult.accessToken);
-          setAuthError(null);
-          console.log("Token exchange successful!");
-        } catch (error) {
-          console.error("Token exchange error:", error);
-          setAuthError(error);
-        }
-      } else if (response) {
-        // Log any other response type for debugging
-        console.log("Auth response type:", response.type);
-        if (response.type === 'error') {
-          setAuthError(response.error);
-          console.error("Auth error:", response.error);
-        }
-      }
-    };
-
-    getTokenAsync();
-  }, [response, request]);
-
-  const startAuth = async () => {
-    console.log("Starting Spotify authentication...");
-    try {
-      setAuthError(null);
-      const result = await promptAsync();
-      console.log("Auth prompt result:", result.type);
-    } catch (error) {
-      console.error("Auth error:", error);
-      setAuthError(error);
-    }
+  // Provide a logout function to maintain compatibility with existing code
+  const logout = () => {
+    setToken(null);
+    console.log("Token cleared");
   };
 
-  const logout = async () => {
-    try {
-      await AsyncStorage.removeItem(TOKEN_STORAGE_KEY);
-      setToken(null);
-      console.log("User logged out");
-    } catch (error) {
-      console.error("Error logging out:", error);
-    }
-  };
-
-  return { token, authError, getSpotifyAuth: startAuth, logout, isInitialized };
+  return { token, getSpotifyAuth: promptAsync, logout };
 };
 
 export default useSpotifyAuth;

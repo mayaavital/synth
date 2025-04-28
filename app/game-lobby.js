@@ -137,7 +137,9 @@ export default function GameLobby() {
             style={[
               styles.playerCard,
               {
+                borderColor: getCardBorderColor(index),
                 shadowColor: getCardBorderColor(index),
+                shadowRadius: 8
               },
             ]}
           >

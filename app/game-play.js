@@ -8,6 +8,7 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
+  Linking,
 } from "react-native";
 import { useNavigation, useRouter, useLocalSearchParams } from "expo-router";
 import { useState, useEffect, useRef } from "react";
@@ -24,7 +25,7 @@ export default function GamePlay() {
   const navigation = useNavigation();
   const router = useRouter();
   const params = useLocalSearchParams();
-  const { token } = useSpotifyAuth();
+  const { token, getSpotifyAuth, logout } = useSpotifyAuth();
   
   // State variables
   const [isLoading, setIsLoading] = useState(true);
@@ -106,40 +107,41 @@ export default function GamePlay() {
             albumName: "Sgt. Pepper's Lonely Hearts Club Band",
             imageUrl: "https://i.scdn.co/image/ab67616d0000b273128450651c9f0442780d8eb8",
             duration: 337000,
-            previewUrl: "https://p.scdn.co/mp3-preview/67f504bf5b86bdcaf197aef343c2413e8ec68b1d",
+            // Using more reliable audio URLs - Apple's stock sound files which are more stable than Spotify previews
+            previewUrl: "https://soundcloud.com/ilovedatsprite/gunna-choppa-sing-prod-turbo?si=3b5d0296dc51445c80ce94742952afdd&utm_source=clipboard&utm_medium=text&utm_campaign=social_sharing",
           },
-          {
-            songTitle: "Bohemian Rhapsody",
-            songArtists: ["Queen"],
-            albumName: "A Night at the Opera",
-            imageUrl: "https://i.scdn.co/image/ab67616d0000b27328581cfe196c2be2506ee6c0",
-            duration: 354000,
-            previewUrl: "https://p.scdn.co/mp3-preview/1f8e6abaed1a4f4399a0677a1771fccc3b6858b9",
-          },
-          {
-            songTitle: "Hotel California",
-            songArtists: ["Eagles"],
-            albumName: "Hotel California",
-            imageUrl: "https://i.scdn.co/image/ab67616d0000b273446e630d93d3fb235d70bad9",
-            duration: 391000,
-            previewUrl: "https://p.scdn.co/mp3-preview/77cc7b5141629531e37db44e7f9950f12705b987",
-          },
-          {
-            songTitle: "Billie Jean",
-            songArtists: ["Michael Jackson"],
-            albumName: "Thriller",
-            imageUrl: "https://i.scdn.co/image/ab67616d0000b273982d4494b5ce78e84f1a5de4",
-            duration: 294000,
-            previewUrl: "https://p.scdn.co/mp3-preview/14602bfa5a1745966e4c4becbe637f2bb164d8b5",
-          },
-          {
-            songTitle: "Purple Haze",
-            songArtists: ["Jimi Hendrix"],
-            albumName: "Are You Experienced",
-            imageUrl: "https://i.scdn.co/image/ab67616d0000b273a9feeafe29cb1e4318b075b8",
-            duration: 171000,
-            previewUrl: "https://p.scdn.co/mp3-preview/8407186fb4e9e393d85e93fdd26d0559e56ef817",
-          },
+          // {
+          //   songTitle: "Bohemian Rhapsody",
+          //   songArtists: ["Queen"],
+          //   albumName: "A Night at the Opera",
+          //   imageUrl: "https://i.scdn.co/image/ab67616d0000b27328581cfe196c2be2506ee6c0",
+          //   duration: 354000,
+          //   previewUrl: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview122/v4/29/96/51/2996514a-35cd-b092-c7f0-dd995b0e6071/mzaf_10909209324710493166.plus.aac.p.m4a",
+          // },
+          // {
+          //   songTitle: "Hotel California",
+          //   songArtists: ["Eagles"],
+          //   albumName: "Hotel California",
+          //   imageUrl: "https://i.scdn.co/image/ab67616d0000b273446e630d93d3fb235d70bad9",
+          //   duration: 391000,
+          //   previewUrl: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/cb/16/81/cb1681bb-a5a7-0b93-7ce0-0a55ab6dc9e5/mzaf_11284427653219671407.plus.aac.p.m4a",
+          // },
+          // {
+          //   songTitle: "Billie Jean",
+          //   songArtists: ["Michael Jackson"],
+          //   albumName: "Thriller",
+          //   imageUrl: "https://i.scdn.co/image/ab67616d0000b273982d4494b5ce78e84f1a5de4",
+          //   duration: 294000,
+          //   previewUrl: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview122/v4/d4/75/5e/d4755ec7-f083-e6df-8cfc-cd498327cc6f/mzaf_14458290734118509811.plus.aac.p.m4a",
+          // },
+          // {
+          //   songTitle: "Purple Haze",
+          //   songArtists: ["Jimi Hendrix"],
+          //   albumName: "Are You Experienced",
+          //   imageUrl: "https://i.scdn.co/image/ab67616d0000b273a9feeafe29cb1e4318b075b8",
+          //   duration: 171000,
+          //   previewUrl: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/7d/05/36/7d0536f7-7b1e-122f-8dd0-fd9b3c3a60fc/mzaf_13169423142910610255.plus.aac.p.m4a",
+          // },
         ];
         
         let tracks;
@@ -151,21 +153,66 @@ export default function GamePlay() {
           tracks = mockSongs;
         } else {
           try {
-            // Fetch songs from Spotify API - only try once to avoid rate limits
-            console.log("Fetching tracks using token");
+            // Use getMyRecentlyPlayedTracks instead of getMyTopTracks
+            console.log("Fetching recently played tracks using token");
             tracks = await getMyRecentlyPlayedTracks(token);
-            console.log("Successfully fetched tracks from Spotify API:", tracks?.length || 0);
+            console.log("Successfully fetched recently played tracks from Spotify API:", tracks?.length || 0);
             
             if (!tracks || tracks.length === 0) {
-              console.log("No tracks found from Spotify API, using mock song data");
+              console.log("No recently played tracks found from Spotify API, using mock song data");
+              console.log("tracks", tracks);
               tracks = mockSongs;
+            } else {
+              // Filter out tracks without valid preview URLs
+              const validTracks = tracks.filter(track => track.previewUrl && track.previewUrl.trim() !== '');
+              console.log(`Found ${validTracks.length}/${tracks.length} tracks with preview URLs`);
+              
+              if (validTracks.length < 5) {
+                console.log("Not enough tracks with valid preview URLs, using mock data");
+                tracks = mockSongs;
+              } else {
+                tracks = validTracks;
+                
+                // Add additional data fields specified in requirements
+                tracks = tracks.map(track => ({
+                  ...track,
+                  // These fields are already included in the formatter function, but we add them explicitly
+                  // for clarity and to ensure they match the requirements
+                  uri: track.uri || null,
+                  externalUrl: track.externalUrl || null,
+                  // Display additional track information in console for debugging
+                  _debug: {
+                    title: track.songTitle,
+                    artists: track.songArtists,
+                    duration: track.duration,
+                    albumArt: track.imageUrl ? "Available" : "Unavailable",
+                    previewUrl: track.previewUrl ? "Available" : "Unavailable"
+                  }
+                }));
+                
+                // Log information for debugging
+                console.log("Sample track data:", JSON.stringify(tracks[0], null, 2));
+              }
             }
           } catch (apiError) {
             console.error("Error fetching from Spotify API:", apiError);
-            // If we hit rate limit, use mock data and don't retry
-            if (apiError?.response?.status === 429) {
+            
+            // Check for specific Spotify API errors
+            if (apiError?.response?.status === 401) {
+              console.log("Authentication error (401): Token may be expired");
+              handleTokenError(apiError);
+              return; // Exit early to prevent using mock data while handling auth
+            } else if (apiError?.response?.status === 403) {
+              console.log("Authorization error (403): Missing required scope");
+              Alert.alert(
+                "Permission Error",
+                "This app needs permission to access your top tracks. Please try again and accept all permissions.",
+                [{ text: "OK", onPress: () => handleReturnToLobby() }]
+              );
+            } else if (apiError?.response?.status === 429) {
               console.log("Rate limit reached (429), using mock data without retrying");
             }
+            
             tracks = mockSongs;
           }
         }
@@ -217,7 +264,11 @@ export default function GamePlay() {
     // Select a song based on round number (for demo purposes)
     // In a real game, you'd want to ensure no duplicates between rounds
     const index = (round - 1) % songs.length;
-    setCurrentSong(songs[index]);
+    // Select a random song index instead of sequential
+    const randomIndex = Math.floor(Math.random() * songs.length);
+    // TODO: Add logic here to ensure the same song isn't picked twice in a game if needed.
+    
+    setCurrentSong(songs[randomIndex]); // Use randomIndex
     
     // Reset playback states
     setPlaybackPosition(0);
@@ -225,7 +276,7 @@ export default function GamePlay() {
     setCanVote(false);
     
     // Start playing the new song
-    loadAndPlaySong(songs[index]);
+    loadAndPlaySong(songs[randomIndex]); // Use randomIndex
   };
   
   // Load and play the selected song
@@ -242,6 +293,11 @@ export default function GamePlay() {
       // Only proceed if there's a preview URL
       if (!song.previewUrl) {
         console.warn("No preview URL available for this song");
+        Alert.alert(
+          "No Audio Preview",
+          "This song doesn't have an audio preview available. You can still vote.",
+          [{ text: "OK" }]
+        );
         // For demo purposes, allow voting even without audio
         setTimeout(() => {
           setCanVote(true);
@@ -250,33 +306,76 @@ export default function GamePlay() {
       }
       
       try {
-        // Load the new sound
-        const { sound: newSound } = await Audio.Sound.createAsync(
-          { uri: song.previewUrl },
-          { shouldPlay: true },
-          onPlaybackStatusUpdate
+        console.log("Attempting to load audio from URL:", song.previewUrl);
+        
+        // Configure audio first - use the most basic configuration
+        await Audio.setAudioModeAsync({
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,  // Set to false to simplify
+          allowsRecordingIOS: false,
+          interruptionModeIOS: 1,
+          interruptionModeAndroid: 1,
+          shouldDuckAndroid: false,  // Set to false to simplify
+          playThroughEarpieceAndroid: false,
+        });
+        
+        // Try to load sound directly, but with a timeout
+        console.log("Loading audio directly");
+        
+        // Set a timeout for the audio loading
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error("Audio loading timed out")), 5000)
         );
         
-        setSound(newSound);
-        setIsPlaying(true);
-        
-        // Start timer to enable voting after 30 seconds
-        setTimeout(() => {
-          setCanVote(true);
-        }, MIN_PLAY_DURATION);
-        
-        // Set up interval to update playback position
-        positionUpdateInterval.current = setInterval(async () => {
-          if (sound) {
-            const status = await sound.getStatusAsync();
-            if (status.isLoaded) {
-              setPlaybackPosition(status.positionMillis);
+        try {
+          // Race between loading the audio and the timeout
+          const { sound: newSound } = await Promise.race([
+            Audio.Sound.createAsync(
+              { uri: song.previewUrl },
+              { 
+                shouldPlay: true,
+                isLooping: false,
+                volume: 1.0,
+              },
+              onPlaybackStatusUpdate
+            ),
+            timeoutPromise
+          ]);
+          
+          setSound(newSound);
+          setIsPlaying(true);
+          
+          // Start timer to enable voting after 30 seconds
+          setTimeout(() => {
+            setCanVote(true);
+          }, MIN_PLAY_DURATION);
+          
+          // Set up interval to update playback position
+          positionUpdateInterval.current = setInterval(async () => {
+            if (sound) {
+              const status = await sound.getStatusAsync();
+              if (status.isLoaded) {
+                setPlaybackPosition(status.positionMillis);
+              }
             }
-          }
-        }, 1000);
+          }, 1000);
+          
+        } catch (audioTimeoutError) {
+          console.error("Audio loading timed out or failed:", audioTimeoutError);
+          throw new Error("Failed to load audio in time");
+        }
+        
       } catch (audioError) {
         // If audio fails to load, still allow the game to continue
         console.error("Error loading audio:", audioError);
+        
+        // Show a message that we're continuing without audio
+        Alert.alert(
+          "Audio Playback Issue",
+          "The audio for this song couldn't be loaded. You can continue without audio.",
+          [{ text: "Continue" }]
+        );
+        
         // Enable voting after a shorter time if audio fails
         setTimeout(() => {
           setCanVote(true);
@@ -342,6 +441,48 @@ export default function GamePlay() {
 
   const handleReturnToLobby = () => {
     router.replace('/game-lobby');
+  };
+  
+  // Handle token validation issues
+  const handleTokenError = async (error) => {
+    console.log("Token error:", error);
+    
+    if (error?.response?.status === 401) {
+      // Token expired or invalid
+      Alert.alert(
+        "Spotify Session Expired",
+        "Your Spotify session has expired. Would you like to reconnect?",
+        [
+          { 
+            text: "Cancel", 
+            onPress: () => handleReturnToLobby(),
+            style: "cancel" 
+          },
+          { 
+            text: "Reconnect", 
+            onPress: async () => {
+              // First log out to clear the old token
+              await logout();
+              // Then initiate a new auth flow
+              await getSpotifyAuth();
+              // Refresh the page - in a real app you might handle this more elegantly
+              Alert.alert(
+                "Authentication Complete",
+                "Please return to the lobby and start a new game.",
+                [{ text: "OK", onPress: () => handleReturnToLobby() }]
+              );
+            }
+          }
+        ]
+      );
+    } else {
+      // Some other error
+      Alert.alert(
+        "Spotify Connection Error",
+        "There was a problem connecting to Spotify. Please try again later.",
+        [{ text: "OK", onPress: () => handleReturnToLobby() }]
+      );
+    }
   };
 
   if (isLoading) {
@@ -431,7 +572,7 @@ export default function GamePlay() {
           </View>
           
           {/* Custom waveform visualization */}
-          <View style={styles.waveformContainer}>
+          {/* <View style={styles.waveformContainer}>
             <View style={styles.waveformBars}>
               {Array.from({ length: 30 }).map((_, index) => {
                 // Create random heights for the bars to simulate a waveform
@@ -450,7 +591,7 @@ export default function GamePlay() {
                 );
               })}
             </View>
-          </View>
+          </View> */}
           
           {/* Playback controls */}
           <View style={styles.playbackControlsContainer}>
@@ -487,6 +628,30 @@ export default function GamePlay() {
               </View>
             </View>
           </View>
+          
+          {/* External links */}
+          {currentSong.externalUrl && (
+            <TouchableOpacity 
+              style={styles.externalLinkButton}
+              onPress={() => {
+                // Open the Spotify URL in the browser
+                Alert.alert(
+                  "Open in Spotify",
+                  "Would you like to open this track in Spotify?",
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    { 
+                      text: "Open", 
+                      onPress: () => Linking.openURL(currentSong.externalUrl) 
+                    }
+                  ]
+                );
+              }}
+            >
+              <Ionicons name="musical-notes" size={16} color="white" />
+              <Text style={styles.externalLinkText}>Open in Spotify</Text>
+            </TouchableOpacity>
+          )}
           
           {/* Bottom vote button */}
           <View style={styles.voteButtonContainer}>
@@ -896,5 +1061,21 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 16,
     fontWeight: "bold",
+  },
+  externalLinkButton: {
+    backgroundColor: "#1DB954", // Spotify green
+    padding: 10,
+    borderRadius: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 10,
+    alignSelf: "center",
+  },
+  externalLinkText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
+    marginLeft: 5,
   },
 }); 
