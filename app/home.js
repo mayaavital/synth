@@ -8,6 +8,7 @@ import {
   Alert,
   ActivityIndicator,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
@@ -19,13 +20,6 @@ export default function home() {
   const { token, authError, getSpotifyAuth, logout, isInitialized } =
     useSpotifyAuth();
   const [isAuthenticating, setIsAuthenticating] = useState(false);
-
-  // Hide default header and use our custom one
-  useEffect(() => {
-    navigation.setOptions({
-      headerShown: false,
-    });
-  }, [navigation]);
 
   // Check if we have an auth error
   useEffect(() => {
@@ -66,11 +60,18 @@ export default function home() {
       console.error("Error logging out:", error);
     }
   };
-
-  return (
-    <SafeAreaView style={styles.container}>
-      {/* Custom header */}
-      <View style={styles.header}>
+  // Hide default header and use our custom one
+  useEffect(() => {
+    navigation.setOptions({
+      headerShown: true,
+      headerTitleStyle: {
+        color: "#FFC857", // Golden yellow color
+        fontSize: 28,
+        fontWeight: "bold",
+        letterSpacing: 2,
+      },
+      headerStyle: { backgroundColor: "#8E44AD" },
+      headerLeft: () => (
         <TouchableOpacity
           style={styles.menuButton}
           onPress={() => {
@@ -94,101 +95,110 @@ export default function home() {
         >
           <Ionicons name="menu" size={28} color="white" />
         </TouchableOpacity>
-        <Text style={styles.logoText}>SYNTH</Text>
-        <View style={styles.placeholder} />
-      </View>
+      ),
+      title: "SYNTH",
+    });
+  }, [navigation]);
 
-      {/* Spotify Connection Status */}
-      <View style={styles.spotifyStatus}>
-        {!isInitialized ? (
-          <ActivityIndicator size="small" color="#1DB954" />
-        ) : (
-          <>
-            <View style={styles.statusLine}>
-              <View
-                style={[
-                  styles.statusDot,
-                  token ? styles.statusConnected : styles.statusDisconnected,
-                ]}
-              />
-              <Text style={styles.spotifyStatusText}>
-                {token ? "Connected to Spotify" : "Not connected to Spotify"}
+  return (
+    <LinearGradient colors={["#040306", "#131624"]} style={{ flex: 1 }}>
+      <SafeAreaView>
+        {/* npx expo install expo-linear-gradient */}
+        {/* Spotify Connection Status */}
+        <View style={styles.spotifyStatus}>
+          {!isInitialized ? (
+            <ActivityIndicator size="small" color="#1DB954" />
+          ) : (
+            <>
+              <View style={styles.statusLine}>
+                <View
+                  style={[
+                    styles.statusDot,
+                    token ? styles.statusConnected : styles.statusDisconnected,
+                  ]}
+                />
+                <Text style={styles.spotifyStatusText}>
+                  {token ? "Connected to Spotify" : "Not connected to Spotify"}
+                </Text>
+              </View>
+
+              {token ? (
+                <TouchableOpacity
+                  style={styles.spotifyDisconnectButton}
+                  onPress={handleLogout}
+                >
+                  <Text style={styles.disconnectText}>Disconnect</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={styles.spotifyConnectButton}
+                  onPress={handleConnectSpotify}
+                  disabled={isAuthenticating}
+                >
+                  <Image
+                    source={require("../assets/white-spotify-logo.png")}
+                    style={styles.spotifyIcon}
+                  />
+                  <Text style={styles.spotifyConnectText}>
+                    {isAuthenticating ? "Connecting..." : "Connect to Spotify"}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </>
+          )}
+        </View>
+        <View style={styles.cardContainer}>
+          <TouchableOpacity
+            style={styles.card}
+            onPress={() => router.push("/create-game")}
+          >
+            <View style={styles.iconContainer}>
+              <Ionicons name="add-circle" size={32} color="white" />
+            </View>
+            <View style={styles.textContainer}>
+              <Text style={styles.cardTitle}>Create a new game</Text>
+              <Text style={styles.cardSubtitle}>
+                Invite your friends, guess the listener, and create playlists.
               </Text>
             </View>
+          </TouchableOpacity>
 
-            {token ? (
-              <TouchableOpacity
-                style={styles.spotifyDisconnectButton}
-                onPress={handleLogout}
-              >
-                <Text style={styles.disconnectText}>Disconnect</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={styles.spotifyConnectButton}
-                onPress={handleConnectSpotify}
-                disabled={isAuthenticating}
-              >
-                <Image
-                  source={require("../assets/white-spotify-logo.png")}
-                  style={styles.spotifyIcon}
-                />
-                <Text style={styles.spotifyConnectText}>
-                  {isAuthenticating ? "Connecting..." : "Connect to Spotify"}
-                </Text>
-              </TouchableOpacity>
-            )}
-          </>
-        )}
-      </View>
-
-      <View style={styles.cardContainer}>
-        <TouchableOpacity
-          style={styles.card}
-          onPress={() => router.push("/create-game")}
-        >
-          <View style={styles.iconContainer}>
-            <Ionicons name="add-circle" size={32} color="white" />
-          </View>
-          <View style={styles.textContainer}>
-            <Text style={styles.cardTitle}>Create a new game</Text>
-            <Text style={styles.cardSubtitle}>
-              Invite your friends, guess the listener, and create playlists.
-            </Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.card}
-          onPress={() => router.push("/join-game")}
-        >
-          <View style={styles.iconContainer}>
-            <Ionicons name="people" size={32} color="white" />
-          </View>
-          <View style={styles.textContainer}>
-            <Text style={styles.cardTitle}>Join a game</Text>
-            <Text style={styles.cardSubtitle}>
-              Join a game that your friend already created.
-            </Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.card}>
-          <View
-            style={styles.iconContainer}
-            onPress={() => alert("sorry this feature isn't available yet!")}
+          <TouchableOpacity
+            style={styles.card}
+            onPress={() => router.push("/join-game")}
           >
-            <Ionicons name="play-back-circle-outline" size={32} color="white" />
-          </View>
-          <View style={styles.textContainer}>
-            <Text style={styles.cardTitle}>Previous Games</Text>
-            <Text style={styles.cardSubtitle}>
-              See how you and your friends did on previous games.
-            </Text>
-          </View>
-        </TouchableOpacity>
-      </View>
-    </SafeAreaView>
+            <View style={styles.iconContainer}>
+              <Ionicons name="people" size={32} color="white" />
+            </View>
+            <View style={styles.textContainer}>
+              <Text style={styles.cardTitle}>Join a game</Text>
+              <Text style={styles.cardSubtitle}>
+                Join a game that your friend already created.
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.card}>
+            <View
+              style={styles.iconContainer}
+              onPress={() => alert("sorry this feature isn't available yet!")}
+            >
+              <Ionicons
+                name="play-back-circle-outline"
+                size={32}
+                color="white"
+              />
+            </View>
+            <View style={styles.textContainer}>
+              <Text style={styles.cardTitle}>Previous Games</Text>
+              <Text style={styles.cardSubtitle}>
+                See how you and your friends did on previous games.
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    </LinearGradient>
   );
 }
 

@@ -22,13 +22,41 @@ export default function JoinGame() {
   // Set header options
   useEffect(() => {
     navigation.setOptions({
-      headerShown: false,
+      // headerShown: true,
+      // headerTitleStyle: {
+      //   color: "#FFC857", // Golden yellow color
+      //   fontSize: 28,
+      //   fontWeight: "bold",
+      //   letterSpacing: 2,
+      // },
+      // headerStyle: { backgroundColor: "#8E44AD", height: 60 + insets.top},
+      // headerLeft: () => (
+      //   <TouchableOpacity
+      //     style={styles.menuButton}
+      //     onPress={() => navigation.goBack()}
+      //   >
+      //     <Ionicons name="arrow-back" size={28} color="white" />
+      //   </TouchableOpacity>
+      // ),
+      // title: "SYNTH",
+      header: (props) => (
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.menuButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={28} color="white" />
+          </TouchableOpacity>
+          <Text style={styles.logoText}>SYNTH</Text>
+          <View style={styles.placeholder} />
+        </View>
+      ),
     });
   }, [navigation]);
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
+      {/* <View style={styles.header}>
         <TouchableOpacity
           style={styles.menuButton}
           onPress={() => navigation.goBack()}
@@ -37,7 +65,7 @@ export default function JoinGame() {
         </TouchableOpacity>
         <Text style={styles.logoText}>SYNTH</Text>
         <View style={styles.placeholder} />
-      </View>
+      </View> */}
 
       <View style={styles.content}>
         <Text style={styles.sectionTitle}>Game Name</Text>
@@ -83,11 +111,12 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",
     justifyContent: "space-between",
     backgroundColor: "#8E44AD", // Purple background for header
     paddingVertical: 15,
     paddingHorizontal: 16,
+    height: 100,
   },
   menuButton: {
     padding: 8,

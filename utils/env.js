@@ -19,6 +19,7 @@ const redirectUri = (uri) => {
     console.error(err);
     alert(err);
   }
+
   return Platform.OS === "web" ? "http://localhost:19006/" : uri;
 };
 
@@ -45,7 +46,8 @@ const ENV = {
     // Fixed endpoint for top tracks
     TOP_TRACKS_API: "https://api.spotify.com/v1/me/top/tracks?limit=50",
     // Album endpoint remains the same
-    ALBUM_TRACK_API_GETTER: (albumId) => `https://api.spotify.com/v1/albums/${albumId}`,
+    ALBUM_TRACK_API_GETTER: (albumId) =>
+      `https://api.spotify.com/v1/albums/${albumId}`,
   },
 };
 

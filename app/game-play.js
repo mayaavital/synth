@@ -15,7 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSpotifyAuth } from "../utils";
 import { getMyRecentlyPlayedTracks } from "../utils/apiOptions";
 import { Audio } from "expo-av";
-import Slider from '@react-native-community/slider';
+import Slider from "@react-native-community/slider";
 
 const ROUNDS_TOTAL = 3;
 const MIN_PLAY_DURATION = 30000; // 30 seconds in milliseconds
@@ -25,17 +25,17 @@ export default function GamePlay() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { token } = useSpotifyAuth();
-  
+
   // State variables
   const [isLoading, setIsLoading] = useState(true);
   const [allSongs, setAllSongs] = useState([]);
   const [currentRound, setCurrentRound] = useState(1);
   const [currentSong, setCurrentSong] = useState(null);
-  const [gameStage, setGameStage] = useState('loading'); // loading, playing, voting, results
+  const [gameStage, setGameStage] = useState("loading"); // loading, playing, voting, results
   const [error, setError] = useState(null);
   const [playerSongs, setPlayerSongs] = useState({});
   const [hasFetchedSongs, setHasFetchedSongs] = useState(false);
-  
+
   // Audio playback states
   const [sound, setSound] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -43,12 +43,12 @@ export default function GamePlay() {
   const [songDuration, setSongDuration] = useState(0);
   const [canVote, setCanVote] = useState(false);
   const positionUpdateInterval = useRef(null);
-  
+
   // Get game details from params
   const gameName = params.gameName || "Game Name";
   const playerCount = parseInt(params.playerCount) || 4;
   const gameId = params.gameId || `game-${Date.now()}`;
-  
+
   // Parse player usernames from params if available
   let playerUsernames = [];
   try {
@@ -58,32 +58,49 @@ export default function GamePlay() {
   } catch (e) {
     console.error("Error parsing player data:", e);
   }
-  
+
   // Create players array using player usernames if available
-  const players = playerUsernames.length > 0 
-    ? playerUsernames.map((username, index) => ({
-        id: index + 1,
-        username,
-        platform: "spotify"
-      })) 
-    : [
-        { id: 1, username: "@luke_mcfall", platform: "spotify" },
-        { id: 2, username: "@cole_sprout", platform: "spotify" },
-        { id: 3, username: "@maya_avital", platform: "spotify" },
-        { id: 4, username: "@john_doe", platform: "spotify" },
-      ].slice(0, playerCount);
+  const players =
+    playerUsernames.length > 0
+      ? playerUsernames.map((username, index) => ({
+          id: index + 1,
+          username,
+          platform: "spotify",
+        }))
+      : [
+          { id: 1, username: "@luke_mcfall", platform: "spotify" },
+          { id: 2, username: "@cole_sprout", platform: "spotify" },
+          { id: 3, username: "@maya_avital", platform: "spotify" },
+          { id: 4, username: "@marcus_lintott", platform: "spotify" },
+        ].slice(0, playerCount);
 
   // Set header options
   useEffect(() => {
     navigation.setOptions({
-      headerShown: false,
+      headerShown: true,
+      headerTitleStyle: {
+        color: "#FFC857", // Golden yellow color
+        fontSize: 28,
+        fontWeight: "bold",
+        letterSpacing: 2,
+      },
+      headerStyle: { backgroundColor: "#8E44AD" },
+      headerLeft: () => (
+        <TouchableOpacity
+          style={styles.menuButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Ionicons name="arrow-back" size={28} color="white" />
+        </TouchableOpacity>
+      ),
+      title: gameName,
     });
-    
+
     console.log("Game started with params:", {
       gameName,
       playerCount,
       gameId,
-      players: players.map(p => p.username)
+      players: players.map((p) => p.username),
     });
   }, [navigation]);
 
@@ -93,59 +110,72 @@ export default function GamePlay() {
     if (hasFetchedSongs || token === undefined) {
       return;
     }
-    
+
     const fetchSongs = async () => {
       try {
         setIsLoading(true);
-        
+
         // Mock song data to use if token is not available
         const mockSongs = [
           {
             songTitle: "A Day in the Life",
             songArtists: ["The Beatles"],
             albumName: "Sgt. Pepper's Lonely Hearts Club Band",
-            imageUrl: "https://i.scdn.co/image/ab67616d0000b273128450651c9f0442780d8eb8",
+            imageUrl:
+              "https://i.scdn.co/image/ab67616d0000b273128450651c9f0442780d8eb8",
             duration: 337000,
-            previewUrl: "https://p.scdn.co/mp3-preview/67f504bf5b86bdcaf197aef343c2413e8ec68b1d",
+            previewUrl:
+              "https://p.scdn.co/mp3-preview/67f504bf5b86bdcaf197aef343c2413e8ec68b1d",
           },
           {
             songTitle: "Bohemian Rhapsody",
             songArtists: ["Queen"],
             albumName: "A Night at the Opera",
-            imageUrl: "https://i.scdn.co/image/ab67616d0000b27328581cfe196c2be2506ee6c0",
+            imageUrl:
+              "https://i.scdn.co/image/ab67616d0000b27328581cfe196c2be2506ee6c0",
             duration: 354000,
-            previewUrl: "https://p.scdn.co/mp3-preview/1f8e6abaed1a4f4399a0677a1771fccc3b6858b9",
+            previewUrl:
+              "https://p.scdn.co/mp3-preview/1f8e6abaed1a4f4399a0677a1771fccc3b6858b9",
           },
           {
             songTitle: "Hotel California",
             songArtists: ["Eagles"],
             albumName: "Hotel California",
-            imageUrl: "https://i.scdn.co/image/ab67616d0000b273446e630d93d3fb235d70bad9",
+            imageUrl:
+              "https://i.scdn.co/image/ab67616d0000b273446e630d93d3fb235d70bad9",
             duration: 391000,
-            previewUrl: "https://p.scdn.co/mp3-preview/77cc7b5141629531e37db44e7f9950f12705b987",
+            previewUrl:
+              "https://p.scdn.co/mp3-preview/77cc7b5141629531e37db44e7f9950f12705b987",
           },
           {
             songTitle: "Billie Jean",
             songArtists: ["Michael Jackson"],
             albumName: "Thriller",
-            imageUrl: "https://i.scdn.co/image/ab67616d0000b273982d4494b5ce78e84f1a5de4",
+            imageUrl:
+              "https://i.scdn.co/image/ab67616d0000b273982d4494b5ce78e84f1a5de4",
             duration: 294000,
-            previewUrl: "https://p.scdn.co/mp3-preview/14602bfa5a1745966e4c4becbe637f2bb164d8b5",
+            previewUrl:
+              "https://p.scdn.co/mp3-preview/14602bfa5a1745966e4c4becbe637f2bb164d8b5",
           },
           {
             songTitle: "Purple Haze",
             songArtists: ["Jimi Hendrix"],
             albumName: "Are You Experienced",
-            imageUrl: "https://i.scdn.co/image/ab67616d0000b273a9feeafe29cb1e4318b075b8",
+            imageUrl:
+              "https://i.scdn.co/image/ab67616d0000b273a9feeafe29cb1e4318b075b8",
             duration: 171000,
-            previewUrl: "https://p.scdn.co/mp3-preview/8407186fb4e9e393d85e93fdd26d0559e56ef817",
+            previewUrl:
+              "https://p.scdn.co/mp3-preview/8407186fb4e9e393d85e93fdd26d0559e56ef817",
           },
         ];
-        
+
         let tracks;
-        
-        console.log("Current token status:", token ? "Token available" : "No token");
-        
+
+        console.log(
+          "Current token status:",
+          token ? "Token available" : "No token"
+        );
+
         if (!token) {
           console.log("No Spotify token available, using mock song data");
           tracks = mockSongs;
@@ -154,37 +184,44 @@ export default function GamePlay() {
             // Fetch songs from Spotify API - only try once to avoid rate limits
             console.log("Fetching tracks using token");
             tracks = await getMyRecentlyPlayedTracks(token);
-            console.log("Successfully fetched tracks from Spotify API:", tracks?.length || 0);
-            
+            console.log(
+              "Successfully fetched tracks from Spotify API:",
+              tracks?.length || 0
+            );
+
             if (!tracks || tracks.length === 0) {
-              console.log("No tracks found from Spotify API, using mock song data");
+              console.log(
+                "No tracks found from Spotify API, using mock song data"
+              );
               tracks = mockSongs;
             }
           } catch (apiError) {
             console.error("Error fetching from Spotify API:", apiError);
             // If we hit rate limit, use mock data and don't retry
             if (apiError?.response?.status === 429) {
-              console.log("Rate limit reached (429), using mock data without retrying");
+              console.log(
+                "Rate limit reached (429), using mock data without retrying"
+              );
             }
             tracks = mockSongs;
           }
         }
-        
+
         console.log(`Using ${tracks.length} tracks for the game`);
-        
+
         // Take up to 15 songs and associate them with random players
-        const processedSongs = tracks.slice(0, 15).map(track => ({
+        const processedSongs = tracks.slice(0, 15).map((track) => ({
           ...track,
           assignedToPlayer: players[Math.floor(Math.random() * players.length)],
         }));
-        
+
         setAllSongs(processedSongs);
-        
+
         // Select first song for first round
         selectSongForRound(1, processedSongs);
-        
+
         setIsLoading(false);
-        setGameStage('playing');
+        setGameStage("playing");
         setHasFetchedSongs(true); // Mark as having fetched songs to prevent loops
       } catch (err) {
         console.error("Error fetching songs:", err);
@@ -193,7 +230,7 @@ export default function GamePlay() {
         setHasFetchedSongs(true); // Mark as having fetched even on error to prevent infinite retries
       }
     };
-    
+
     // Only fetch songs once
     fetchSongs();
   }, [token, players, hasFetchedSongs]);
@@ -209,25 +246,25 @@ export default function GamePlay() {
       }
     };
   }, [sound]);
-  
+
   // Select a song for the current round
   const selectSongForRound = (round, songs = allSongs) => {
     if (!songs || songs.length === 0) return;
-    
+
     // Select a song based on round number (for demo purposes)
     // In a real game, you'd want to ensure no duplicates between rounds
     const index = (round - 1) % songs.length;
     setCurrentSong(songs[index]);
-    
+
     // Reset playback states
     setPlaybackPosition(0);
     setSongDuration(0);
     setCanVote(false);
-    
+
     // Start playing the new song
     loadAndPlaySong(songs[index]);
   };
-  
+
   // Load and play the selected song
   const loadAndPlaySong = async (song) => {
     try {
@@ -238,7 +275,7 @@ export default function GamePlay() {
           clearInterval(positionUpdateInterval.current);
         }
       }
-      
+
       // Only proceed if there's a preview URL
       if (!song.previewUrl) {
         console.warn("No preview URL available for this song");
@@ -248,7 +285,7 @@ export default function GamePlay() {
         }, 5000); // Let them vote after just 5 seconds if no audio
         return;
       }
-      
+
       try {
         // Load the new sound
         const { sound: newSound } = await Audio.Sound.createAsync(
@@ -256,15 +293,15 @@ export default function GamePlay() {
           { shouldPlay: true },
           onPlaybackStatusUpdate
         );
-        
+
         setSound(newSound);
         setIsPlaying(true);
-        
+
         // Start timer to enable voting after 30 seconds
         setTimeout(() => {
           setCanVote(true);
         }, MIN_PLAY_DURATION);
-        
+
         // Set up interval to update playback position
         positionUpdateInterval.current = setInterval(async () => {
           if (sound) {
@@ -282,31 +319,30 @@ export default function GamePlay() {
           setCanVote(true);
         }, 5000);
       }
-      
     } catch (error) {
       console.error("Error in loadAndPlaySong:", error);
       // Enable voting as a fallback
       setCanVote(true);
     }
   };
-  
+
   // Handle playback status updates
   const onPlaybackStatusUpdate = (status) => {
     if (status.isLoaded) {
       setSongDuration(status.durationMillis || 0);
       setPlaybackPosition(status.positionMillis);
-      
+
       // If the song ended naturally
       if (status.didJustFinish) {
         setCanVote(true);
-        
+
         if (positionUpdateInterval.current) {
           clearInterval(positionUpdateInterval.current);
         }
       }
     }
   };
-  
+
   // Toggle play/pause
   const togglePlayPause = async () => {
     if (sound) {
@@ -318,7 +354,7 @@ export default function GamePlay() {
       setIsPlaying(!isPlaying);
     }
   };
-  
+
   // Move to the next round
   const nextRound = () => {
     // Stop current playback
@@ -328,27 +364,27 @@ export default function GamePlay() {
         clearInterval(positionUpdateInterval.current);
       }
     }
-    
+
     if (currentRound < ROUNDS_TOTAL) {
       const nextRoundNum = currentRound + 1;
       setCurrentRound(nextRoundNum);
       selectSongForRound(nextRoundNum);
-      setGameStage('playing');
+      setGameStage("playing");
     } else {
       // Game over - would show final results
-      setGameStage('results');
+      setGameStage("results");
     }
   };
 
   const handleReturnToLobby = () => {
-    router.replace('/game-lobby');
+    router.replace("/game-lobby");
   };
 
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity 
+        {/* <View style={styles.header}>
+          <TouchableOpacity
             style={styles.menuButton}
             onPress={() => navigation.goBack()}
           >
@@ -356,8 +392,8 @@ export default function GamePlay() {
           </TouchableOpacity>
           <Text style={styles.logoText}>SYNTH</Text>
           <View style={styles.placeholder} />
-        </View>
-        
+        </View> */}
+
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#C143FF" />
           <Text style={styles.loadingText}>Loading songs...</Text>
@@ -365,12 +401,12 @@ export default function GamePlay() {
       </SafeAreaView>
     );
   }
-  
+
   if (error) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity 
+        {/* <View style={styles.header}>
+          <TouchableOpacity
             style={styles.menuButton}
             onPress={() => navigation.goBack()}
           >
@@ -378,15 +414,12 @@ export default function GamePlay() {
           </TouchableOpacity>
           <Text style={styles.logoText}>SYNTH</Text>
           <View style={styles.placeholder} />
-        </View>
-        
+        </View> */}
+
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle" size={64} color="#FF6B6B" />
           <Text style={styles.errorText}>{error}</Text>
-          <Pressable 
-            style={styles.retryButton}
-            onPress={handleReturnToLobby}
-          >
+          <Pressable style={styles.retryButton} onPress={handleReturnToLobby}>
             <Text style={styles.retryButtonText}>Back to Lobby</Text>
           </Pressable>
         </View>
@@ -396,8 +429,8 @@ export default function GamePlay() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity 
+      {/* <View style={styles.header}>
+        <TouchableOpacity
           style={styles.menuButton}
           onPress={() => navigation.goBack()}
         >
@@ -405,31 +438,37 @@ export default function GamePlay() {
         </TouchableOpacity>
         <Text style={styles.logoText}>SYNTH</Text>
         <View style={styles.placeholder} />
-      </View>
-      
+      </View> */}
+
       <View style={styles.gameStatusBar}>
-        <Text style={styles.roundText}>Round {currentRound} of {ROUNDS_TOTAL}</Text>
+        <Text style={styles.roundText}>
+          Round {currentRound} of {ROUNDS_TOTAL}
+        </Text>
       </View>
-      
-      {currentSong && gameStage === 'playing' && (
+
+      {currentSong && gameStage === "playing" && (
         <View style={styles.songPlaybackContainer}>
           {/* Album artwork with stylish background */}
           <View style={styles.albumArtworkWrapper}>
             <View style={styles.albumArtworkBackground}>
-              <Image 
-                source={{ uri: currentSong.imageUrl }} 
+              <Image
+                source={{ uri: currentSong.imageUrl }}
                 style={styles.albumCover}
                 resizeMode="cover"
               />
             </View>
           </View>
-          
+
           {/* Song info */}
           <View style={styles.songPlaybackInfo}>
-            <Text style={styles.playbackSongTitle}>{currentSong.songTitle}</Text>
-            <Text style={styles.playbackArtistName}>{currentSong.songArtists.join(', ')}</Text>
+            <Text style={styles.playbackSongTitle}>
+              {currentSong.songTitle}
+            </Text>
+            <Text style={styles.playbackArtistName}>
+              {currentSong.songArtists.join(", ")}
+            </Text>
           </View>
-          
+
           {/* Custom waveform visualization */}
           <View style={styles.waveformContainer}>
             <View style={styles.waveformBars}>
@@ -437,34 +476,35 @@ export default function GamePlay() {
                 // Create random heights for the bars to simulate a waveform
                 const randomHeight = 10 + Math.random() * 40;
                 return (
-                  <View 
+                  <View
                     key={index}
                     style={[
                       styles.waveformBar,
-                      { 
+                      {
                         height: randomHeight,
-                        opacity: index % 3 === 0 ? 0.9 : index % 2 === 0 ? 0.7 : 0.5
-                      }
+                        opacity:
+                          index % 3 === 0 ? 0.9 : index % 2 === 0 ? 0.7 : 0.5,
+                      },
                     ]}
                   />
                 );
               })}
             </View>
           </View>
-          
+
           {/* Playback controls */}
           <View style={styles.playbackControlsContainer}>
             <TouchableOpacity
               style={styles.playPauseButton}
               onPress={togglePlayPause}
             >
-              <Ionicons 
-                name={isPlaying ? "pause" : "play"} 
-                size={28} 
-                color="white" 
+              <Ionicons
+                name={isPlaying ? "pause" : "play"}
+                size={28}
+                color="white"
               />
             </TouchableOpacity>
-            
+
             {/* Progress bar */}
             <View style={styles.progressBarContainer}>
               <Slider
@@ -481,23 +521,18 @@ export default function GamePlay() {
                 <Text style={styles.timeText}>
                   {formatTime(playbackPosition)}
                 </Text>
-                <Text style={styles.timeText}>
-                  {formatTime(songDuration)}
-                </Text>
+                <Text style={styles.timeText}>{formatTime(songDuration)}</Text>
               </View>
             </View>
           </View>
-          
+
           {/* Bottom vote button */}
           <View style={styles.voteButtonContainer}>
             <Pressable
-              style={[
-                styles.voteButton, 
-                !canVote && styles.voteButtonDisabled
-              ]}
+              style={[styles.voteButton, !canVote && styles.voteButtonDisabled]}
               onPress={() => {
                 if (canVote) {
-                  setGameStage('voting');
+                  setGameStage("voting");
                 }
               }}
               disabled={!canVote}
@@ -513,15 +548,15 @@ export default function GamePlay() {
           </View>
         </View>
       )}
-      
-      {gameStage === 'voting' && (
+
+      {gameStage === "voting" && (
         <View style={styles.votingContainer}>
           <Text style={styles.votingInstructions}>
             Who do you think listened to this song?
           </Text>
-          
+
           <View style={styles.playersGrid}>
-            {players.map(player => (
+            {players.map((player) => (
               <Pressable
                 key={player.id}
                 style={styles.playerVoteButton}
@@ -531,33 +566,35 @@ export default function GamePlay() {
                     round: currentRound,
                     songId: currentSong?.songTitle,
                     votedFor: player.username,
-                    correctPlayer: currentSong?.assignedToPlayer?.username
+                    correctPlayer: currentSong?.assignedToPlayer?.username,
                   };
-                  
+
                   console.log("Vote cast:", newVote);
-                  
+
                   // Check if this was the correct guess
-                  const isCorrectGuess = 
+                  const isCorrectGuess =
                     player.username === currentSong?.assignedToPlayer?.username;
-                  
+
                   // Show feedback (in a full implementation, you'd show this to all players)
                   Alert.alert(
                     isCorrectGuess ? "Correct!" : "Incorrect!",
-                    isCorrectGuess 
-                      ? `Yes, ${player.username} listened to this song!` 
+                    isCorrectGuess
+                      ? `Yes, ${player.username} listened to this song!`
                       : `Actually, ${currentSong?.assignedToPlayer?.username} listened to this song.`,
-                    [{ 
-                      text: "Next Round", 
-                      onPress: () => nextRound()
-                    }]
+                    [
+                      {
+                        text: "Next Round",
+                        onPress: () => nextRound(),
+                      },
+                    ]
                   );
                 }}
               >
                 <View style={styles.profileImageContainer}>
                   <View style={styles.profileBackground}>
-                    <Image 
-                      source={require('../assets/pfp.png')} 
-                      style={styles.profileImage} 
+                    <Image
+                      source={require("../assets/pfp.png")}
+                      style={styles.profileImage}
                     />
                   </View>
                 </View>
@@ -567,33 +604,30 @@ export default function GamePlay() {
           </View>
         </View>
       )}
-      
-      {gameStage === 'results' && (
+
+      {gameStage === "results" && (
         <View style={styles.resultsContainer}>
           <Text style={styles.resultsTitle}>Game Complete!</Text>
-          
+
           <View style={styles.gameStats}>
             <Text style={styles.gameStatsHeader}>
-              {gameName} - Game #{gameId.split('-')[1].substring(0, 6)}
+              {gameName} - Game #{gameId.split("-")[1].substring(0, 6)}
             </Text>
-            
+
             <Text style={styles.gameStatLine}>
-              Players: {players.map(p => p.username).join(', ')}
+              Players: {players.map((p) => p.username).join(", ")}
             </Text>
-            
+
             <Text style={styles.gameStatLine}>
               Songs played: {currentRound}
             </Text>
-            
+
             <Text style={styles.gameStatLine}>
               Game type: Guess The Listener
             </Text>
           </View>
-          
-          <Pressable
-            style={styles.returnButton}
-            onPress={handleReturnToLobby}
-          >
+
+          <Pressable style={styles.returnButton} onPress={handleReturnToLobby}>
             <Text style={styles.returnButtonText}>Return to Lobby</Text>
           </Pressable>
         </View>
@@ -605,12 +639,14 @@ export default function GamePlay() {
 // Helper function to format time in MM:SS
 const formatTime = (milliseconds) => {
   if (!milliseconds) return "00:00";
-  
+
   const totalSeconds = Math.floor(milliseconds / 1000);
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
-  
-  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+
+  return `${minutes.toString().padStart(2, "0")}:${seconds
+    .toString()
+    .padStart(2, "0")}`;
 };
 
 const styles = StyleSheet.create({
@@ -897,4 +933,4 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
   },
-}); 
+});

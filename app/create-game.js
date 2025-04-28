@@ -22,13 +22,29 @@ export default function CreateGame() {
   // Set header options
   useEffect(() => {
     navigation.setOptions({
-      headerShown: false,
+      headerShown: true,
+      headerTitleStyle: {
+        color: "#FFC857", // Golden yellow color
+        fontSize: 28,
+        fontWeight: "bold",
+        letterSpacing: 2,
+      },
+      headerStyle: { backgroundColor: "#8E44AD" },
+      headerLeft: () => (
+        <TouchableOpacity
+          style={styles.menuButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Ionicons name="arrow-back" size={28} color="white" />
+        </TouchableOpacity>
+      ),
+      title: "SYNTH",
     });
   }, [navigation]);
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
+      {/* <View style={styles.header}>
         <TouchableOpacity
           style={styles.menuButton}
           onPress={() => navigation.goBack()}
@@ -37,7 +53,7 @@ export default function CreateGame() {
         </TouchableOpacity>
         <Text style={styles.logoText}>SYNTH</Text>
         <View style={styles.placeholder} />
-      </View>
+      </View> */}
 
       <View style={styles.content}>
         <Text style={styles.sectionTitle}>Game Name</Text>
