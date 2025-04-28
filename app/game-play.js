@@ -483,49 +483,6 @@ export default function GamePlay() {
     router.replace("/game-lobby");
   };
 
-  // Handle token validation issues
-  const handleTokenError = async (error) => {
-    console.log("Token error:", error);
-
-    if (error?.response?.status === 401) {
-      // Token expired or invalid
-      Alert.alert(
-        "Spotify Session Expired",
-        "Your Spotify session has expired. Would you like to reconnect?",
-        [
-          {
-            text: "Cancel",
-            onPress: () => handleReturnToLobby(),
-            style: "cancel",
-          },
-          {
-            text: "Reconnect",
-            onPress: async () => {
-              // First log out to clear the old token
-              await logout();
-              // Then initiate a new auth flow
-              await getSpotifyAuth();
-              // Refresh the page - in a real app you might handle this more elegantly
-              Alert.alert(
-                "Authentication Complete",
-                "Please return to the lobby and start a new game.",
-                [{ text: "OK", onPress: () => handleReturnToLobby() }]
-              );
-            },
-          },
-        ]
-      );
-    } else {
-      // Some other error
-      Alert.alert(
-        "Spotify Connection Error",
-        "There was a problem connecting to Spotify. Please try again later.",
-        [{ text: "OK", onPress: () => handleReturnToLobby() }]
-      );
-    }
-  };
-
-  // Handle token validation issues
   const handleTokenError = async (error) => {
     console.log("Token error:", error);
 
