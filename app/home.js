@@ -17,8 +17,15 @@ import { useSpotifyAuth } from "../utils";
 export default function home() {
   const navigation = useNavigation();
   const router = useRouter();
-  const { token, authError, getSpotifyAuth, logout, isInitialized, isTokenValid, getValidToken } =
-    useSpotifyAuth();
+  const {
+    token,
+    authError,
+    getSpotifyAuth,
+    logout,
+    isInitialized,
+    isTokenValid,
+    getValidToken,
+  } = useSpotifyAuth();
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [tokenStatus, setTokenStatus] = useState("unknown");
 
@@ -28,7 +35,7 @@ export default function home() {
       setTokenStatus("none");
       return;
     }
-    
+
     if (isTokenValid()) {
       setTokenStatus("valid");
     } else {
@@ -131,7 +138,7 @@ export default function home() {
   // Get user-friendly token status message
   const getTokenStatusMessage = () => {
     if (!isInitialized) return "Checking connection...";
-    
+
     switch (tokenStatus) {
       case "valid":
         return "Connected to Spotify";
@@ -154,7 +161,13 @@ export default function home() {
         fontWeight: "bold",
         letterSpacing: 2,
       },
-      headerStyle: { backgroundColor: "#8E44AD" },
+      headerStyle: {
+        backgroundColor: "#8E44AD",
+        shadowColor: "#FFFFF",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.5,
+        shadowRadius: 3,
+      },
       headerLeft: () => (
         <TouchableOpacity
           style={styles.menuButton}
@@ -185,133 +198,136 @@ export default function home() {
   }, [navigation, token]);
 
   return (
-    <LinearGradient colors={["#040306", "#131624"]} style={{ flex: 1 }}>
-      <SafeAreaView>
-        {/* Spotify Connection Status */}
-        <View style={styles.spotifyStatus}>
-          {!isInitialized ? (
-            <ActivityIndicator size="small" color="#1DB954" />
-          ) : (
-            <>
-              <View style={styles.statusLine}>
-                <View
-                  style={[
-                    styles.statusDot,
-                    tokenStatus === "valid" ? styles.statusConnected : 
-                    tokenStatus === "expired" ? styles.statusWarning : 
-                    styles.statusDisconnected,
-                  ]}
-                />
-                <Text style={styles.spotifyStatusText}>
-                  {getTokenStatusMessage()}
-                </Text>
-              </View>
+    // <LinearGradient colors={["#040306", "#131624"]} style={{ flex: 1 }}>
+    <SafeAreaView style={{ backgroundColor: "#1E1E1E", flex: 1 }}>
+      {/* Spotify Connection Status */}
+      <View style={styles.spotifyStatus}>
+        {!isInitialized ? (
+          <ActivityIndicator size="small" color="#1DB954" />
+        ) : (
+          <>
+            <View style={styles.statusLine}>
+              <View
+                style={[
+                  styles.statusDot,
+                  tokenStatus === "valid"
+                    ? styles.statusConnected
+                    : tokenStatus === "expired"
+                    ? styles.statusWarning
+                    : styles.statusDisconnected,
+                ]}
+              />
+              <Text style={styles.spotifyStatusText}>
+                {getTokenStatusMessage()}
+              </Text>
+            </View>
 
-              {token ? (
-                tokenStatus === "expired" ? (
-                  // Show refresh button for expired tokens
-                  <TouchableOpacity
-                    style={styles.spotifyRefreshButton}
-                    onPress={handleRefreshToken}
-                    disabled={isAuthenticating}
-                  >
-                    {isAuthenticating ? (
-                      <ActivityIndicator size="small" color="white" />
-                    ) : (
-                      <>
-                        <Ionicons name="refresh" size={20} color="white" style={styles.refreshIcon} />
-                        <Text style={styles.refreshText}>Refresh Connection</Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
-                ) : (
-                  // Show disconnect button for valid tokens
-                  <TouchableOpacity
-                    style={styles.spotifyDisconnectButton}
-                    onPress={handleLogout}
-                  >
-                    <Text style={styles.disconnectText}>Disconnect</Text>
-                  </TouchableOpacity>
-                )
-              ) : (
-                // Show connect button when no token
+            {token ? (
+              tokenStatus === "expired" ? (
+                // Show refresh button for expired tokens
                 <TouchableOpacity
-                  style={styles.spotifyConnectButton}
-                  onPress={handleConnectSpotify}
+                  style={styles.spotifyRefreshButton}
+                  onPress={handleRefreshToken}
                   disabled={isAuthenticating}
                 >
                   {isAuthenticating ? (
                     <ActivityIndicator size="small" color="white" />
                   ) : (
                     <>
-                      <Image
-                        source={require("../assets/white-spotify-logo.png")}
-                        style={styles.spotifyIcon}
+                      <Ionicons
+                        name="refresh"
+                        size={20}
+                        color="white"
+                        style={styles.refreshIcon}
                       />
-                      <Text style={styles.spotifyConnectText}>
-                        Connect to Spotify
-                      </Text>
+                      <Text style={styles.refreshText}>Refresh Connection</Text>
                     </>
                   )}
                 </TouchableOpacity>
-              )}
-            </>
-          )}
-        </View>
-        
-        {/* Game options */}
-        <View style={styles.cardContainer}>
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => router.push("/create-game")}
-          >
-            <View style={styles.iconContainer}>
-              <Ionicons name="add-circle" size={32} color="white" />
-            </View>
-            <View style={styles.textContainer}>
-              <Text style={styles.cardTitle}>Create a new game</Text>
-              <Text style={styles.cardSubtitle}>
-                Invite your friends, guess the listener, and create playlists.
-              </Text>
-            </View>
-          </TouchableOpacity>
+              ) : (
+                // Show disconnect button for valid tokens
+                <TouchableOpacity
+                  style={styles.spotifyDisconnectButton}
+                  onPress={handleLogout}
+                >
+                  <Text style={styles.disconnectText}>Disconnect</Text>
+                </TouchableOpacity>
+              )
+            ) : (
+              // Show connect button when no token
+              <TouchableOpacity
+                style={styles.spotifyConnectButton}
+                onPress={handleConnectSpotify}
+                disabled={isAuthenticating}
+              >
+                {isAuthenticating ? (
+                  <ActivityIndicator size="small" color="white" />
+                ) : (
+                  <>
+                    <Image
+                      source={require("../assets/white-spotify-logo.png")}
+                      style={styles.spotifyIcon}
+                    />
+                    <Text style={styles.spotifyConnectText}>
+                      Connect to Spotify
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
+          </>
+        )}
+      </View>
 
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => router.push("/join-game")}
-          >
-            <View style={styles.iconContainer}>
-              <Ionicons name="people" size={32} color="white" />
-            </View>
-            <View style={styles.textContainer}>
-              <Text style={styles.cardTitle}>Join a game</Text>
-              <Text style={styles.cardSubtitle}>
-                Join a game that your friend already created.
-              </Text>
-            </View>
-          </TouchableOpacity>
+      {/* Game options */}
+      <View style={styles.cardContainer}>
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => router.push("/create-game")}
+        >
+          <View style={styles.iconContainer}>
+            <Ionicons name="add-circle" size={32} color="white" />
+          </View>
+          <View style={styles.textContainer}>
+            <Text style={styles.cardTitle}>Create a new game</Text>
+            <Text style={styles.cardSubtitle}>
+              Invite your friends, guess the listener, and create playlists.
+            </Text>
+          </View>
+        </TouchableOpacity>
 
-          <TouchableOpacity style={styles.card}>
-            <View
-              style={styles.iconContainer}
-              onPress={() => alert("sorry this feature isn't available yet!")}
-            >
-              <Ionicons
-                name="play-back-circle-outline"
-                size={32}
-                color="white"
-              />
-            </View>
-            <View style={styles.textContainer}>
-              <Text style={styles.cardTitle}>Previous Games</Text>
-              <Text style={styles.cardSubtitle}>
-                See how you and your friends did on previous games.
-              </Text>
-            </View>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    </LinearGradient>
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => router.push("/join-game")}
+        >
+          <View style={styles.iconContainer}>
+            <Ionicons name="people" size={32} color="white" />
+          </View>
+          <View style={styles.textContainer}>
+            <Text style={styles.cardTitle}>Join a game</Text>
+            <Text style={styles.cardSubtitle}>
+              Join a game that your friend already created.
+            </Text>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.card}>
+          <View
+            style={styles.iconContainer}
+            onPress={() => alert("sorry this feature isn't available yet!")}
+          >
+            <Ionicons name="play-back-circle-outline" size={32} color="white" />
+          </View>
+          <View style={styles.textContainer}>
+            <Text style={styles.cardTitle}>Previous Games</Text>
+            <Text style={styles.cardSubtitle}>
+              See how you and your friends did on previous games.
+            </Text>
+          </View>
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
+    // </LinearGradient>
   );
 }
 
@@ -346,6 +362,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#282828",
     borderRadius: 10,
     alignItems: "center",
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
   },
   statusLine: {
     flexDirection: "row",

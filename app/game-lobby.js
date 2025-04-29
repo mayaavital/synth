@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Pressable,
   Alert,
+  ScrollView,
 } from "react-native";
 import { useNavigation, useRouter, useLocalSearchParams } from "expo-router";
 import { useState, useEffect } from "react";
@@ -31,6 +32,7 @@ export default function GameLobby() {
       platform: "spotify",
       isHost: true,
       isConnected: true,
+      img_path: require("../assets/luke.png"),
     },
     {
       id: 2,
@@ -38,6 +40,7 @@ export default function GameLobby() {
       platform: "spotify",
       isHost: false,
       isConnected: true,
+      img_path: require("../assets/cole 1.png"),
     },
     {
       id: 3,
@@ -45,6 +48,15 @@ export default function GameLobby() {
       platform: "spotify",
       isHost: false,
       isConnected: true,
+      img_path: require("../assets/maya.png"),
+    },
+    {
+      id: 4,
+      username: "@marcus_lintott",
+      platform: "spotify",
+      isHost: false,
+      isConnected: true,
+      img_path: require("../assets/marcus.png"),
     },
     // Empty slots will be filled based on playerCount
   ]);
@@ -146,60 +158,62 @@ export default function GameLobby() {
       </View> */}
 
       {/* Player grid */}
-      <View style={styles.playerGrid}>
-        {players.map((player, index) => (
-          <View
-            key={player.id}
-            style={[
-              styles.playerCard,
-              {
-                borderColor: getCardBorderColor(index),
-                shadowColor: getCardBorderColor(index),
-                shadowRadius: 8
-              },
-            ]}
-          >
-            {/* {player.isHost && ( // will include this once backend is connected
+      <ScrollView>
+        <View style={styles.playerGrid}>
+          {players.map((player, index) => (
+            <View
+              key={player.id}
+              style={[
+                styles.playerCard,
+                {
+                  borderColor: getCardBorderColor(index),
+                  shadowColor: getCardBorderColor(index),
+                  shadowRadius: 8,
+                },
+              ]}
+            >
+              {/* {player.isHost && ( // will include this once backend is connected
               <View style={styles.crownContainer}>
                 <Ionicons name="crown" size={32} color="white" />
               </View>
             )} */}
 
-            {player.isConnected ? (
-              <>
-                <View style={styles.profileImageContainer}>
-                  <View style={styles.profileBackground}>
-                    <Image
-                      source={require("../assets/pfp.png")}
-                      style={styles.profileImage}
-                    />
+              {player.isConnected ? (
+                <>
+                  <View style={styles.profileImageContainer}>
+                    <View style={styles.profileBackground}>
+                      <Image
+                        source={player.img_path}
+                        resizeMode="contain"
+                        style={styles.profileImage}
+                      />
+                    </View>
                   </View>
-                </View>
-                <Text style={styles.username}>{player.username}</Text>
-                <View style={styles.platformContainer}>
-                  <Text style={styles.listeningText}>Listening on</Text>
-                  <View style={styles.spotifyIcon}>
-                    <Image
-                      source={require("../assets/white-spotify-logo.png")}
-                      style={styles.spotifyLogoImage}
-                    />
+                  <Text style={styles.username}>{player.username}</Text>
+                  <View style={styles.platformContainer}>
+                    <Text style={styles.listeningText}>Listening on</Text>
+                    <View style={styles.spotifyIcon}>
+                      <Image
+                        source={require("../assets/white-spotify-logo.png")}
+                        style={styles.spotifyLogoImage}
+                      />
+                    </View>
                   </View>
+                </>
+              ) : (
+                <View style={styles.waitingContainer}>
+                  <Ionicons
+                    name="person-circle-outline"
+                    size={80}
+                    color="white"
+                  />
+                  <Text style={styles.waitingText}>Waiting to join...</Text>
                 </View>
-              </>
-            ) : (
-              <View style={styles.waitingContainer}>
-                <Ionicons
-                  name="person-circle-outline"
-                  size={80}
-                  color="white"
-                />
-                <Text style={styles.waitingText}>Waiting to join...</Text>
-              </View>
-            )}
-          </View>
-        ))}
-      </View>
-
+              )}
+            </View>
+          ))}
+        </View>
+      </ScrollView>
       {/* Start Game Button */}
       <View style={styles.startButtonContainer}>
         <Pressable

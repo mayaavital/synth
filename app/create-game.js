@@ -97,6 +97,37 @@ export default function CreateGame() {
             <Text style={styles.countText}>4</Text>
           </TouchableOpacity>
         </View>
+        <View style={styles.playerCountContainer}>
+          <TouchableOpacity
+            style={[
+              styles.countOption,
+              playerCount === 5 && styles.selectedCount,
+            ]}
+            onPress={() => setPlayerCount(5)}
+          >
+            <Text style={styles.countText}>5</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.countOption,
+              playerCount === 6 && styles.selectedCount,
+            ]}
+            onPress={() => setPlayerCount(6)}
+          >
+            <Text style={styles.countText}>6</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.countOption,
+              playerCount === 7 && styles.selectedCount,
+            ]}
+            onPress={() => setPlayerCount(7)}
+          >
+            <Text style={styles.countText}>7</Text>
+          </TouchableOpacity>
+        </View>
 
         <Pressable
           style={[
