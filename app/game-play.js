@@ -17,10 +17,12 @@ import { Audio } from "expo-av";
 import Slider from "@react-native-community/slider";
 import { useSpotifyAuth } from "../utils";
 import { getMyRecentlyPlayedTracks, getAlbumTracks, getTrackDetails } from "../utils/apiOptions";
+// Import Deezer API functions
+import { enrichTracksWithDeezerPreviews, findDeezerTrackFromSpotify } from "../utils/deezerApi";
 
 const ALBUM_ID = "2noRn2Aes5aoNVsU6iWThc";
 const ROUNDS_TOTAL = 3;
-const MIN_PLAY_DURATION = 15000; // Reduced to 15 seconds for testing
+const MIN_PLAY_DURATION = 15000; // Set to 15 seconds as specified
 
 export default function GamePlay() {
   const navigation = useNavigation();
@@ -308,19 +310,46 @@ export default function GamePlay() {
                 console.error("Error in batch track fetching:", batchError);
               }
               
-              if (individualTracks.length >= 3) {
-                console.log(`Found ${individualTracks.length} tracks with previews from track API`);
-                tracks = individualTracks;
-              } else {
-                // If we still don't have enough tracks, try mix and match
-                const combinedTracks = [...validTracks, ...individualTracks];
-                if (combinedTracks.length >= 3) {
-                  console.log(`Using combined ${combinedTracks.length} tracks with preview URLs`);
-                  tracks = combinedTracks;
-                } else {
-                  console.log("Still not enough preview URLs, falling back to mock data");
-                  tracks = mockSongs;
+              // If we still don't have at least 3 valid tracks with preview URLs, try Deezer
+              const combinedTracks = [...validTracks, ...individualTracks];
+              if (combinedTracks.length < 3) {
+                console.log("Not enough preview URLs from Spotify, trying Deezer API");
+                
+                try {
+                  // Try to enrich tracks with Deezer preview URLs
+                  const deezerEnrichedTracks = await enrichTracksWithDeezerPreviews(tracksToTry);
+                  
+                  // Filter tracks that now have preview URLs
+                  const validDeezerTracks = deezerEnrichedTracks.filter(track => track.previewUrl);
+                  console.log(`Found ${validDeezerTracks.length} tracks with Deezer preview URLs`);
+                  
+                  if (validDeezerTracks.length >= 3) {
+                    console.log("Using Deezer preview URLs");
+                    tracks = validDeezerTracks;
+                  } else {
+                    // Combine all tracks with valid preview URLs
+                    const allValidTracks = [...combinedTracks, ...validDeezerTracks];
+                    if (allValidTracks.length >= 3) {
+                      console.log(`Using combined ${allValidTracks.length} tracks with preview URLs from Spotify and Deezer`);
+                      tracks = allValidTracks;
+                    } else {
+                      console.log("Still not enough preview URLs, falling back to mock data");
+                      tracks = mockSongs;
+                    }
+                  }
+                } catch (deezerError) {
+                  console.error("Error enriching tracks with Deezer:", deezerError);
+                  
+                  if (combinedTracks.length >= 3) {
+                    tracks = combinedTracks;
+                  } else {
+                    console.log("Using mock songs after Deezer error");
+                    tracks = mockSongs;
+                  }
                 }
+              } else {
+                // Use the combined tracks if we have enough
+                tracks = combinedTracks;
               }
             } else {
               tracks = validTracks;
@@ -437,7 +466,10 @@ export default function GamePlay() {
     setIsPlaying(status.isPlaying);
     
     // Enable voting after at least 15 seconds
+    // Add logging to debug this issue
+    console.log(`Playback position: ${status.positionMillis}, MIN_PLAY_DURATION: ${MIN_PLAY_DURATION}, canVote: ${canVote}`);
     if (status.positionMillis >= MIN_PLAY_DURATION && !canVote) {
+      console.log("Enabling vote button");
       setCanVote(true);
     }
     
@@ -447,7 +479,7 @@ export default function GamePlay() {
     }
   };
 
-  // Add back the loadAndPlaySong function with audio functionality
+  // Update loadAndPlaySong function to handle Deezer icons
   const loadAndPlaySong = async (song) => {
     console.log("Loading song:", song?.songTitle);
     
@@ -461,19 +493,53 @@ export default function GamePlay() {
     setCurrentSong(song);
     setIsLoadingAudio(true);
     setAudioLoadError(null);
+    
+    // Explicitly reset voting state for the new song
     setCanVote(false);
+    setPlaybackPosition(0);
+    setPlaybackDuration(0);
     
     // Check if we have a valid preview URL
     if (!song.previewUrl) {
-      console.log("No preview URL available for this song");
-      setAudioLoadError("No preview available for this song");
-      setIsLoadingAudio(false);
+      console.log("No preview URL available for this song, trying Deezer as last resort");
       
-      // Enable voting even without audio
-      setTimeout(() => {
-        setCanVote(true);
-      }, 5000);
-      return;
+      try {
+        // Try to find this track on Deezer as a last attempt
+        const deezerTrack = await findDeezerTrackFromSpotify(song);
+        if (deezerTrack && deezerTrack.previewUrl) {
+          console.log("Found Deezer preview URL for:", song.songTitle);
+          // Update the current song with the Deezer preview URL
+          song = {
+            ...song,
+            previewUrl: deezerTrack.previewUrl,
+            deezerInfo: {
+              trackId: deezerTrack.trackId,
+              externalUrl: deezerTrack.externalUrl
+            }
+          };
+          setCurrentSong(song);
+        } else {
+          console.log("No Deezer preview URL found either");
+          setAudioLoadError("No preview available for this song");
+          setIsLoadingAudio(false);
+          
+          // Enable voting even without audio
+          setTimeout(() => {
+            setCanVote(true);
+          }, 5000);
+          return;
+        }
+      } catch (deezerError) {
+        console.error("Error finding Deezer preview:", deezerError);
+        setAudioLoadError("No preview available for this song");
+        setIsLoadingAudio(false);
+        
+        // Enable voting even without audio
+        setTimeout(() => {
+          setCanVote(true);
+        }, 5000);
+        return;
+      }
     }
     
     try {
@@ -553,7 +619,7 @@ export default function GamePlay() {
     loadAndPlaySong(songs[randomIndex]);
   };
 
-  // Restore the original nextRound function
+  // Fix the nextRound function to properly reset canVote state
   const nextRound = async () => {
     // Stop current playback
     if (sound) {
@@ -564,11 +630,22 @@ export default function GamePlay() {
       }
     }
     
+    // Reset playback-related states
+    setPlaybackPosition(0);
+    setPlaybackDuration(0);
+    setCanVote(false);  // Make sure voting is disabled for the new round
+    setIsPlaying(false);
+    setAudioLoadError(null);
+    
     if (currentRound < ROUNDS_TOTAL) {
       const nextRoundNum = currentRound + 1;
       setCurrentRound(nextRoundNum);
-      selectSongForRound(nextRoundNum);
       setGameStage("playing");
+      
+      // Add a small delay to make sure UI updates before loading the next song
+      setTimeout(() => {
+        selectSongForRound(nextRoundNum);
+      }, 100);
     } else {
       // Game over - would show final results
       setGameStage("results");
@@ -657,6 +734,35 @@ export default function GamePlay() {
         "There was a problem connecting to Spotify. Please try again later.",
         [{ text: "OK", onPress: () => handleReturnToLobby() }]
       );
+    }
+  };
+
+  // Add a useEffect hook that watches playbackPosition to enable voting after MIN_PLAY_DURATION
+  useEffect(() => {
+    // If we have a valid playback position that exceeds MIN_PLAY_DURATION, enable voting
+    if (playbackPosition >= MIN_PLAY_DURATION && !canVote && currentSong) {
+      console.log(`Enabling voting at position ${playbackPosition}ms`);
+      setCanVote(true);
+    }
+  }, [playbackPosition, canVote, currentSong]);
+
+  // Helper function to get the profile photo based on username
+  const getProfilePhotoForUser = (username) => {
+    // Remove @ symbol if present
+    const name = username.replace('@', '');
+    
+    // Map usernames to their profile photos
+    switch (name) {
+      case 'luke_mcfall':
+        return require('../assets/photos/lukepfp.png');
+      case 'cole_sprout':
+        return require('../assets/photos/colepfp.png');
+      case 'maya_avital':
+        return require('../assets/photos/mayapfp.png');
+      case 'marcus_lintott':
+        return require('../assets/photos/marcuspfp.png');
+      default:
+        return require('../assets/pfp.png'); // Default fallback
     }
   };
 
@@ -761,11 +867,23 @@ export default function GamePlay() {
                 <Text style={styles.audioErrorText}>{audioLoadError}</Text>
                 {currentSong?.externalUrl && (
                   <TouchableOpacity
-                    style={styles.externalLinkButton}
-                    onPress={() => Linking.openURL(currentSong.externalUrl)}
+                    style={[
+                      styles.externalLinkButton,
+                      styles.spotifyLinkButton
+                    ]}
+                    onPress={() => Linking.openURL(
+                      // Always use Spotify URL for external linking
+                      currentSong.externalUrl
+                    )}
                   >
-                    <Ionicons name="logo-spotify" size={20} color="white" />
-                    <Text style={styles.externalLinkText}>Open in Spotify</Text>
+                    {/* Show Spotify logo from assets */}
+                    <Image 
+                      source={require('../assets/white-spotify-logo.png')} 
+                      style={{ width: 20, height: 20, marginRight: 5 }} 
+                    />
+                    <Text style={styles.externalLinkText}>
+                      Open in Spotify
+                    </Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -808,11 +926,23 @@ export default function GamePlay() {
                 {/* External link button */}
                 {currentSong?.externalUrl && (
                   <TouchableOpacity
-                    style={styles.externalLinkButton}
-                    onPress={() => Linking.openURL(currentSong.externalUrl)}
+                    style={[
+                      styles.externalLinkButton,
+                      styles.spotifyLinkButton
+                    ]}
+                    onPress={() => Linking.openURL(
+                      // Always use Spotify URL for external linking
+                      currentSong.externalUrl
+                    )}
                   >
-                    <Ionicons name="logo-spotify" size={20} color="white" />
-                    <Text style={styles.externalLinkText}>Open in Spotify</Text>
+                    {/* Show Spotify logo from assets */}
+                    <Image 
+                      source={require('../assets/white-spotify-logo.png')} 
+                      style={{ width: 20, height: 20, marginRight: 5 }} 
+                    />
+                    <Text style={styles.externalLinkText}>
+                      Open in Spotify
+                    </Text>
                   </TouchableOpacity>
                 )}
               </>
@@ -822,27 +952,33 @@ export default function GamePlay() {
           {/* Bottom vote button - update to be enabled after minimum play time */}
           <View style={styles.voteButtonContainer}>
             <Pressable
-              style={[styles.voteButton, !canVote && styles.voteButtonDisabled]}
+              style={[
+                styles.voteButton, 
+                !canVote ? styles.voteButtonDisabled : styles.voteButtonEnabled
+              ]}
               onPress={() => {
                 if (canVote) {
                   setGameStage("voting");
                 } else {
                   Alert.alert(
                     "Not Ready Yet",
-                    "Please listen to more of the song before voting.",
+                    `Please listen to at least ${MIN_PLAY_DURATION/1000} seconds of the song before voting.`,
                     [{ text: "OK" }]
                   );
                 }
               }}
               disabled={!canVote}
             >
-              <Text style={styles.voteButtonText}>VOTE</Text>
-              <Ionicons name="arrow-forward" size={24} color="black" />
+              <Text style={[styles.voteButtonText, !canVote ? styles.voteButtonTextDisabled : {}]}>
+                VOTE NOW
+              </Text>
+              <Ionicons name="arrow-forward" size={24} color={canVote ? "black" : "#777"} />
             </Pressable>
+            {/* Countdown removed */}
             <Text style={styles.voteHintText}>
               {canVote 
                 ? "Make your guess about who listened to this song" 
-                : "Listen to more of the song before voting"}
+                : `Listen for ${MIN_PLAY_DURATION/1000} seconds before voting...`}
             </Text>
           </View>
         </View>
@@ -892,7 +1028,7 @@ export default function GamePlay() {
                 <View style={styles.profileImageContainer}>
                   <View style={styles.profileBackground}>
                     <Image
-                      source={require("../assets/pfp.png")}
+                      source={getProfilePhotoForUser(player.username)}
                       style={styles.profileImage}
                     />
                   </View>
@@ -1121,7 +1257,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   voteButton: {
-    backgroundColor: "#FFC857", // Gold color for the button
+    backgroundColor: "#7D7575", // Default to disabled state
     borderRadius: 30,
     paddingVertical: 16,
     paddingHorizontal: 40,
@@ -1130,17 +1266,36 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: "80%",
     borderWidth: 2,
-    borderColor: "#000",
+    borderColor: "#555",
+    // Add transition-like styling
+    shadowColor: "#333",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    elevation: 3,
   },
   voteButtonDisabled: {
     backgroundColor: "#7D7575", // Dimmed color for disabled state
     borderColor: "#555",
+    opacity: 0.8, // Just slightly dimmed, but still clearly visible
+  },
+  voteButtonEnabled: {
+    backgroundColor: "#FFC857", // Gold color for the enabled button
+    borderColor: "#E6A100", // Darker gold border
+    shadowColor: "#FFC857",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 10,
+    elevation: 5,
   },
   voteButtonText: {
     color: "#000",
     fontSize: 22,
     fontWeight: "bold",
     marginRight: 8,
+  },
+  voteButtonTextDisabled: {
+    color: "#000", // Black text to match enabled state, just on gray background 
   },
   voteHintText: {
     color: "#AAA",
@@ -1239,7 +1394,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   externalLinkButton: {
-    backgroundColor: "#1DB954", // Spotify green
     padding: 10,
     borderRadius: 20,
     flexDirection: "row",
@@ -1247,6 +1401,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: 10,
     alignSelf: "center",
+    backgroundColor: "#1DB954", // Spotify green
+  },
+  spotifyLinkButton: {
+    backgroundColor: "#1DB954", // Spotify green
   },
   externalLinkText: {
     color: "white",
@@ -1327,5 +1485,20 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     fontSize: 14,
     textAlign: "center",
+  },
+  countdownContainer: {
+    width: "80%",
+    marginTop: 10,
+    marginBottom: 5,
+  },
+  countdownTrack: {
+    height: 4,
+    backgroundColor: "#444",
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  countdownProgress: {
+    height: "100%",
+    backgroundColor: "#C143FF",
   },
 });
