@@ -143,6 +143,26 @@ export default function GameLobby() {
     });
   };
 
+  // Helper function to get the profile photo based on username
+  const getProfilePhotoForUser = (username) => {
+    // Remove @ symbol if present
+    const name = username.replace("@", "");
+
+    // Map usernames to their profile photos
+    switch (name) {
+      case "luke_mcfall":
+        return require("../assets/photos/lukepfp.png");
+      case "cole_sprout":
+        return require("../assets/photos/colepfp.png");
+      case "maya_avital":
+        return require("../assets/photos/mayapfp.png");
+      case "marcus_lintott":
+        return require("../assets/photos/marcuspfp.png");
+      default:
+        return require("../assets/pfp.png"); // Default fallback
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Custom header */}

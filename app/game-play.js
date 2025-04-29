@@ -13,19 +13,22 @@ import {
 import { useNavigation, useRouter, useLocalSearchParams } from "expo-router";
 import { useState, useEffect, useRef } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { useSpotifyAuth } from "../utils";
-import { getMyRecentlyPlayedTracks } from "../utils/apiOptions";
 import { Audio } from "expo-av";
 import Slider from "@react-native-community/slider";
+import { useSpotifyAuth } from "../utils";
+import { getMyRecentlyPlayedTracks, getAlbumTracks, getTrackDetails } from "../utils/apiOptions";
+// Import Deezer API functions
+import { enrichTracksWithDeezerPreviews, findDeezerTrackFromSpotify } from "../utils/deezerApi";
 
+const ALBUM_ID = "2noRn2Aes5aoNVsU6iWThc";
 const ROUNDS_TOTAL = 3;
-const MIN_PLAY_DURATION = 30000; // 30 seconds in milliseconds
+const MIN_PLAY_DURATION = 15000; // Set to 15 seconds as specified
 
 export default function GamePlay() {
   const navigation = useNavigation();
   const router = useRouter();
   const params = useLocalSearchParams();
-  const { token, getSpotifyAuth, logout, isTokenValid, getValidToken } = useSpotifyAuth();
+  const { token, getSpotifyAuth, logout, isTokenValid, getValidToken, isInitialized } = useSpotifyAuth();
 
   // Mock song data to fallback on if Spotify API is unavailable
   const mockSongs = [
@@ -62,7 +65,7 @@ export default function GamePlay() {
   ];
 
   // State variables
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [allSongs, setAllSongs] = useState([]);
   const [currentRound, setCurrentRound] = useState(1);
   const [currentSong, setCurrentSong] = useState(null);
@@ -70,14 +73,16 @@ export default function GamePlay() {
   const [error, setError] = useState(null);
   const [playerSongs, setPlayerSongs] = useState({});
   const [hasFetchedSongs, setHasFetchedSongs] = useState(false);
-
-  // Audio playback states
+  
+  // Audio playback state variables
   const [sound, setSound] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackPosition, setPlaybackPosition] = useState(0);
-  const [songDuration, setSongDuration] = useState(0);
+  const [playbackDuration, setPlaybackDuration] = useState(0);
   const [canVote, setCanVote] = useState(false);
-  const positionUpdateInterval = useRef(null);
+  const [isLoadingAudio, setIsLoadingAudio] = useState(false);
+  const [audioLoadError, setAudioLoadError] = useState(null);
+  const audioLoadTimeoutRef = useRef(null);
 
   // Get game details from params
   const gameName = params.gameName || "Game Name";
@@ -109,7 +114,7 @@ export default function GamePlay() {
           { id: 4, username: "@marcus_lintott", platform: "spotify" },
         ].slice(0, playerCount);
 
-  // Set header options
+  // Set header options and debug token
   useEffect(() => {
     navigation.setOptions({
       headerShown: true,
@@ -136,32 +141,74 @@ export default function GamePlay() {
       playerCount,
       gameId,
       players: players.map((p) => p.username),
+      albumId: ALBUM_ID,
     });
   }, [navigation]);
 
+  // Debug token state changes
+  useEffect(() => {
+    console.log("Token state changed:", {
+      hasToken: !!token,
+      isInitialized,
+      hasFetchedSongs,
+    });
+  }, [token, isInitialized, hasFetchedSongs]);
+
   // Fetch songs when component mounts - but only once
   useEffect(() => {
-    // Skip if we've already fetched songs or if token is undefined
-    if (allSongs.length > 0 || isLoading) {
+    // Skip if we've already fetched songs or if still loading
+    if (allSongs.length > 0 || isLoading || !isInitialized) {
       return;
     }
 
     const fetchSongs = async () => {
       setIsLoading(true);
       setError(null);
+      console.log("Starting fetchSongs function");
+      console.log("Token initialized:", isInitialized, "Token available:", !!token);
 
       let currentToken = token;
       
       // If we have a token, make sure it's valid before using it
       if (token) {
         try {
+          console.log("Validating token...");
           // This will either return the valid token or refresh it automatically
           currentToken = await getValidToken();
-          console.log("Using valid token for API request");
+          console.log("Using valid token for API request:", currentToken ? "Token received" : "No token received");
         } catch (error) {
           console.error("Error validating/refreshing token:", error);
           currentToken = null;
         }
+      } else {
+        console.log("No initial token available after initialization");
+        
+        // Give user option to authenticate if no token is available
+        Alert.alert(
+          "Spotify Authentication Needed",
+          "No Spotify token available. Would you like to connect to Spotify?",
+          [
+            {
+              text: "Use Sample Songs",
+              onPress: () => console.log("Using sample songs only"),
+              style: "cancel",
+            },
+            {
+              text: "Connect to Spotify",
+              onPress: async () => {
+                try {
+                  setIsLoading(false); // Reset loading state
+                  await getSpotifyAuth(); // Start auth process
+                  // Note: After successful auth, the token will be set and this effect will run again
+                } catch (authError) {
+                  console.error("Authentication error:", authError);
+                  setIsLoading(false);
+                  setError("Authentication failed. Using sample songs.");
+                }
+              },
+            },
+          ]
+        );
       }
 
       let tracks;
@@ -169,54 +216,167 @@ export default function GamePlay() {
       // If we don't have a valid token, use mock data
       if (!currentToken) {
         console.log("No valid Spotify token, using mock song data");
+        console.log("Mock songs available:", mockSongs?.length || 0);
         tracks = mockSongs;
       } else {
         try {
-          console.log("Fetching recently played tracks from Spotify");
-          tracks = await getMyRecentlyPlayedTracks(currentToken);
-          console.log(
-            "Successfully fetched recently played tracks:",
-            tracks?.length || 0
-          );
+          // First try getting recently played tracks as they often have preview URLs
+          console.log("Fetching recently played tracks...");
+          try {
+            tracks = await getMyRecentlyPlayedTracks(currentToken);
+            console.log(
+              "Successfully fetched recently played tracks:",
+              tracks?.length || 0
+            );
+          } catch (recentError) {
+            console.error("Error fetching recently played tracks:", recentError);
+            tracks = null;
+          }
+          
+          // If no recent tracks or error, try the album tracks
+          if (!tracks || tracks.length === 0) {
+            console.log("Fetching tracks from specified album:", ALBUM_ID);
+            tracks = await getAlbumTracks(ALBUM_ID, currentToken);
+            console.log(
+              "Successfully fetched album tracks:",
+              tracks?.length || 0
+            );
+          }
 
           if (!tracks || tracks.length === 0) {
             console.log("No tracks found, using mock data");
+            console.log("Mock songs available:", mockSongs?.length || 0);
             tracks = mockSongs;
           } else {
+            // Debug all tracks and their preview URLs
+            console.log("=== TRACK PREVIEW URL DEBUG ===");
+            tracks.forEach((track, index) => {
+              console.log(`Track ${index + 1}: ${track.songTitle} - Preview URL: ${track.previewUrl || 'None'}`);
+            });
+            
             // Filter out tracks without valid preview URLs
             const validTracks = tracks.filter(
-              (track) => track.previewUrl && track.previewUrl.trim() !== ""
+              (track) => {
+                const hasValidPreview = track.previewUrl && track.previewUrl.trim() !== "";
+                if (!hasValidPreview) {
+                  console.log(`Track filtered out (no preview URL): ${track.songTitle}`);
+                }
+                return hasValidPreview;
+              }
             );
             console.log(
               `Found ${validTracks.length}/${tracks.length} tracks with preview URLs`
             );
 
-            if (validTracks.length < 5) {
-              console.log("Not enough tracks with preview URLs, using mock data");
-              tracks = mockSongs;
+            if (validTracks.length < 3) {
+              console.log("Not enough tracks with preview URLs, trying individual track API...");
+              
+              // Try fetching individual tracks to see if we can get preview URLs
+              const individualTracks = [];
+              const trackPromises = [];
+              
+              // Try to get more tracks than we need in case some fail
+              const maxTracksToTry = 10;
+              const tracksToTry = tracks.slice(0, maxTracksToTry);
+              
+              // Use Promise.all with a timeout to avoid waiting too long
+              const fetchWithTimeout = async (trackId) => {
+                try {
+                  return await Promise.race([
+                    getTrackDetails(trackId, currentToken),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
+                  ]);
+                } catch (e) {
+                  console.log(`Fetch timed out or failed for track ${trackId}`);
+                  return null;
+                }
+              };
+              
+              for (const track of tracksToTry) {
+                if (track.trackId) {
+                  trackPromises.push(fetchWithTimeout(track.trackId));
+                }
+              }
+              
+              try {
+                const results = await Promise.all(trackPromises);
+                for (const trackDetails of results) {
+                  if (trackDetails && trackDetails.previewUrl) {
+                    console.log(`Found preview URL for track ${trackDetails.songTitle}`);
+                    individualTracks.push(trackDetails);
+                  }
+                }
+              } catch (batchError) {
+                console.error("Error in batch track fetching:", batchError);
+              }
+              
+              // If we still don't have at least 3 valid tracks with preview URLs, try Deezer
+              const combinedTracks = [...validTracks, ...individualTracks];
+              if (combinedTracks.length < 3) {
+                console.log("Not enough preview URLs from Spotify, trying Deezer API");
+                
+                try {
+                  // Try to enrich tracks with Deezer preview URLs
+                  const deezerEnrichedTracks = await enrichTracksWithDeezerPreviews(tracksToTry);
+                  
+                  // Filter tracks that now have preview URLs
+                  const validDeezerTracks = deezerEnrichedTracks.filter(track => track.previewUrl);
+                  console.log(`Found ${validDeezerTracks.length} tracks with Deezer preview URLs`);
+                  
+                  if (validDeezerTracks.length >= 3) {
+                    console.log("Using Deezer preview URLs");
+                    tracks = validDeezerTracks;
+                  } else {
+                    // Combine all tracks with valid preview URLs
+                    const allValidTracks = [...combinedTracks, ...validDeezerTracks];
+                    if (allValidTracks.length >= 3) {
+                      console.log(`Using combined ${allValidTracks.length} tracks with preview URLs from Spotify and Deezer`);
+                      tracks = allValidTracks;
+                    } else {
+                      console.log("Still not enough preview URLs, falling back to mock data");
+                      tracks = mockSongs;
+                    }
+                  }
+                } catch (deezerError) {
+                  console.error("Error enriching tracks with Deezer:", deezerError);
+                  
+                  if (combinedTracks.length >= 3) {
+                    tracks = combinedTracks;
+                  } else {
+                    console.log("Using mock songs after Deezer error");
+                    tracks = mockSongs;
+                  }
+                }
+              } else {
+                // Use the combined tracks if we have enough
+                tracks = combinedTracks;
+              }
             } else {
               tracks = validTracks;
-
-              // Add additional data fields as needed
-              tracks = tracks.map((track) => ({
-                ...track,
-                uri: track.uri || null,
-                externalUrl: track.externalUrl || null,
-                _debug: {
-                  title: track.songTitle,
-                  artists: track.songArtists,
-                  duration: track.duration,
-                  albumArt: track.imageUrl ? "Available" : "Unavailable",
-                  previewUrl: track.previewUrl ? "Available" : "Unavailable",
-                },
-              }));
-
-              console.log("Sample track data:", JSON.stringify(tracks[0], null, 2));
             }
+
+            // Add additional data fields as needed
+            tracks = tracks.map((track) => ({
+              ...track,
+              uri: track.uri || null,
+              externalUrl: track.externalUrl || null,
+              _debug: {
+                title: track.songTitle,
+                artists: track.songArtists,
+                duration: track.duration,
+                albumArt: track.imageUrl ? "Available" : "Unavailable",
+                previewUrl: track.previewUrl ? "Available" : "Unavailable",
+              },
+            }));
+
+            console.log("Sample track data:", JSON.stringify(tracks[0], null, 2));
           }
         } catch (apiError) {
           console.error("Error fetching from Spotify API:", apiError);
-
+          console.log("Using fallback mock data");
+          console.log("Mock songs available:", mockSongs?.length || 0);
+          tracks = mockSongs;
+          
           // Handle API errors
           if (apiError?.response?.status === 401) {
             console.log("Authentication error (401)");
@@ -242,9 +402,25 @@ export default function GamePlay() {
               [{ text: "OK" }]
             );
           }
-
-          tracks = mockSongs;
         }
+      }
+
+      // Final check to make sure we have tracks to use
+      if (!tracks || tracks.length === 0) {
+        console.error("No tracks available, even after trying mock data!");
+        // Create emergency fallback track if all else fails
+        tracks = [{
+          songTitle: "Emergency Fallback Song",
+          songArtists: ["Synth App"],
+          albumName: "Fallback Album",
+          imageUrl: "https://via.placeholder.com/300",
+          duration: 30000,
+          previewUrl: null, // No audio available for fallback
+          uri: null,
+          externalUrl: null
+        }];
+        
+        setError("Could not load song data. Using emergency fallback.");
       }
 
       console.log(`Using ${tracks.length} tracks for the game`);
@@ -262,23 +438,173 @@ export default function GamePlay() {
       setHasFetchedSongs(true);
     };
 
-    // Only fetch songs once
+    // Only fetch songs once and after auth is initialized
     fetchSongs();
-  }, [token, players, hasFetchedSongs]);
+  }, [token, players, hasFetchedSongs, isInitialized]);
 
   // Cleanup audio resources when unmounting
   useEffect(() => {
     return () => {
       if (sound) {
-        sound.unloadAsync();
+        sound.unloadAsync().catch(e => console.log("Error unloading sound", e));
       }
-      if (positionUpdateInterval.current) {
-        clearInterval(positionUpdateInterval.current);
+      
+      if (audioLoadTimeoutRef.current) {
+        clearTimeout(audioLoadTimeoutRef.current);
       }
     };
   }, [sound]);
 
-  // Select a song for the current round
+  // Audio status update handler
+  const onPlaybackStatusUpdate = (status) => {
+    if (!status.isLoaded) return;
+    
+    setPlaybackPosition(status.positionMillis);
+    setPlaybackDuration(status.durationMillis);
+    
+    // Set play/pause state based on audio status
+    setIsPlaying(status.isPlaying);
+    
+    // Enable voting after at least 15 seconds
+    // Add logging to debug this issue
+    console.log(`Playback position: ${status.positionMillis}, MIN_PLAY_DURATION: ${MIN_PLAY_DURATION}, canVote: ${canVote}`);
+    if (status.positionMillis >= MIN_PLAY_DURATION && !canVote) {
+      console.log("Enabling vote button");
+      setCanVote(true);
+    }
+    
+    // Handle song completion
+    if (status.didJustFinish) {
+      setIsPlaying(false);
+    }
+  };
+
+  // Update loadAndPlaySong function to handle Deezer icons
+  const loadAndPlaySong = async (song) => {
+    console.log("Loading song:", song?.songTitle);
+    
+    // Verify we have a valid song object
+    if (!song) {
+      console.error("No song provided to loadAndPlaySong");
+      return;
+    }
+    
+    // Set current song for display regardless of audio playback success
+    setCurrentSong(song);
+    setIsLoadingAudio(true);
+    setAudioLoadError(null);
+    
+    // Explicitly reset voting state for the new song
+    setCanVote(false);
+    setPlaybackPosition(0);
+    setPlaybackDuration(0);
+    
+    // Check if we have a valid preview URL
+    if (!song.previewUrl) {
+      console.log("No preview URL available for this song, trying Deezer as last resort");
+      
+      try {
+        // Try to find this track on Deezer as a last attempt
+        const deezerTrack = await findDeezerTrackFromSpotify(song);
+        if (deezerTrack && deezerTrack.previewUrl) {
+          console.log("Found Deezer preview URL for:", song.songTitle);
+          // Update the current song with the Deezer preview URL
+          song = {
+            ...song,
+            previewUrl: deezerTrack.previewUrl,
+            deezerInfo: {
+              trackId: deezerTrack.trackId,
+              externalUrl: deezerTrack.externalUrl
+            }
+          };
+          setCurrentSong(song);
+        } else {
+          console.log("No Deezer preview URL found either");
+          setAudioLoadError("No preview available for this song");
+          setIsLoadingAudio(false);
+          
+          // Enable voting even without audio
+          setTimeout(() => {
+            setCanVote(true);
+          }, 5000);
+          return;
+        }
+      } catch (deezerError) {
+        console.error("Error finding Deezer preview:", deezerError);
+        setAudioLoadError("No preview available for this song");
+        setIsLoadingAudio(false);
+        
+        // Enable voting even without audio
+        setTimeout(() => {
+          setCanVote(true);
+        }, 5000);
+        return;
+      }
+    }
+    
+    try {
+      // Unload any existing sound
+      if (sound) {
+        await sound.unloadAsync();
+      }
+      
+      // Set timeout to handle case where audio loading takes too long
+      if (audioLoadTimeoutRef.current) {
+        clearTimeout(audioLoadTimeoutRef.current);
+      }
+      
+      audioLoadTimeoutRef.current = setTimeout(() => {
+        setIsLoadingAudio(false);
+        setAudioLoadError("Audio loading timed out. You can still vote.");
+        setCanVote(true);
+      }, 15000);
+      
+      // Create a new sound object
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: song.previewUrl },
+        { shouldPlay: true, progressUpdateIntervalMillis: 100 },
+        onPlaybackStatusUpdate
+      );
+      
+      setSound(newSound);
+      setIsPlaying(true);
+      setIsLoadingAudio(false);
+      
+      // Clear the timeout if audio loaded successfully
+      clearTimeout(audioLoadTimeoutRef.current);
+      audioLoadTimeoutRef.current = null;
+      
+      console.log("Audio loaded and playing successfully");
+    } catch (error) {
+      console.error("Error loading audio:", error);
+      setIsLoadingAudio(false);
+      setAudioLoadError("Error loading audio. You can still vote.");
+      setCanVote(true);
+      
+      // Clear the timeout if we've already handled the error
+      if (audioLoadTimeoutRef.current) {
+        clearTimeout(audioLoadTimeoutRef.current);
+        audioLoadTimeoutRef.current = null;
+      }
+    }
+  };
+
+  // Toggle play/pause function
+  const togglePlayPause = async () => {
+    if (!sound) return;
+    
+    try {
+      if (isPlaying) {
+        await sound.pauseAsync();
+      } else {
+        await sound.playAsync();
+      }
+    } catch (error) {
+      console.error("Error toggling playback:", error);
+    }
+  };
+
+  // Fix the selectSongForRound function to call loadAndPlaySong
   const selectSongForRound = (round, songs = allSongs) => {
     if (!songs || songs.length === 0) return;
 
@@ -289,171 +615,37 @@ export default function GamePlay() {
     const randomIndex = Math.floor(Math.random() * songs.length);
     // TODO: Add logic here to ensure the same song isn't picked twice in a game if needed.
 
-    setCurrentSong(songs[randomIndex]); // Use randomIndex
-
-    // Reset playback states
-    setPlaybackPosition(0);
-    setSongDuration(0);
-    setCanVote(false);
-
-    // Start playing the new song
-    loadAndPlaySong(songs[randomIndex]); // Use randomIndex
+    // Load the selected song (this will set currentSong)
+    loadAndPlaySong(songs[randomIndex]);
   };
 
-  // Load and play the selected song
-  const loadAndPlaySong = async (song) => {
-    try {
-      // Unload any existing sound
-      if (sound) {
-        await sound.unloadAsync();
-        if (positionUpdateInterval.current) {
-          clearInterval(positionUpdateInterval.current);
-        }
-      }
-
-      // Only proceed if there's a preview URL
-      if (!song.previewUrl) {
-        console.warn("No preview URL available for this song");
-        Alert.alert(
-          "No Audio Preview",
-          "This song doesn't have an audio preview available. You can still vote.",
-          [{ text: "OK" }]
-        );
-        // For demo purposes, allow voting even without audio
-        setTimeout(() => {
-          setCanVote(true);
-        }, 5000); // Let them vote after just 5 seconds if no audio
-        return;
-      }
-
-      try {
-        console.log("Attempting to load audio from URL:", song.previewUrl);
-
-        // Configure audio first - use the most basic configuration
-        await Audio.setAudioModeAsync({
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: false, // Set to false to simplify
-          allowsRecordingIOS: false,
-          interruptionModeIOS: 1,
-          interruptionModeAndroid: 1,
-          shouldDuckAndroid: false, // Set to false to simplify
-          playThroughEarpieceAndroid: false,
-        });
-
-        // Try to load sound directly, but with a timeout
-        console.log("Loading audio directly");
-
-        // Set a timeout for the audio loading
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Audio loading timed out")), 5000)
-        );
-
-        try {
-          // Race between loading the audio and the timeout
-          const { sound: newSound } = await Promise.race([
-            Audio.Sound.createAsync(
-              { uri: song.previewUrl },
-              {
-                shouldPlay: true,
-                isLooping: false,
-                volume: 1.0,
-              },
-              onPlaybackStatusUpdate
-            ),
-            timeoutPromise,
-          ]);
-
-          setSound(newSound);
-          setIsPlaying(true);
-
-          // Start timer to enable voting after 30 seconds
-          setTimeout(() => {
-            setCanVote(true);
-          }, MIN_PLAY_DURATION);
-
-          // Set up interval to update playback position
-          positionUpdateInterval.current = setInterval(async () => {
-            if (sound) {
-              const status = await sound.getStatusAsync();
-              if (status.isLoaded) {
-                setPlaybackPosition(status.positionMillis);
-              }
-            }
-          }, 1000);
-        } catch (audioTimeoutError) {
-          console.error(
-            "Audio loading timed out or failed:",
-            audioTimeoutError
-          );
-          throw new Error("Failed to load audio in time");
-        }
-      } catch (audioError) {
-        // If audio fails to load, still allow the game to continue
-        console.error("Error loading audio:", audioError);
-
-        // Show a message that we're continuing without audio
-        Alert.alert(
-          "Audio Playback Issue",
-          "The audio for this song couldn't be loaded. You can continue without audio.",
-          [{ text: "Continue" }]
-        );
-
-        // Enable voting after a shorter time if audio fails
-        setTimeout(() => {
-          setCanVote(true);
-        }, 5000);
-      }
-    } catch (error) {
-      console.error("Error in loadAndPlaySong:", error);
-      // Enable voting as a fallback
-      setCanVote(true);
-    }
-  };
-
-  // Handle playback status updates
-  const onPlaybackStatusUpdate = (status) => {
-    if (status.isLoaded) {
-      setSongDuration(status.durationMillis || 0);
-      setPlaybackPosition(status.positionMillis);
-
-      // If the song ended naturally
-      if (status.didJustFinish) {
-        setCanVote(true);
-
-        if (positionUpdateInterval.current) {
-          clearInterval(positionUpdateInterval.current);
-        }
-      }
-    }
-  };
-
-  // Toggle play/pause
-  const togglePlayPause = async () => {
-    if (sound) {
-      if (isPlaying) {
-        await sound.pauseAsync();
-      } else {
-        await sound.playAsync();
-      }
-      setIsPlaying(!isPlaying);
-    }
-  };
-
-  // Move to the next round
-  const nextRound = () => {
+  // Fix the nextRound function to properly reset canVote state
+  const nextRound = async () => {
     // Stop current playback
     if (sound) {
-      sound.stopAsync();
-      if (positionUpdateInterval.current) {
-        clearInterval(positionUpdateInterval.current);
+      try {
+        await sound.stopAsync();
+      } catch (error) {
+        console.error("Error stopping sound:", error);
       }
     }
-
+    
+    // Reset playback-related states
+    setPlaybackPosition(0);
+    setPlaybackDuration(0);
+    setCanVote(false);  // Make sure voting is disabled for the new round
+    setIsPlaying(false);
+    setAudioLoadError(null);
+    
     if (currentRound < ROUNDS_TOTAL) {
       const nextRoundNum = currentRound + 1;
       setCurrentRound(nextRoundNum);
-      selectSongForRound(nextRoundNum);
       setGameStage("playing");
+      
+      // Add a small delay to make sure UI updates before loading the next song
+      setTimeout(() => {
+        selectSongForRound(nextRoundNum);
+      }, 100);
     } else {
       // Game over - would show final results
       setGameStage("results");
@@ -542,6 +734,35 @@ export default function GamePlay() {
         "There was a problem connecting to Spotify. Please try again later.",
         [{ text: "OK", onPress: () => handleReturnToLobby() }]
       );
+    }
+  };
+
+  // Add a useEffect hook that watches playbackPosition to enable voting after MIN_PLAY_DURATION
+  useEffect(() => {
+    // If we have a valid playback position that exceeds MIN_PLAY_DURATION, enable voting
+    if (playbackPosition >= MIN_PLAY_DURATION && !canVote && currentSong) {
+      console.log(`Enabling voting at position ${playbackPosition}ms`);
+      setCanVote(true);
+    }
+  }, [playbackPosition, canVote, currentSong]);
+
+  // Helper function to get the profile photo based on username
+  const getProfilePhotoForUser = (username) => {
+    // Remove @ symbol if present
+    const name = username.replace('@', '');
+    
+    // Map usernames to their profile photos
+    switch (name) {
+      case 'luke_mcfall':
+        return require('../assets/photos/lukepfp.png');
+      case 'cole_sprout':
+        return require('../assets/photos/colepfp.png');
+      case 'maya_avital':
+        return require('../assets/photos/mayapfp.png');
+      case 'marcus_lintott':
+        return require('../assets/photos/marcuspfp.png');
+      default:
+        return require('../assets/pfp.png'); // Default fallback
     }
   };
 
@@ -634,106 +855,131 @@ export default function GamePlay() {
             </Text>
           </View>
 
-          {/* Custom waveform visualization */}
-          {/* <View style={styles.waveformContainer}>
-            <View style={styles.waveformBars}>
-              {Array.from({ length: 30 }).map((_, index) => {
-                // Create random heights for the bars to simulate a waveform
-                const randomHeight = 10 + Math.random() * 40;
-                return (
-                  <View
-                    key={index}
-                    style={[
-                      styles.waveformBar,
-                      {
-                        height: randomHeight,
-                        opacity:
-                          index % 3 === 0 ? 0.9 : index % 2 === 0 ? 0.7 : 0.5,
-                      },
-                    ]}
-                  />
-                );
-              })}
-            </View>
-          </View> */}
-
           {/* Playback controls */}
           <View style={styles.playbackControlsContainer}>
-            <TouchableOpacity
-              style={styles.playPauseButton}
-              onPress={togglePlayPause}
-            >
-              <Ionicons
-                name={isPlaying ? "pause" : "play"}
-                size={28}
-                color="white"
-              />
-            </TouchableOpacity>
-
-            {/* Progress bar */}
-            <View style={styles.progressBarContainer}>
-              <Slider
-                style={styles.progressBar}
-                minimumValue={0}
-                maximumValue={songDuration > 0 ? songDuration : 1}
-                value={playbackPosition}
-                minimumTrackTintColor="#C143FF"
-                maximumTrackTintColor="#4D4D4D"
-                thumbTintColor="#FFFFFF"
-                disabled={true}
-              />
-              <View style={styles.timeContainer}>
-                <Text style={styles.timeText}>
-                  {formatTime(playbackPosition)}
-                </Text>
-                <Text style={styles.timeText}>{formatTime(songDuration)}</Text>
+            {isLoadingAudio ? (
+              <View style={styles.loadingAudioContainer}>
+                <ActivityIndicator size="small" color="#C143FF" />
+                <Text style={styles.loadingAudioText}>Loading audio...</Text>
               </View>
-            </View>
+            ) : audioLoadError ? (
+              <View style={styles.audioErrorContainer}>
+                <Text style={styles.audioErrorText}>{audioLoadError}</Text>
+                {currentSong?.externalUrl && (
+                  <TouchableOpacity
+                    style={[
+                      styles.externalLinkButton,
+                      styles.spotifyLinkButton
+                    ]}
+                    onPress={() => Linking.openURL(
+                      // Always use Spotify URL for external linking
+                      currentSong.externalUrl
+                    )}
+                  >
+                    {/* Show Spotify logo from assets */}
+                    <Image 
+                      source={require('../assets/white-spotify-logo.png')} 
+                      style={{ width: 20, height: 20, marginRight: 5 }} 
+                    />
+                    <Text style={styles.externalLinkText}>
+                      Open in Spotify
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ) : (
+              <>
+                {/* Progress bar */}
+                <View style={styles.progressContainer}>
+                  <Text style={styles.timeText}>
+                    {formatTime(playbackPosition)}
+                  </Text>
+                  <Slider
+                    style={styles.progressBar}
+                    minimumValue={0}
+                    maximumValue={playbackDuration > 0 ? playbackDuration : 30000}
+                    value={playbackPosition}
+                    minimumTrackTintColor="#C143FF"
+                    maximumTrackTintColor="#444"
+                    thumbTintColor="#FFC857"
+                    disabled={true}
+                  />
+                  <Text style={styles.timeText}>
+                    {formatTime(playbackDuration)}
+                  </Text>
+                </View>
+
+                {/* Play/pause button */}
+                <View style={styles.controlButtonsContainer}>
+                  <TouchableOpacity
+                    style={styles.playPauseButton}
+                    onPress={togglePlayPause}
+                  >
+                    <Ionicons
+                      name={isPlaying ? "pause" : "play"}
+                      size={32}
+                      color="white"
+                    />
+                  </TouchableOpacity>
+                </View>
+
+                {/* External link button */}
+                {currentSong?.externalUrl && (
+                  <TouchableOpacity
+                    style={[
+                      styles.externalLinkButton,
+                      styles.spotifyLinkButton
+                    ]}
+                    onPress={() => Linking.openURL(
+                      // Always use Spotify URL for external linking
+                      currentSong.externalUrl
+                    )}
+                  >
+                    {/* Show Spotify logo from assets */}
+                    <Image 
+                      source={require('../assets/white-spotify-logo.png')} 
+                      style={{ width: 20, height: 20, marginRight: 5 }} 
+                    />
+                    <Text style={styles.externalLinkText}>
+                      Open in Spotify
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
           </View>
 
-          {/* External links */}
-          {currentSong.externalUrl && (
-            <TouchableOpacity
-              style={styles.externalLinkButton}
-              onPress={() => {
-                // Open the Spotify URL in the browser
-                Alert.alert(
-                  "Open in Spotify",
-                  "Would you like to open this track in Spotify?",
-                  [
-                    { text: "Cancel", style: "cancel" },
-                    {
-                      text: "Open",
-                      onPress: () => Linking.openURL(currentSong.externalUrl),
-                    },
-                  ]
-                );
-              }}
-            >
-              <Ionicons name="musical-notes" size={16} color="white" />
-              <Text style={styles.externalLinkText}>Open in Spotify</Text>
-            </TouchableOpacity>
-          )}
-
-          {/* Bottom vote button */}
+          {/* Bottom vote button - update to be enabled after minimum play time */}
           <View style={styles.voteButtonContainer}>
             <Pressable
-              style={[styles.voteButton, !canVote && styles.voteButtonDisabled]}
+              style={[
+                styles.voteButton, 
+                !canVote ? styles.voteButtonDisabled : styles.voteButtonEnabled
+              ]}
               onPress={() => {
                 if (canVote) {
                   setGameStage("voting");
+                } else {
+                  Alert.alert(
+                    "Not Ready Yet",
+                    `Please listen to at least ${MIN_PLAY_DURATION/1000} seconds of the song before voting.`,
+                    [{ text: "OK" }]
+                  );
                 }
               }}
               disabled={!canVote}
             >
-              <Text style={styles.voteButtonText}>VOTE</Text>
-              <Ionicons name="arrow-forward" size={24} color="black" />
-            </Pressable>
-            {!canVote && (
-              <Text style={styles.voteHintText}>
-                Listen for at least 30 seconds to enable voting
+              <Text style={[styles.voteButtonText, !canVote ? styles.voteButtonTextDisabled : {}]}>
+                VOTE NOW
               </Text>
-            )}
+              <Ionicons name="arrow-forward" size={24} color={canVote ? "black" : "#777"} />
+            </Pressable>
+            {/* Countdown removed */}
+            <Text style={styles.voteHintText}>
+              {canVote 
+                ? "Make your guess about who listened to this song" 
+                : `Listen for ${MIN_PLAY_DURATION/1000} seconds before voting...`}
+            </Text>
           </View>
         </View>
       )}
@@ -782,7 +1028,7 @@ export default function GamePlay() {
                 <View style={styles.profileImageContainer}>
                   <View style={styles.profileBackground}>
                     <Image
-                      source={require("../assets/pfp.png")}
+                      source={getProfilePhotoForUser(player.username)}
                       style={styles.profileImage}
                     />
                   </View>
@@ -973,31 +1219,37 @@ const styles = StyleSheet.create({
   playbackControlsContainer: {
     marginTop: 20,
   },
-  playPauseButton: {
-    alignSelf: "center",
-    backgroundColor: "#8E44AD",
-    width: 50,
-    height: 50,
+  spotifyPromptContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 20,
+  },
+  spotifyPromptText: {
+    color: 'white',
+    fontSize: 16,
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  spotifyButton: {
+    backgroundColor: '#1DB954', // Spotify green
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
     borderRadius: 25,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 16,
+    marginVertical: 10,
   },
-  progressBarContainer: {
-    marginHorizontal: 10,
+  spotifyButtonText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginLeft: 8,
   },
-  progressBar: {
-    width: "100%",
-    height: 40,
-  },
-  timeContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: -10,
-  },
-  timeText: {
-    color: "#AAA",
+  noLinkText: {
+    color: '#999',
     fontSize: 14,
+    fontStyle: 'italic',
   },
   voteButtonContainer: {
     marginTop: 20,
@@ -1005,7 +1257,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   voteButton: {
-    backgroundColor: "#FFC857", // Gold color for the button
+    backgroundColor: "#7D7575", // Default to disabled state
     borderRadius: 30,
     paddingVertical: 16,
     paddingHorizontal: 40,
@@ -1014,17 +1266,36 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: "80%",
     borderWidth: 2,
-    borderColor: "#000",
+    borderColor: "#555",
+    // Add transition-like styling
+    shadowColor: "#333",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    elevation: 3,
   },
   voteButtonDisabled: {
     backgroundColor: "#7D7575", // Dimmed color for disabled state
     borderColor: "#555",
+    opacity: 0.8, // Just slightly dimmed, but still clearly visible
+  },
+  voteButtonEnabled: {
+    backgroundColor: "#FFC857", // Gold color for the enabled button
+    borderColor: "#E6A100", // Darker gold border
+    shadowColor: "#FFC857",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 10,
+    elevation: 5,
   },
   voteButtonText: {
     color: "#000",
     fontSize: 22,
     fontWeight: "bold",
     marginRight: 8,
+  },
+  voteButtonTextDisabled: {
+    color: "#000", // Black text to match enabled state, just on gray background 
   },
   voteHintText: {
     color: "#AAA",
@@ -1123,7 +1394,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   externalLinkButton: {
-    backgroundColor: "#1DB954", // Spotify green
     padding: 10,
     borderRadius: 20,
     flexDirection: "row",
@@ -1131,11 +1401,104 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: 10,
     alignSelf: "center",
+    backgroundColor: "#1DB954", // Spotify green
+  },
+  spotifyLinkButton: {
+    backgroundColor: "#1DB954", // Spotify green
   },
   externalLinkText: {
     color: "white",
     fontSize: 16,
     fontWeight: "bold",
     marginLeft: 5,
+  },
+  spotifyEmbedContainer: {
+    width: '100%',
+    height: 80,
+    marginBottom: 10,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  playerToggleContainer: {
+    alignItems: 'center',
+    marginVertical: 10,
+  },
+  playerToggleButton: {
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  playerToggleText: {
+    color: 'white',
+    fontSize: 12,
+  },
+  progressContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    width: "100%",
+    paddingHorizontal: 10,
+  },
+  progressBar: {
+    flex: 1,
+    height: 40,
+    marginHorizontal: 10,
+  },
+  timeText: {
+    color: "#AAA",
+    fontSize: 12,
+  },
+  controlButtonsContainer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    marginVertical: 10,
+  },
+  playPauseButton: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "#C143FF",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#FFC857",
+  },
+  loadingAudioContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+  },
+  loadingAudioText: {
+    color: "white",
+    marginTop: 10,
+    fontSize: 14,
+  },
+  audioErrorContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+  },
+  audioErrorText: {
+    color: "#FF6B6B",
+    marginBottom: 15,
+    fontSize: 14,
+    textAlign: "center",
+  },
+  countdownContainer: {
+    width: "80%",
+    marginTop: 10,
+    marginBottom: 5,
+  },
+  countdownTrack: {
+    height: 4,
+    backgroundColor: "#444",
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  countdownProgress: {
+    height: "100%",
+    backgroundColor: "#C143FF",
   },
 });

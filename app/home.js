@@ -475,4 +475,56 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 14,
   },
+  albumNoteText: {
+    color: "#d1d5db",
+    marginTop: 15,
+    fontSize: 14,
+    textAlign: "center",
+    padding: 10,
+  },
+  gameModeSection: {
+    margin: 20,
+    padding: 15,
+    backgroundColor: "#282828",
+    borderRadius: 10,
+  },
+  gameModeTitle: {
+    color: "white",
+    fontSize: 20,
+    fontWeight: "bold",
+    marginBottom: 15,
+  },
+  gameCardContainer: {
+    gap: 15,
+  },
+  gameCard: {
+    backgroundColor: "#333",
+    borderRadius: 10,
+    padding: 15,
+  },
+  gameCardContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  gameCardTextContainer: {
+    flex: 1,
+    marginLeft: 15,
+  },
+  gameCardTitle: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  gameCardDescription: {
+    color: "#d1d5db",
+    marginTop: 4,
+    fontSize: 12,
+  },
+  gameNoteText: {
+    color: "#d1d5db",
+    marginTop: 15,
+    fontSize: 12,
+    textAlign: "center",
+  },
 });
