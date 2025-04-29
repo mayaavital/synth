@@ -47,7 +47,13 @@ export default function CreateGame() {
           >
             <Ionicons name="arrow-back" size={28} color="white" />
           </TouchableOpacity>
-          <Text style={styles.logoText}>SYNTH</Text>
+          <View style={styles.headerTitleContainer}>
+            <Image 
+              source={require("../assets/SYNTH.png")} 
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
+          </View>
           <View style={styles.placeholder} />
         </View>
       ),
@@ -262,5 +268,17 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.6,
     shadowRadius: 7,
     elevation: 5,
+  },
+  headerTitleContainer: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    bottom: 10,
+  },
+  logoImage: {
+    height: 35,
+    width: 110,
   },
 });

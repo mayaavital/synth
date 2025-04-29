@@ -87,7 +87,7 @@ export default function GameLobby() {
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.menuButton}
-            onPress={() => navigation.goBack()}
+            onPress={handleBackToHome}
           >
             <Ionicons name="arrow-back" size={28} color="white" />
           </TouchableOpacity>
@@ -100,23 +100,65 @@ export default function GameLobby() {
 
   // Fill remaining slots as "waiting to join"
   useEffect(() => {
-    const filledPlayers = [...players];
+    // Check if we're returning from a game
+    const returningFromGame = params.returningFromGame === "true";
+    
+    // Parse player usernames from params if available
+    let playerUsernames = [];
+    try {
+      if (params.players) {
+        playerUsernames = JSON.parse(params.players);
+      }
+    } catch (e) {
+      console.error("Error parsing player data:", e);
+    }
+    
+    // Create a list of players with the correct data
+    let updatedPlayers = [];
+    
+    if (returningFromGame && playerUsernames.length > 0) {
+      // If returning from a game with player data, use those players
+      updatedPlayers = playerUsernames.map((username, index) => {
+        // Map username to existing player data if possible
+        const existingPlayer = players.find(p => p.username === username);
+        
+        if (existingPlayer) {
+          return existingPlayer;
+        } else {
+          // Create a new player entry if not found in existing data
+          return {
+            id: index + 1,
+            username: username,
+            platform: "spotify",
+            isHost: index === 0, // First player is host
+            isConnected: true,
+            img_path: getProfilePhotoForUser(username),
+          };
+        }
+      });
+    } else {
+      // Use the current players array
+      updatedPlayers = [...players];
+    }
+    
     // Make sure we have the correct number of player slots
-    while (filledPlayers.length < playerCount) {
-      filledPlayers.push({
-        id: filledPlayers.length + 1,
+    while (updatedPlayers.length < playerCount) {
+      updatedPlayers.push({
+        id: updatedPlayers.length + 1,
         username: null,
         platform: null,
         isHost: false,
         isConnected: false,
       });
     }
+    
     // In case we have more players than the count (shouldn't happen)
-    if (filledPlayers.length > playerCount) {
-      filledPlayers.length = playerCount;
+    if (updatedPlayers.length > playerCount) {
+      updatedPlayers.length = playerCount;
     }
-    setPlayers(filledPlayers);
-  }, [playerCount]);
+    
+    setPlayers(updatedPlayers);
+  }, [playerCount, params.players, params.returningFromGame]);
 
   // Determine card border color based on player index
   const getCardBorderColor = (index) => {
@@ -141,37 +183,45 @@ export default function GameLobby() {
     // In a real app, you would probably make an API call here to initialize the game
     // and then listen for a confirmation before navigating
 
+    // Reuse existing gameId if returning from a previous game, otherwise generate a new one
+    const gameId = params.gameId || `game-${Date.now()}`;
+
     // Navigate to the game play screen with parameters
     router.push({
       pathname: "/game-play",
       params: {
         gameName,
         playerCount: connectedPlayers.length,
-        gameId: `game-${Date.now()}`, // Generate a unique game ID
+        gameId: gameId,
         // You could also serialize the players array if needed
         players: JSON.stringify(connectedPlayers.map((p) => p.username)),
       },
     });
   };
 
-  // Helper function to get the profile photo based on username
+  // Add helper function to get profile photo
   const getProfilePhotoForUser = (username) => {
     // Remove @ symbol if present
-    const name = username.replace("@", "");
+    const name = username?.replace("@", "") || "";
 
     // Map usernames to their profile photos
     switch (name) {
       case "luke_mcfall":
-        return require("../assets/photos/lukepfp.png");
+        return require("../assets/luke.png");
       case "cole_sprout":
-        return require("../assets/photos/colepfp.png");
+        return require("../assets/cole 1.png");
       case "maya_avital":
-        return require("../assets/photos/mayapfp.png");
+        return require("../assets/maya.png");
       case "marcus_lintott":
-        return require("../assets/photos/marcuspfp.png");
+        return require("../assets/marcus.png");
       default:
         return require("../assets/pfp.png"); // Default fallback
     }
+  };
+
+  // Add a function to handle navigation back to home
+  const handleBackToHome = () => {
+    router.replace("/");
   };
 
   return (

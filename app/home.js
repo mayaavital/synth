@@ -354,8 +354,8 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
   logo: {
-    height: "50%",
-    width: "50%",
+    height: 35,
+    width: 110,
     resizeMode: "contain",
   },
   placeholder: {
@@ -378,13 +378,18 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   statusDot: {
-    width: 12,
-    height: 12,
+    width: 8,
+    height: 8,
     borderRadius: 6,
     marginRight: 10,
   },
   statusConnected: {
     backgroundColor: "#1DB954", // Spotify green
+    shadowColor: "#1DB954",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.95,
+    shadowRadius: 9,
+    elevation: 10,
   },
   statusDisconnected: {
     backgroundColor: "#e74c3c", // Red
