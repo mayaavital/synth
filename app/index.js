@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useState, useCallback } from "react";
+import { useNavigation } from "expo-router";
 import { useRouter } from "expo-router";
 import { useSpotifyAuth } from "../utils";
 import { useFonts } from "expo-font";
@@ -26,8 +27,8 @@ const windowHeight = Dimensions.get("window").height;
 
 export default function App() {
   const router = useRouter();
-  //const { token, authError, getSpotifyAuth } = useSpotifyAuth();
-  const [token, setToken] = useState(null);
+  const navigation = useNavigation();
+  const { token, authError, getSpotifyAuth } = useSpotifyAuth();
   const [isAuthenticating, setIsAuthenticating] = useState(false);
 
   // Font loading
@@ -35,82 +36,33 @@ export default function App() {
     // we can add custom fonts here
     // 'ZenDots': require('../assets/fonts/ZenDots-Regular.ttf'),
   });
-
+  useEffect(() => {
+    navigation.setOptions({
+      headerShown: false,
+    });
+  });
   const onLayoutRootView = useCallback(async () => {
     if (fontsLoaded) {
       await SplashScreen.hideAsync();
     }
   }, [fontsLoaded]);
 
-  // // Handle authentication process
-  // const handleSpotifyAuth = async () => {
-  //   setIsAuthenticating(true);
-  //   await getSpotifyAuth();
-  //   setTimeout(() => {
-  //     setIsAuthenticating(false);
-  //   }, 1000); // Reset auth state after a short delay
-  // };
+  // Handle authentication process
+  const handleSpotifyAuth = async () => {
+    setIsAuthenticating(true);
+    await getSpotifyAuth();
+    setTimeout(() => {
+      setIsAuthenticating(false);
+    }, 1000); // Reset auth state after a short delay
+  };
 
+  //Handle navigation based on authentication state
   useEffect(() => {
-    const checkTokenValidity = async () => {
-      const accessToken = await AsyncStorage.getItem("token");
-      setToken(accessToken);
-      const expirationDate = await AsyncStorage.getItem("expirationDate");
-      console.log("access token", accessToken);
-      console.log("expiration date", expirationDate);
-
-      if (accessToken && expirationDate) {
-        const currentTime = Date.now();
-        if (currentTime < parseInt(expirationDate)) {
-          // here the token is still valid
-          navigation.replace("Main");
-        } else {
-          // token would be expired so we need to remove it from the async storage
-          AsyncStorage.removeItem("token");
-          AsyncStorage.removeItem("expirationDate");
-        }
-      }
-    };
-
-    checkTokenValidity();
-  }, []);
-
-  async function authenticate() {
-    const config = {
-      issuer: "https://accounts.spotify.com",
-      clientId: "44bc87fe29004136b77183319f56338e",
-      scopes: [
-        "user-read-email",
-        "user-library-read",
-        "user-read-recently-played",
-        "user-top-read",
-        "playlist-read-private",
-        "playlist-read-collaborative",
-        "playlist-modify-public", // or "playlist-modify-private"
-      ],
-      redirectUrl: "synth://callback",
-    };
-    const result = await AppAuth.authAsync(config);
-    console.log(result);
-    if (result.accessToken) {
-      const expirationDate = new Date(
-        result.accessTokenExpirationDate
-      ).getTime();
-      AsyncStorage.setItem("token", result.accessToken);
-      AsyncStorage.setItem("expirationDate", expirationDate.toString());
-      //navigation.navigate("Main")
+    if (token) {
       console.log("Authentication successful, navigating to home");
       router.push("home");
     }
-  }
-
-  // Handle navigation based on authentication state
-  // useEffect(() => {
-  //   if (token) {
-  //     console.log("Authentication successful, navigating to home");
-  //     router.push("home");
-  //   }
-  // }, [token, router]);
+  }, [token, router]);
 
   // Wait for fonts to load
   if (!fontsLoaded) {
@@ -120,9 +72,7 @@ export default function App() {
   // Conditional rendering
   let contentDisplayed = (
     <View style={styles.container} onLayout={onLayoutRootView}>
-      <View style={styles.synth_container}>
-        <Text style={styles.synth_text}>SYNTH</Text>
-      </View>
+      <Image source={require("../assets/Title.png")}></Image>
 
       {isAuthenticating ? (
         <View style={styles.loadingContainer}>
@@ -130,15 +80,15 @@ export default function App() {
           <Text style={styles.loadingText}>Connecting to Spotify...</Text>
         </View>
       ) : (
-        <>
+        <View style={{ justifyContent: "center", alignItems: "center" }}>
           <Pressable
             style={styles.connectSpotify}
-            onPress={authenticate}
+            onPress={handleSpotifyAuth}
             disabled={isAuthenticating}
           >
             <Text style={styles.text}>Login with Spotify</Text>
             <Image
-              source={require("../assets/spotify-logo.png")}
+              source={require("../assets/white-spotify-logo.png")}
               style={styles.spotifyLogo}
             />
           </Pressable>
@@ -146,29 +96,30 @@ export default function App() {
           <Pressable
             style={styles.connectApple}
             marginTop={windowHeight * 0.01}
-            onPress={authenticate}
+            onPress={handleSpotifyAuth}
             disabled={isAuthenticating}
           >
             <Text style={styles.text}>Login with Apple Music</Text>
             <Image
-              source={require("../assets/apple-music.png")}
+              source={require("../assets/apple-white.png")}
               style={styles.spotifyLogo}
             />
           </Pressable>
-        </>
+        </View>
       )}
 
-      {/* {authError && (
+      {authError && (
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>
             Authentication error. Please try again.
           </Text>
         </View>
-      )} */}
+      )}
     </View>
   );
 
   return (
+    // <LinearGradient colors={["#040306", "#131624"]} style={{ flex: 1 }}>
     <SafeAreaView style={styles.safeArea}>
       {contentDisplayed}
       <StatusBar style="light" />
@@ -185,7 +136,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#1E1E1E",
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "space-around",
   },
   loadingContainer: {
     alignItems: "center",
@@ -207,9 +158,9 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   connectSpotify: {
-    backgroundColor: "#C6E1B8",
+    backgroundColor: "#44C568",
     flexDirection: "row",
-    justifyContent: "space-around",
+    justifyContent: "space-between",
     alignItems: "center",
     borderRadius: (windowHeight * 0.1) / 2,
     height: windowHeight * 0.08,
@@ -217,9 +168,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: windowWidth * 0.05,
   },
   connectApple: {
-    backgroundColor: "#F1D5EE",
+    backgroundColor: "#EE6D7A",
     flexDirection: "row",
-    justifyContent: "space-around",
+    justifyContent: "space-between",
     alignItems: "center",
     borderRadius: (windowHeight * 0.1) / 2,
     height: windowHeight * 0.08,
@@ -227,8 +178,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: windowWidth * 0.05,
   },
   spotifyLogo: {
-    height: windowWidth * 0.08,
-    width: windowWidth * 0.08,
+    height: windowWidth * 0.1,
+    width: windowWidth * 0.1,
     resizeMode: "contain",
   },
   synth_container: {
@@ -241,12 +192,8 @@ const styles = StyleSheet.create({
     top: windowWidth * 0.15,
     borderRadius: 20,
   },
-  synth_text: {
-    fontSize: 24,
-    fontWeight: "bold",
-  },
   text: {
-    color: "#1E1E1E",
+    color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "500",
   },

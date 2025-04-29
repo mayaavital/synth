@@ -47,28 +47,6 @@ const useSpotifyAuth = () => {
     DISCOVERY
   );
 
-  // useEffect(() => {
-  //   const checkTokenValidity = async () => {
-  //     const accessToken = await AsyncStorage.getItem(TOKEN_STORAGE_KEY);
-  //     const expirationDate = await AsyncStorage.getItem(EXPIRATION_KEY);
-  //     console.log("access token:", accessToken);
-  //     console.log("expiration date:", expirationDate);
-
-  //     if (accessToken && expirationDate) {
-  //       const currentTime = Date.now();
-  //       if (currentTime < parseInt(expirationDate)) {
-  //         // here the token is still valid
-  //         // navigation.replace("/inde");
-  //       } else {
-  //         // token would be expired so we need to remove it from the async storage
-  //         AsyncStorage.removeItem(TOKEN_STORAGE_KEY);
-  //         AsyncStorage.removeItem(EXPIRATION_KEY);
-  //       }
-  //     }
-  //   };
-  //   checkTokenValidity();
-  // }, []);
-
   useEffect(() => {
     console.log(response);
     if (response?.type === "success" && response.params?.access_token) {
