@@ -2,8 +2,15 @@ import axios from "axios";
 import getEnv from "./env";
 
 const {
-  SPOTIFY_API: { TOP_TRACKS_API, ALBUM_TRACK_API_GETTER },
+  SPOTIFY_API: { TOP_TRACKS_API, ALBUM_TRACK_API_GETTER, TRACK_API_GETTER },
 } = getEnv();
+
+// Verify the API configuration
+console.log("API Configuration check:", {
+  hasTopTracksAPI: !!TOP_TRACKS_API,
+  hasAlbumTrackAPI: typeof ALBUM_TRACK_API_GETTER === 'function',
+  hasTrackAPI: typeof TRACK_API_GETTER === 'function'
+});
 
 // Add Spotify Recently Played API endpoint
 const RECENTLY_PLAYED_API = "https://api.spotify.com/v1/me/player/recently-played?limit=50";
@@ -13,9 +20,35 @@ const ERROR_ALERT = new Error(
 );
 
 /* Pulls out the relevant data from the API response and puts it in a nicely structured object. */
-const formatter = (data) =>
-  data.map((val) => {
+const formatter = (data) => {
+  if (!data || !Array.isArray(data)) {
+    console.error("Invalid data passed to formatter:", data);
+    return [];
+  }
+  
+  console.log(`Formatting ${data.length} tracks`);
+  
+  return data.map((val, index) => {
+    if (index === 0) {
+      console.log("=== FORMATTING DEBUG ===");
+      console.log("Fields available:", Object.keys(val));
+      console.log("Has 'preview_url':", val.hasOwnProperty('preview_url'));
+      console.log("Has 'external_urls':", val.hasOwnProperty('external_urls'));
+      console.log("Sample external_urls:", val.external_urls);
+    }
+    
     const artists = val.artists?.map((artist) => ({ name: artist.name }));
+    
+    // Find preview URL - check multiple possible locations
+    const previewUrl = val.preview_url || 
+                      val.external_preview_url || 
+                      val.external_urls?.preview ||
+                      null;
+    
+    if (index === 0) {
+      console.log("Found preview URL:", previewUrl);
+    }
+                      
     // returning undefined for now to not confuse students, ideally a fix would be a hosted version of this
     return {
       songTitle: val.name,
@@ -24,24 +57,31 @@ const formatter = (data) =>
       imageUrl: val.album?.images[0]?.url ?? undefined,
       duration: val.duration_ms,
       externalUrl: val.external_urls?.spotify ?? undefined,
-      previewUrl: val.preview_url ?? undefined,
+      previewUrl: previewUrl,
       // Add additional fields required by the specifications
       uri: val.uri ?? undefined,
       // Including additional useful fields
       trackId: val.id ?? undefined,
       popularity: val.popularity ?? undefined,
       albumReleaseDate: val.album?.release_date ?? undefined,
+      _originalData: (index === 0) ? val : undefined,  // Include original data for the first track only
     };
   });
+};
 
 /* Fetches data from the given endpoint URL with the access token provided. */
 const fetcher = async (url, token) => {
   if (!token) {
+    console.error("No token provided to fetcher!");
     throw new Error("No authentication token provided");
   }
   
   try {
-    return await axios(url, {
+    console.log(`Making API request to: ${url}`);
+    console.log(`With token (first 10 chars): ${token.substring(0, 10)}...`);
+    
+    const startTime = Date.now();
+    const response = await axios(url, {
       method: "GET",
       headers: {
         Accept: "application/json",
@@ -49,8 +89,29 @@ const fetcher = async (url, token) => {
         Authorization: "Bearer " + token,
       },
     });
+    const endTime = Date.now();
+    
+    console.log(`API request completed in ${endTime - startTime}ms`);
+    console.log(`Response status: ${response.status}`);
+    
+    if (response.data) {
+      console.log("Response contains data");
+      if (response.data.items) {
+        console.log(`Response contains ${response.data.items.length} items`);
+      }
+    } else {
+      console.warn("Response does not contain data");
+    }
+    
+    return response;
   } catch (error) {
     console.log("Fetcher error: ", error);
+    console.log("Error details:", {
+      message: error.message,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data
+    });
     throw error; // Rethrow to handle in the calling function
   }
 };
@@ -79,6 +140,24 @@ export const getAlbumTracks = async (albumId, token) => {
   try {
     console.log("ALBUM_TRACK_ID", ALBUM_TRACK_API_GETTER(albumId));
     const res = await fetcher(ALBUM_TRACK_API_GETTER(albumId), token);
+    
+    // Log raw album data for debugging
+    console.log("=== RAW ALBUM API RESPONSE ===");
+    console.log("Album name:", res.data?.name);
+    console.log("Total tracks:", res.data?.total_tracks || res.data?.tracks?.total || 0);
+    
+    // Log example track to check structure
+    if (res.data?.tracks?.items?.length > 0) {
+      console.log("=== EXAMPLE TRACK STRUCTURE ===");
+      const exampleTrack = res.data.tracks.items[0];
+      // Convert to JSON and back to get a clean object for logging
+      const cleanExample = JSON.parse(JSON.stringify(exampleTrack));
+      console.log("Track fields:", Object.keys(cleanExample));
+      console.log("Has preview_url:", exampleTrack.hasOwnProperty('preview_url'));
+      console.log("preview_url value:", exampleTrack.preview_url);
+      console.log("First track:", cleanExample);
+    }
+    
     const transformedResponse = res.data?.tracks?.items?.map((item) => {
       item.album = { images: res.data?.images, name: res.data?.name };
       return item;
@@ -99,22 +178,92 @@ export const getAlbumTracks = async (albumId, token) => {
 /* Fetches your recently played tracks from the Spotify API. */
 export const getMyRecentlyPlayedTracks = async (token) => {
   try {
+    console.log("Starting API call to recently played tracks endpoint");
+    console.log("Using token (first 10 chars):", token ? token.substring(0, 10) + "..." : "No token");
+    console.log("API URL:", RECENTLY_PLAYED_API);
+    
     const res = await fetcher(RECENTLY_PLAYED_API, token);
+    console.log("API response received:", res ? "Success" : "No response");
     
     // The recently played API returns a different format than the top tracks API
     // We need to extract the track from each item
-    const tracks = res.data?.items?.map(item => item.track);
+    const items = res.data?.items;
+    console.log("Items in response:", items?.length || 0);
+    
+    const tracks = items?.map(item => item.track);
     
     if (!tracks || tracks.length === 0) {
       console.warn("No recently played tracks found");
       return [];
     }
     
-    return formatter(tracks);
+    console.log("Formatting tracks...");
+    const formattedTracks = formatter(tracks);
+    console.log("Tracks formatted, returning data");
+    
+    return formattedTracks;
   } catch (e) {
     console.error("Error fetching recently played tracks:", e);
+    console.error("Error details:", JSON.stringify({
+      message: e.message,
+      response: e.response ? {
+        status: e.response.status,
+        statusText: e.response.statusText,
+        data: e.response.data
+      } : "No response object"
+    }, null, 2));
     
     // Don't show alert directly, let the caller handle the error
+    if (e.response?.status === 401) {
+      console.log("Throwing 401 error for token refresh");
+      throw e; // Allow 401 errors to bubble up for token refresh handling
+    }
+    
+    return null;
+  }
+};
+
+/* Fetches details for a specific track */
+export const getTrackDetails = async (trackId, token) => {
+  try {
+    console.log("Fetching track details for ID:", trackId);
+    
+    // Check if TRACK_API_GETTER is available
+    if (typeof TRACK_API_GETTER !== 'function') {
+      console.error("TRACK_API_GETTER is not properly defined in env.js");
+      
+      // Direct fallback URL construction
+      const trackUrl = `https://api.spotify.com/v1/tracks/${trackId}`;
+      console.log("Using direct URL instead:", trackUrl);
+      
+      const res = await fetcher(trackUrl, token);
+      
+      // Log raw track data for debugging
+      console.log("=== TRACK API RESPONSE ===");
+      console.log("Track name:", res.data?.name);
+      console.log("Has preview_url:", res.data?.hasOwnProperty('preview_url'));
+      console.log("Preview URL value:", res.data?.preview_url);
+      
+      // Return formatted track data
+      return formatter([res.data])[0];
+    }
+    
+    const trackUrl = TRACK_API_GETTER(trackId);
+    console.log("Track API URL:", trackUrl);
+    
+    const res = await fetcher(trackUrl, token);
+    
+    // Log raw track data for debugging
+    console.log("=== TRACK API RESPONSE ===");
+    console.log("Track name:", res.data?.name);
+    console.log("Has preview_url:", res.data?.hasOwnProperty('preview_url'));
+    console.log("Preview URL value:", res.data?.preview_url);
+    
+    // Return formatted track data
+    return formatter([res.data])[0];
+  } catch (e) {
+    console.error("Error in getTrackDetails:", e);
+    
     if (e.response?.status === 401) {
       throw e; // Allow 401 errors to bubble up for token refresh handling
     }
