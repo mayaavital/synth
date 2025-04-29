@@ -36,6 +36,10 @@ const formatter = (data) =>
 
 /* Fetches data from the given endpoint URL with the access token provided. */
 const fetcher = async (url, token) => {
+  if (!token) {
+    throw new Error("No authentication token provided");
+  }
+  
   try {
     return await axios(url, {
       method: "GET",
@@ -47,6 +51,7 @@ const fetcher = async (url, token) => {
     });
   } catch (error) {
     console.log("Fetcher error: ", error);
+    throw error; // Rethrow to handle in the calling function
   }
 };
 
@@ -57,8 +62,13 @@ export const getMyTopTracks = async (token) => {
     let res = await fetcher(TOP_TRACKS_API, token);
     return formatter(res.data?.items);
   } catch (e) {
-    console.error(e);
-    alert(ERROR_ALERT);
+    console.error("Error in getMyTopTracks:", e);
+    
+    // Don't show alert directly, let the caller handle the error
+    if (e.response?.status === 401) {
+      throw e; // Allow 401 errors to bubble up for token refresh handling
+    }
+    
     return null;
   }
 };
@@ -75,8 +85,13 @@ export const getAlbumTracks = async (albumId, token) => {
     });
     return formatter(transformedResponse);
   } catch (e) {
-    console.error(e);
-    alert(ERROR_ALERT);
+    console.error("Error in getAlbumTracks:", e);
+    
+    // Don't show alert directly, let the caller handle the error
+    if (e.response?.status === 401) {
+      throw e; // Allow 401 errors to bubble up for token refresh handling
+    }
+    
     return null;
   }
 };
@@ -98,7 +113,12 @@ export const getMyRecentlyPlayedTracks = async (token) => {
     return formatter(tracks);
   } catch (e) {
     console.error("Error fetching recently played tracks:", e);
-    alert(ERROR_ALERT);
+    
+    // Don't show alert directly, let the caller handle the error
+    if (e.response?.status === 401) {
+      throw e; // Allow 401 errors to bubble up for token refresh handling
+    }
+    
     return null;
   }
 };

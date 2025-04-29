@@ -25,8 +25,48 @@ export default function GamePlay() {
   const navigation = useNavigation();
   const router = useRouter();
   const params = useLocalSearchParams();
-  const { token, getSpotifyAuth, logout } = useSpotifyAuth();
-  console.log("token og", token);
+  const { token, getSpotifyAuth, logout, isTokenValid, getValidToken } =
+    useSpotifyAuth();
+
+  // Mock song data to fallback on if Spotify API is unavailable
+  const mockSongs = [
+    {
+      songTitle: "A Day in the Life",
+      songArtists: ["The Beatles"],
+      albumName: "Sgt. Pepper's Lonely Hearts Club Band",
+      imageUrl:
+        "https://i.scdn.co/image/ab67616d0000b273128450651c9f0442780d8eb8",
+      duration: 337000,
+      previewUrl:
+        "https://p.scdn.co/mp3-preview/67f504bf5b86bdcaf197aef343c2413e8ec68b1d",
+      uri: "spotify:track:0jXR9dJLlGpfYQrN0m1HLO",
+      externalUrl: "https://open.spotify.com/track/0jXR9dJLlGpfYQrN0m1HLO",
+    },
+    {
+      songTitle: "Bohemian Rhapsody",
+      songArtists: ["Queen"],
+      albumName: "A Night at the Opera",
+      imageUrl:
+        "https://i.scdn.co/image/ab67616d0000b27328581cfe196c2be2506ee6c0",
+      duration: 354000,
+      previewUrl:
+        "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview122/v4/29/96/51/2996514a-35cd-b092-c7f0-dd995b0e6071/mzaf_10909209324710493166.plus.aac.p.m4a",
+      uri: "spotify:track:7tFiyTwD0nx5a1eklYtX2J",
+      externalUrl: "https://open.spotify.com/track/7tFiyTwD0nx5a1eklYtX2J",
+    },
+    {
+      songTitle: "Hotel California",
+      songArtists: ["Eagles"],
+      albumName: "Hotel California",
+      imageUrl:
+        "https://i.scdn.co/image/ab67616d0000b273446e630d93d3fb235d70bad9",
+      duration: 391000,
+      previewUrl:
+        "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/cb/16/81/cb1681bb-a5a7-0b93-7ce0-0a55ab6dc9e5/mzaf_11284427653219671407.plus.aac.p.m4a",
+      uri: "spotify:track:40riOy7x9W7GXjyGp4pjAv",
+      externalUrl: "https://open.spotify.com/track/40riOy7x9W7GXjyGp4pjAv",
+    },
+  ];
 
   // State variables
   const [isLoading, setIsLoading] = useState(true);
@@ -110,177 +150,129 @@ export default function GamePlay() {
   // Fetch songs when component mounts - but only once
   useEffect(() => {
     // Skip if we've already fetched songs or if token is undefined
-    if (hasFetchedSongs || token === undefined) {
+    if (allSongs.length > 0 || isLoading) {
       return;
     }
     console.log("token2", token);
     const fetchSongs = async () => {
-      try {
-        setIsLoading(true);
+      setIsLoading(true);
+      setError(null);
 
-        // Mock song data to use if token is not available
-        const mockSongs = [
-          {
-            songTitle: "A Day in the Life",
-            songArtists: ["The Beatles"],
-            albumName: "Sgt. Pepper's Lonely Hearts Club Band",
-            imageUrl:
-              "https://i.scdn.co/image/ab67616d0000b273128450651c9f0442780d8eb8",
-            duration: 337000,
-            previewUrl:
-              "https://p.scdn.co/mp3-preview/67f504bf5b86bdcaf197aef343c2413e8ec68b1d",
-            // Using more reliable audio URLs - Apple's stock sound files which are more stable than Spotify previews
-            previewUrl:
-              "https://soundcloud.com/ilovedatsprite/gunna-choppa-sing-prod-turbo?si=3b5d0296dc51445c80ce94742952afdd&utm_source=clipboard&utm_medium=text&utm_campaign=social_sharing",
-          },
-          // {
-          //   songTitle: "Bohemian Rhapsody",
-          //   songArtists: ["Queen"],
-          //   albumName: "A Night at the Opera",
-          //   imageUrl: "https://i.scdn.co/image/ab67616d0000b27328581cfe196c2be2506ee6c0",
-          //   duration: 354000,
-          //   previewUrl: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview122/v4/29/96/51/2996514a-35cd-b092-c7f0-dd995b0e6071/mzaf_10909209324710493166.plus.aac.p.m4a",
-          // },
-          // {
-          //   songTitle: "Hotel California",
-          //   songArtists: ["Eagles"],
-          //   albumName: "Hotel California",
-          //   imageUrl: "https://i.scdn.co/image/ab67616d0000b273446e630d93d3fb235d70bad9",
-          //   duration: 391000,
-          //   previewUrl: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/cb/16/81/cb1681bb-a5a7-0b93-7ce0-0a55ab6dc9e5/mzaf_11284427653219671407.plus.aac.p.m4a",
-          // },
-          // {
-          //   songTitle: "Billie Jean",
-          //   songArtists: ["Michael Jackson"],
-          //   albumName: "Thriller",
-          //   imageUrl: "https://i.scdn.co/image/ab67616d0000b273982d4494b5ce78e84f1a5de4",
-          //   duration: 294000,
-          //   previewUrl: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview122/v4/d4/75/5e/d4755ec7-f083-e6df-8cfc-cd498327cc6f/mzaf_14458290734118509811.plus.aac.p.m4a",
-          // },
-          // {
-          //   songTitle: "Purple Haze",
-          //   songArtists: ["Jimi Hendrix"],
-          //   albumName: "Are You Experienced",
-          //   imageUrl: "https://i.scdn.co/image/ab67616d0000b273a9feeafe29cb1e4318b075b8",
-          //   duration: 171000,
-          //   previewUrl: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/7d/05/36/7d0536f7-7b1e-122f-8dd0-fd9b3c3a60fc/mzaf_13169423142910610255.plus.aac.p.m4a",
-          // },
-        ];
+      let currentToken = token;
 
-        let tracks;
+      // If we have a token, make sure it's valid before using it
+      if (token) {
+        try {
+          // This will either return the valid token or refresh it automatically
+          currentToken = await getValidToken();
+          console.log("Using valid token for API request");
+        } catch (error) {
+          console.error("Error validating/refreshing token:", error);
+          currentToken = null;
+        }
+      }
 
-        console.log(
-          "Current token status:",
-          token ? "Token available" : "No token"
-        );
-        console.log("token3", token);
-        if (!token) {
-          console.log("No Spotify token available, using mock song data");
-          tracks = mockSongs;
-        } else {
-          try {
-            // Use getMyRecentlyPlayedTracks instead of getMyTopTracks
-            console.log("Fetching recently played tracks using token");
-            tracks = await getMyRecentlyPlayedTracks(token);
+      let tracks;
+
+      // If we don't have a valid token, use mock data
+      if (!currentToken) {
+        console.log("No valid Spotify token, using mock song data");
+        tracks = mockSongs;
+      } else {
+        try {
+          console.log("Fetching recently played tracks from Spotify");
+          tracks = await getMyRecentlyPlayedTracks(currentToken);
+          console.log(
+            "Successfully fetched recently played tracks:",
+            tracks?.length || 0
+          );
+
+          if (!tracks || tracks.length === 0) {
+            console.log("No tracks found, using mock data");
+            tracks = mockSongs;
+          } else {
+            // Filter out tracks without valid preview URLs
+            const validTracks = tracks.filter(
+              (track) => track.previewUrl && track.previewUrl.trim() !== ""
+            );
             console.log(
-              "Successfully fetched recently played tracks from Spotify API:",
-              tracks?.length || 0
+              `Found ${validTracks.length}/${tracks.length} tracks with preview URLs`
             );
 
-            if (!tracks || tracks.length === 0) {
+            if (validTracks.length < 5) {
               console.log(
-                "No recently played tracks found from Spotify API, using mock song data"
+                "Not enough tracks with preview URLs, using mock data"
               );
-              console.log("tracks", tracks);
               tracks = mockSongs;
             } else {
-              // Filter out tracks without valid preview URLs
-              const validTracks = tracks.filter(
-                (track) => track.previewUrl && track.previewUrl.trim() !== ""
-              );
+              tracks = validTracks;
+
+              // Add additional data fields as needed
+              tracks = tracks.map((track) => ({
+                ...track,
+                uri: track.uri || null,
+                externalUrl: track.externalUrl || null,
+                _debug: {
+                  title: track.songTitle,
+                  artists: track.songArtists,
+                  duration: track.duration,
+                  albumArt: track.imageUrl ? "Available" : "Unavailable",
+                  previewUrl: track.previewUrl ? "Available" : "Unavailable",
+                },
+              }));
+
               console.log(
-                `Found ${validTracks.length}/${tracks.length} tracks with preview URLs`
-              );
-
-              if (validTracks.length < 5) {
-                console.log(
-                  "Not enough tracks with valid preview URLs, using mock data"
-                );
-                tracks = mockSongs;
-              } else {
-                tracks = validTracks;
-
-                // Add additional data fields specified in requirements
-                tracks = tracks.map((track) => ({
-                  ...track,
-                  // These fields are already included in the formatter function, but we add them explicitly
-                  // for clarity and to ensure they match the requirements
-                  uri: track.uri || null,
-                  externalUrl: track.externalUrl || null,
-                  // Display additional track information in console for debugging
-                  _debug: {
-                    title: track.songTitle,
-                    artists: track.songArtists,
-                    duration: track.duration,
-                    albumArt: track.imageUrl ? "Available" : "Unavailable",
-                    previewUrl: track.previewUrl ? "Available" : "Unavailable",
-                  },
-                }));
-
-                // Log information for debugging
-                console.log(
-                  "Sample track data:",
-                  JSON.stringify(tracks[0], null, 2)
-                );
-              }
-            }
-          } catch (apiError) {
-            console.error("Error fetching from Spotify API:", apiError);
-
-            // Check for specific Spotify API errors
-            if (apiError?.response?.status === 401) {
-              console.log("Authentication error (401): Token may be expired");
-              handleTokenError(apiError);
-              return; // Exit early to prevent using mock data while handling auth
-            } else if (apiError?.response?.status === 403) {
-              console.log("Authorization error (403): Missing required scope");
-              Alert.alert(
-                "Permission Error",
-                "This app needs permission to access your top tracks. Please try again and accept all permissions.",
-                [{ text: "OK", onPress: () => handleReturnToLobby() }]
-              );
-            } else if (apiError?.response?.status === 429) {
-              console.log(
-                "Rate limit reached (429), using mock data without retrying"
+                "Sample track data:",
+                JSON.stringify(tracks[0], null, 2)
               );
             }
-
-            tracks = mockSongs;
           }
+        } catch (apiError) {
+          console.error("Error fetching from Spotify API:", apiError);
+
+          // Handle API errors
+          if (apiError?.response?.status === 401) {
+            console.log("Authentication error (401)");
+            // We don't need to handle token refresh here since getValidToken already did that
+            // Just notify the user and use mock data
+            Alert.alert(
+              "Spotify Authentication Issue",
+              "There was a problem with your Spotify authentication. Using sample songs instead.",
+              [{ text: "OK" }]
+            );
+          } else if (apiError?.response?.status === 403) {
+            console.log("Authorization error (403): Missing required scope");
+            Alert.alert(
+              "Permission Error",
+              "This app needs permission to access your tracks. Please reconnect to Spotify with all permissions.",
+              [{ text: "OK", onPress: () => handleReturnToLobby() }]
+            );
+          } else if (apiError?.response?.status === 429) {
+            console.log("Rate limit reached (429)");
+            Alert.alert(
+              "Too Many Requests",
+              "You've made too many requests to Spotify. Please try again later.",
+              [{ text: "OK" }]
+            );
+          }
+
+          tracks = mockSongs;
         }
-
-        console.log(`Using ${tracks.length} tracks for the game`);
-
-        // Take up to 15 songs and associate them with random players
-        const processedSongs = tracks.slice(0, 15).map((track) => ({
-          ...track,
-          assignedToPlayer: players[Math.floor(Math.random() * players.length)],
-        }));
-
-        setAllSongs(processedSongs);
-
-        // Select first song for first round
-        selectSongForRound(1, processedSongs);
-
-        setIsLoading(false);
-        setGameStage("playing");
-        setHasFetchedSongs(true); // Mark as having fetched songs to prevent loops
-      } catch (err) {
-        console.error("Error fetching songs:", err);
-        setError("Failed to fetch songs: " + err.message);
-        setIsLoading(false);
-        setHasFetchedSongs(true); // Mark as having fetched even on error to prevent infinite retries
       }
+
+      console.log(`Using ${tracks.length} tracks for the game`);
+
+      // Process the tracks for the game
+      const processedSongs = tracks.slice(0, 15).map((track) => ({
+        ...track,
+        assignedToPlayer: players[Math.floor(Math.random() * players.length)],
+      }));
+
+      setAllSongs(processedSongs);
+      selectSongForRound(1, processedSongs);
+      setIsLoading(false);
+      setGameStage("playing");
+      setHasFetchedSongs(true);
     };
 
     // Only fetch songs once
@@ -490,33 +482,73 @@ export default function GamePlay() {
     console.log("Token error:", error);
 
     if (error?.response?.status === 401) {
-      // Token expired or invalid
-      Alert.alert(
-        "Spotify Session Expired",
-        "Your Spotify session has expired. Would you like to reconnect?",
-        [
-          {
-            text: "Cancel",
-            onPress: () => handleReturnToLobby(),
-            style: "cancel",
-          },
-          {
-            text: "Reconnect",
-            onPress: async () => {
-              // First log out to clear the old token
-              await logout();
-              // Then initiate a new auth flow
-              await getSpotifyAuth();
-              // Refresh the page - in a real app you might handle this more elegantly
-              Alert.alert(
-                "Authentication Complete",
-                "Please return to the lobby and start a new game.",
-                [{ text: "OK", onPress: () => handleReturnToLobby() }]
-              );
+      try {
+        // Try to automatically refresh the token
+        console.log("Attempting to refresh expired token");
+        const newToken = await getValidToken();
+
+        if (newToken) {
+          // Successfully refreshed, continue with the game
+          console.log("Token refreshed successfully");
+          Alert.alert(
+            "Spotify Connection Refreshed",
+            "Your Spotify connection has been refreshed. You can continue playing.",
+            [{ text: "Continue" }]
+          );
+          return;
+        } else {
+          // Failed to refresh automatically, prompt for manual authentication
+          Alert.alert(
+            "Spotify Session Expired",
+            "Your Spotify session has expired. Would you like to reconnect?",
+            [
+              {
+                text: "Cancel",
+                onPress: () => handleReturnToLobby(),
+                style: "cancel",
+              },
+              {
+                text: "Reconnect",
+                onPress: async () => {
+                  await logout();
+                  await getSpotifyAuth();
+                  Alert.alert(
+                    "Authentication Started",
+                    "Please complete the authentication in the browser. Return to the lobby when finished.",
+                    [{ text: "OK", onPress: () => handleReturnToLobby() }]
+                  );
+                },
+              },
+            ]
+          );
+        }
+      } catch (refreshError) {
+        console.error("Error refreshing token:", refreshError);
+        // Show manual re-authentication dialog
+        Alert.alert(
+          "Authentication Failed",
+          "There was a problem refreshing your Spotify session. Would you like to reconnect manually?",
+          [
+            {
+              text: "Cancel",
+              onPress: () => handleReturnToLobby(),
+              style: "cancel",
             },
-          },
-        ]
-      );
+            {
+              text: "Reconnect",
+              onPress: async () => {
+                await logout();
+                await getSpotifyAuth();
+                Alert.alert(
+                  "Authentication Started",
+                  "Please complete the authentication in the browser. Return to the lobby when finished.",
+                  [{ text: "OK", onPress: () => handleReturnToLobby() }]
+                );
+              },
+            },
+          ]
+        );
+      }
     } else {
       // Some other error
       Alert.alert(
