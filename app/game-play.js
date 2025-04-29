@@ -1225,7 +1225,7 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",
     justifyContent: "space-between",
     backgroundColor: "#8E44AD", // Purple background for header
     paddingVertical: 10,
