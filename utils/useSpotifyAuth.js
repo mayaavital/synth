@@ -5,7 +5,7 @@ import {
   useAuthRequest,
   makeRedirectUri,
 } from "expo-auth-session";
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as WebBrowser from "expo-web-browser";
 import { ResponseError } from "expo-auth-session/build/Errors";
 
@@ -17,6 +17,7 @@ const {
   SPOTIFY_API: { DISCOVERY },
 } = getEnv();
 
+console.log("redirect: ", REDIRECT_URI);
 // Log configuration for debugging
 console.log("Auth Configuration:", {
   CLIENT_ID: CLIENT_ID?.slice(0, 5) + "...", // Only show part of the ID for security
@@ -25,9 +26,9 @@ console.log("Auth Configuration:", {
 });
 
 // Token storage keys
-const TOKEN_STORAGE_KEY = 'spotify_access_token';
-const TOKEN_EXPIRATION_KEY = 'spotify_token_expiration';
-const REFRESH_TOKEN_KEY = 'spotify_refresh_token';
+const TOKEN_STORAGE_KEY = "spotify_access_token";
+const TOKEN_EXPIRATION_KEY = "spotify_token_expiration";
+const REFRESH_TOKEN_KEY = "spotify_refresh_token";
 
 // needed so that the browser closes the modal after auth token
 WebBrowser.maybeCompleteAuthSession();
@@ -57,31 +58,31 @@ const useSpotifyAuth = () => {
     try {
       const tokenEndpoint = DISCOVERY.tokenEndpoint;
       const redirectUri = REDIRECT_URI;
-      
+
       const params = new URLSearchParams();
-      params.append('client_id', CLIENT_ID);
-      params.append('grant_type', 'authorization_code');
-      params.append('code', code);
-      params.append('redirect_uri', redirectUri);
-      params.append('code_verifier', request.codeVerifier || '');
-      
+      params.append("client_id", CLIENT_ID);
+      params.append("grant_type", "authorization_code");
+      params.append("code", code);
+      params.append("redirect_uri", redirectUri);
+      params.append("code_verifier", request.codeVerifier || "");
+
       const response = await fetch(tokenEndpoint, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
+          "Content-Type": "application/x-www-form-urlencoded",
         },
         body: params.toString(),
       });
-      
+
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(`Token exchange failed: ${errorData.error}`);
       }
-      
+
       const tokenData = await response.json();
       return tokenData;
     } catch (error) {
-      console.error('Error exchanging code for token:', error);
+      console.error("Error exchanging code for token:", error);
       throw error;
     }
   };
@@ -106,10 +107,10 @@ const useSpotifyAuth = () => {
       const storedToken = await AsyncStorage.getItem(TOKEN_STORAGE_KEY);
       const storedExpiration = await AsyncStorage.getItem(TOKEN_EXPIRATION_KEY);
       const storedRefreshToken = await AsyncStorage.getItem(REFRESH_TOKEN_KEY);
-      
+
       if (storedToken && storedExpiration) {
         const expirationTime = parseInt(storedExpiration);
-        
+
         // Only restore token if it's not expired
         if (expirationTime > Date.now()) {
           console.log("Loaded valid token from storage");
@@ -135,7 +136,7 @@ const useSpotifyAuth = () => {
       } else {
         console.log("No stored token found or missing expiration");
       }
-      
+
       setIsInitialized(true);
     } catch (error) {
       console.error("Error loading token from storage:", error);
@@ -158,40 +159,40 @@ const useSpotifyAuth = () => {
   const refreshAccessToken = async (refreshTokenToUse) => {
     try {
       const tokenEndpoint = DISCOVERY.tokenEndpoint;
-      
+
       const params = new URLSearchParams();
-      params.append('client_id', CLIENT_ID);
-      params.append('grant_type', 'refresh_token');
-      params.append('refresh_token', refreshTokenToUse);
-      
+      params.append("client_id", CLIENT_ID);
+      params.append("grant_type", "refresh_token");
+      params.append("refresh_token", refreshTokenToUse);
+
       const response = await fetch(tokenEndpoint, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
+          "Content-Type": "application/x-www-form-urlencoded",
         },
         body: params.toString(),
       });
-      
+
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(`Token refresh failed: ${errorData.error}`);
       }
-      
+
       const tokenData = await response.json();
       const newToken = tokenData.access_token;
       const expiresIn = tokenData.expires_in || 3600;
-      const expirationTime = Date.now() + (expiresIn * 1000);
+      const expirationTime = Date.now() + expiresIn * 1000;
       const newRefreshToken = tokenData.refresh_token || refreshTokenToUse;
-      
+
       // Save the new tokens
       setToken(newToken);
       setTokenExpiration(expirationTime);
       setRefreshToken(newRefreshToken);
       saveTokenData(newToken, expirationTime, newRefreshToken);
-      
+
       return newToken;
     } catch (error) {
-      console.error('Error refreshing access token:', error);
+      console.error("Error refreshing access token:", error);
       throw error;
     }
   };
@@ -200,24 +201,24 @@ const useSpotifyAuth = () => {
   useEffect(() => {
     const handleResponse = async () => {
       try {
-        if (response?.type === 'success' && response.params?.code) {
+        if (response?.type === "success" && response.params?.code) {
           // Exchange the code for a token
           const tokenData = await exchangeCodeForToken(response.params.code);
-          
+
           const newToken = tokenData.access_token;
           const newRefreshToken = tokenData.refresh_token;
           const expiresIn = parseInt(tokenData.expires_in) || 3600;
-          const expirationTime = Date.now() + (expiresIn * 1000);
-          
+          const expirationTime = Date.now() + expiresIn * 1000;
+
           // Save token and expiration
           setToken(newToken);
           setTokenExpiration(expirationTime);
           setRefreshToken(newRefreshToken);
           saveTokenData(newToken, expirationTime, newRefreshToken);
-          
+
           console.log("Authenticated with expiration in", expiresIn, "seconds");
           setAuthError(null); // Clear any previous errors
-        } else if (response?.type === 'error') {
+        } else if (response?.type === "error") {
           console.error("Auth error:", response.error);
           setAuthError(response.error.message || "Authentication failed");
         }
@@ -226,7 +227,7 @@ const useSpotifyAuth = () => {
         setAuthError(error.message || "Authentication failed");
       }
     };
-    
+
     if (response) {
       handleResponse();
     }
@@ -241,7 +242,7 @@ const useSpotifyAuth = () => {
   const isTokenValid = () => {
     if (!token || !tokenExpiration) return false;
     // Add a 60-second buffer to account for network latency
-    return tokenExpiration > (Date.now() + 60000);
+    return tokenExpiration > Date.now() + 60000;
   };
 
   // Get a valid token (refreshes if expired)
@@ -249,7 +250,7 @@ const useSpotifyAuth = () => {
     if (isTokenValid()) {
       return token;
     }
-    
+
     // Try to refresh the token if we have a refresh token
     if (refreshToken) {
       try {
@@ -260,7 +261,7 @@ const useSpotifyAuth = () => {
         console.error("Failed to refresh token:", refreshError);
       }
     }
-    
+
     // If we get here, we need to re-authenticate
     console.log("No valid token or refresh failed, clearing token data");
     await logout();
@@ -276,14 +277,14 @@ const useSpotifyAuth = () => {
     console.log("Logged out and token data cleared");
   };
 
-  return { 
-    token, 
-    isTokenValid, 
+  return {
+    token,
+    isTokenValid,
     getValidToken,
-    getSpotifyAuth: promptAsync, 
+    getSpotifyAuth: promptAsync,
     logout,
     isInitialized,
-    authError
+    authError,
   };
 };
 

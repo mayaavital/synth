@@ -63,27 +63,38 @@ export default function GameLobby() {
 
   // Track if everyone is ready to start
   const [isEveryoneReady, setIsEveryoneReady] = useState(true);
-
   // Set header options
   useEffect(() => {
     navigation.setOptions({
-      headerShown: true,
-      headerTitleStyle: {
-        color: "#FFC857", // Golden yellow color
-        fontSize: 28,
-        fontWeight: "bold",
-        letterSpacing: 2,
-      },
-      headerStyle: { backgroundColor: "#8E44AD" },
-      headerLeft: () => (
-        <TouchableOpacity
-          style={styles.menuButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="arrow-back" size={28} color="white" />
-        </TouchableOpacity>
+      // headerShown: true,
+      // headerTitleStyle: {
+      //   color: "#FFC857", // Golden yellow color
+      //   fontSize: 28,
+      //   fontWeight: "bold",
+      //   letterSpacing: 2,
+      // },
+      // headerStyle: { backgroundColor: "#8E44AD", height: 60 + insets.top},
+      // headerLeft: () => (
+      //   <TouchableOpacity
+      //     style={styles.menuButton}
+      //     onPress={() => navigation.goBack()}
+      //   >
+      //     <Ionicons name="arrow-back" size={28} color="white" />
+      //   </TouchableOpacity>
+      // ),
+      //  title: gameName,
+      header: (props) => (
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.menuButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={28} color="white" />
+          </TouchableOpacity>
+          <Text style={styles.logoText}>{gameName}</Text>
+          <View style={styles.placeholder} />
+        </View>
       ),
-      title: gameName,
     });
   }, [navigation]);
 
@@ -262,15 +273,21 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",
     justifyContent: "space-between",
-    backgroundColor: "#8E44AD",
-    paddingVertical: 15,
+    backgroundColor: "#8E44AD", // Purple background for header
+    paddingVertical: 8,
     paddingHorizontal: 16,
+    height: 100,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.6,
+    shadowRadius: 7,
+    elevation: 5,
   },
-  menuButton: {
-    padding: 8,
-  },
+  // menuButton: {
+  //   padding: 8,
+  // },
   logoText: {
     color: "#FFC857",
     fontSize: 28,
@@ -375,6 +392,11 @@ const styles = StyleSheet.create({
     borderRadius: 50,
     paddingVertical: 16,
     alignItems: "center",
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.6,
+    shadowRadius: 7,
+    elevation: 5,
   },
   startButtonDisabled: {
     backgroundColor: "#674C70",

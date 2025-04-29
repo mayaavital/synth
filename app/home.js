@@ -154,46 +154,40 @@ export default function home() {
   // Hide default header and use our custom one
   useEffect(() => {
     navigation.setOptions({
-      headerShown: true,
-      headerTitleStyle: {
-        color: "#FFC857", // Golden yellow color
-        fontSize: 28,
-        fontWeight: "bold",
-        letterSpacing: 2,
-      },
-      headerStyle: {
-        backgroundColor: "#8E44AD",
-        shadowColor: "#FFFFF",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.5,
-        shadowRadius: 3,
-      },
-      headerLeft: () => (
-        <TouchableOpacity
-          style={styles.menuButton}
-          onPress={() => {
-            if (token) {
-              Alert.alert(
-                "Spotify Connected",
-                "Do you want to disconnect from Spotify?",
-                [
-                  { text: "Cancel", style: "cancel" },
-                  {
-                    text: "Disconnect",
-                    onPress: handleLogout,
-                    style: "destructive",
-                  },
-                ]
-              );
-            } else {
-              Alert.alert("Not Connected", "You are not connected to Spotify.");
-            }
-          }}
-        >
-          <Ionicons name="menu" size={28} color="white" />
-        </TouchableOpacity>
+      header: (props) => (
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.menuButton}
+            onPress={() => {
+              if (token) {
+                Alert.alert(
+                  "Spotify Connected",
+                  "Do you want to disconnect from Spotify?",
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                      text: "Disconnect",
+                      onPress: handleLogout,
+                      style: "destructive",
+                    },
+                  ]
+                );
+              } else {
+                Alert.alert(
+                  "Not Connected",
+                  "You are not connected to Spotify."
+                );
+              }
+            }}
+          >
+            <Ionicons name="menu" size={28} color="white" />
+          </TouchableOpacity>
+
+          <Image source={require("../assets/SYNTH.png")} style={styles.logo} />
+
+          <View style={styles.placeholder} />
+        </View>
       ),
-      title: "SYNTH",
     });
   }, [navigation, token]);
 
@@ -338,23 +332,34 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",
     justifyContent: "space-between",
     backgroundColor: "#8E44AD", // Purple background for header
-    paddingVertical: 15,
+    paddingVertical: 10,
     paddingHorizontal: 16,
+    height: 100,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.6,
+    shadowRadius: 7,
+    elevation: 5,
   },
-  menuButton: {
-    padding: 8,
-  },
+  // menuButton: {
+  //   padding: 8,
+  // },
   logoText: {
     color: "#FFC857", // Golden yellow color
     fontSize: 28,
     fontWeight: "bold",
     letterSpacing: 2,
   },
+  logo: {
+    height: "50%",
+    width: "50%",
+    resizeMode: "contain",
+  },
   placeholder: {
-    width: 44, // Same width as menu button for balanced layout
+    height: window.innerHeight * 0.05,
   },
   spotifyStatus: {
     margin: 20,
@@ -398,6 +403,10 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 25,
     paddingHorizontal: 20,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
   },
   spotifyDisconnectButton: {
     backgroundColor: "#333",
@@ -406,6 +415,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderWidth: 1,
     borderColor: "#666",
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
   },
   spotifyRefreshButton: {
     flexDirection: "row",

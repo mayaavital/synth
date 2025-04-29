@@ -94,7 +94,7 @@ export default function App() {
           <Pressable
             style={styles.connectApple}
             marginTop={windowHeight * 0.01}
-            onPress={handleSpotifyAuth}
+            onPress={() => router.push("home")}
             disabled={isAuthenticating}
           >
             <Text style={styles.text}>Login with Apple Music</Text>

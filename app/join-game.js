@@ -117,6 +117,11 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     paddingHorizontal: 16,
     height: 100,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.6,
+    shadowRadius: 7,
+    elevation: 5,
   },
   menuButton: {
     padding: 8,
@@ -165,6 +170,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: "auto",
     marginBottom: 24,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.6,
+    shadowRadius: 7,
+    elevation: 5,
   },
   joinButtonDisabled: {
     backgroundColor: "#888",
