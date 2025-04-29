@@ -17,36 +17,101 @@ import { useSpotifyAuth } from "../utils";
 export default function home() {
   const navigation = useNavigation();
   const router = useRouter();
-  const { token, authError, getSpotifyAuth, logout, isInitialized } =
+  const { token, authError, getSpotifyAuth, logout, isInitialized, isTokenValid, getValidToken } =
     useSpotifyAuth();
   const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [tokenStatus, setTokenStatus] = useState("unknown");
+
+  // Check token validity and set status
+  const checkTokenStatus = async () => {
+    if (!token) {
+      setTokenStatus("none");
+      return;
+    }
+    
+    if (isTokenValid()) {
+      setTokenStatus("valid");
+    } else {
+      try {
+        // Try to refresh the token
+        const newToken = await getValidToken();
+        if (newToken) {
+          setTokenStatus("valid");
+        } else {
+          setTokenStatus("expired");
+        }
+      } catch (error) {
+        console.error("Error refreshing token:", error);
+        setTokenStatus("expired");
+      }
+    }
+  };
 
   // Check if we have an auth error
   useEffect(() => {
     if (authError) {
+      setIsAuthenticating(false);
       Alert.alert(
         "Authentication Error",
-        "There was an error connecting to Spotify. Please try again."
+        `There was an error connecting to Spotify: ${authError}`
       );
       console.error("Spotify auth error:", authError);
     }
   }, [authError]);
 
-  // Handle authentication status changes
+  // Handle authentication status changes and check token validity
   useEffect(() => {
     if (token) {
-      console.log("User is authenticated with Spotify");
+      console.log("User has a Spotify token");
       setIsAuthenticating(false);
+      checkTokenStatus();
+    } else {
+      setTokenStatus("none");
     }
   }, [token]);
+
+  // Check token status when component mounts or when isInitialized changes
+  useEffect(() => {
+    if (isInitialized) {
+      checkTokenStatus();
+    }
+  }, [isInitialized]);
 
   // Start Spotify authentication
   const handleConnectSpotify = async () => {
     setIsAuthenticating(true);
     try {
+      console.log("Starting Spotify authentication...");
       await getSpotifyAuth();
     } catch (error) {
       console.error("Error starting auth:", error);
+      setIsAuthenticating(false);
+      Alert.alert(
+        "Authentication Failed",
+        "There was a problem connecting to Spotify. Please try again."
+      );
+    }
+  };
+
+  // Handle refreshing expired token
+  const handleRefreshToken = async () => {
+    try {
+      setIsAuthenticating(true);
+      const newToken = await getValidToken();
+      if (newToken) {
+        setTokenStatus("valid");
+        Alert.alert("Success", "Your Spotify connection has been refreshed.");
+      } else {
+        // If refresh fails, prompt for re-authentication
+        await handleConnectSpotify();
+      }
+    } catch (error) {
+      console.error("Error refreshing token:", error);
+      Alert.alert(
+        "Refresh Failed",
+        "Could not refresh your Spotify session. Please reconnect."
+      );
+    } finally {
       setIsAuthenticating(false);
     }
   };
@@ -55,11 +120,30 @@ export default function home() {
   const handleLogout = async () => {
     try {
       await logout();
+      setTokenStatus("none");
       Alert.alert("Logged Out", "You have been disconnected from Spotify.");
     } catch (error) {
       console.error("Error logging out:", error);
+      Alert.alert("Error", "Failed to log out. Please try again.");
     }
   };
+
+  // Get user-friendly token status message
+  const getTokenStatusMessage = () => {
+    if (!isInitialized) return "Checking connection...";
+    
+    switch (tokenStatus) {
+      case "valid":
+        return "Connected to Spotify";
+      case "expired":
+        return "Spotify token expired";
+      case "none":
+        return "Not connected to Spotify";
+      default:
+        return "Unknown connection status";
+    }
+  };
+
   // Hide default header and use our custom one
   useEffect(() => {
     navigation.setOptions({
@@ -98,12 +182,11 @@ export default function home() {
       ),
       title: "SYNTH",
     });
-  }, [navigation]);
+  }, [navigation, token]);
 
   return (
     <LinearGradient colors={["#040306", "#131624"]} style={{ flex: 1 }}>
       <SafeAreaView>
-        {/* npx expo install expo-linear-gradient */}
         {/* Spotify Connection Status */}
         <View style={styles.spotifyStatus}>
           {!isInitialized ? (
@@ -114,39 +197,69 @@ export default function home() {
                 <View
                   style={[
                     styles.statusDot,
-                    token ? styles.statusConnected : styles.statusDisconnected,
+                    tokenStatus === "valid" ? styles.statusConnected : 
+                    tokenStatus === "expired" ? styles.statusWarning : 
+                    styles.statusDisconnected,
                   ]}
                 />
                 <Text style={styles.spotifyStatusText}>
-                  {token ? "Connected to Spotify" : "Not connected to Spotify"}
+                  {getTokenStatusMessage()}
                 </Text>
               </View>
 
               {token ? (
-                <TouchableOpacity
-                  style={styles.spotifyDisconnectButton}
-                  onPress={handleLogout}
-                >
-                  <Text style={styles.disconnectText}>Disconnect</Text>
-                </TouchableOpacity>
+                tokenStatus === "expired" ? (
+                  // Show refresh button for expired tokens
+                  <TouchableOpacity
+                    style={styles.spotifyRefreshButton}
+                    onPress={handleRefreshToken}
+                    disabled={isAuthenticating}
+                  >
+                    {isAuthenticating ? (
+                      <ActivityIndicator size="small" color="white" />
+                    ) : (
+                      <>
+                        <Ionicons name="refresh" size={20} color="white" style={styles.refreshIcon} />
+                        <Text style={styles.refreshText}>Refresh Connection</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                ) : (
+                  // Show disconnect button for valid tokens
+                  <TouchableOpacity
+                    style={styles.spotifyDisconnectButton}
+                    onPress={handleLogout}
+                  >
+                    <Text style={styles.disconnectText}>Disconnect</Text>
+                  </TouchableOpacity>
+                )
               ) : (
+                // Show connect button when no token
                 <TouchableOpacity
                   style={styles.spotifyConnectButton}
                   onPress={handleConnectSpotify}
                   disabled={isAuthenticating}
                 >
-                  <Image
-                    source={require("../assets/white-spotify-logo.png")}
-                    style={styles.spotifyIcon}
-                  />
-                  <Text style={styles.spotifyConnectText}>
-                    {isAuthenticating ? "Connecting..." : "Connect to Spotify"}
-                  </Text>
+                  {isAuthenticating ? (
+                    <ActivityIndicator size="small" color="white" />
+                  ) : (
+                    <>
+                      <Image
+                        source={require("../assets/white-spotify-logo.png")}
+                        style={styles.spotifyIcon}
+                      />
+                      <Text style={styles.spotifyConnectText}>
+                        Connect to Spotify
+                      </Text>
+                    </>
+                  )}
                 </TouchableOpacity>
               )}
             </>
           )}
         </View>
+        
+        {/* Game options */}
         <View style={styles.cardContainer}>
           <TouchableOpacity
             style={styles.card}
@@ -251,6 +364,9 @@ const styles = StyleSheet.create({
   statusDisconnected: {
     backgroundColor: "#e74c3c", // Red
   },
+  statusWarning: {
+    backgroundColor: "#FFC857", // Yellow warning color
+  },
   spotifyStatusText: {
     color: "white",
     fontSize: 16,
@@ -270,6 +386,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderWidth: 1,
     borderColor: "#666",
+  },
+  spotifyRefreshButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFC857", // Yellow matching the warning dot
+    padding: 10,
+    borderRadius: 25,
+    paddingHorizontal: 20,
+  },
+  refreshIcon: {
+    marginRight: 8,
+  },
+  refreshText: {
+    color: "#000",
+    fontWeight: "bold",
   },
   disconnectText: {
     color: "#e74c3c",
@@ -299,7 +430,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     padding: 20,
-    shadowColor: "#C6B6DD", // light purple (#c084fc is Tailwind's purple-400)
+    shadowColor: "#C6B6DD", // light purple
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 3,
