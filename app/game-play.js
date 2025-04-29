@@ -26,6 +26,7 @@ export default function GamePlay() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { token, getSpotifyAuth, logout } = useSpotifyAuth();
+  console.log("token og", token);
 
   // State variables
   const [isLoading, setIsLoading] = useState(true);
@@ -105,13 +106,14 @@ export default function GamePlay() {
     });
   }, [navigation]);
 
+  console.log("token1", token);
   // Fetch songs when component mounts - but only once
   useEffect(() => {
     // Skip if we've already fetched songs or if token is undefined
     if (hasFetchedSongs || token === undefined) {
       return;
     }
-
+    console.log("token2", token);
     const fetchSongs = async () => {
       try {
         setIsLoading(true);
@@ -171,7 +173,7 @@ export default function GamePlay() {
           "Current token status:",
           token ? "Token available" : "No token"
         );
-
+        console.log("token3", token);
         if (!token) {
           console.log("No Spotify token available, using mock song data");
           tracks = mockSongs;
@@ -375,7 +377,7 @@ export default function GamePlay() {
               {
                 shouldPlay: true,
                 isLooping: false,
-                volume: 1.0,
+                // volume: 1.0,
               },
               onPlaybackStatusUpdate
             ),
@@ -384,6 +386,7 @@ export default function GamePlay() {
 
           setSound(newSound);
           setIsPlaying(true);
+          await sound.playAsync();
 
           // Start timer to enable voting after 30 seconds
           setTimeout(() => {

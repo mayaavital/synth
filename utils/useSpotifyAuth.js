@@ -5,7 +5,7 @@ import {
   useAuthRequest,
   makeRedirectUri,
 } from "expo-auth-session";
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as WebBrowser from "expo-web-browser";
 import { ResponseError } from "expo-auth-session/build/Errors";
 
@@ -25,13 +25,15 @@ console.log("Auth Configuration:", {
 });
 
 // Token storage key
-const TOKEN_STORAGE_KEY = 'spotify_access_token';
+const TOKEN_STORAGE_KEY = "spotify_access_token";
+const EXPIRATION_KEY = "expiration_key";
 
 // needed so that the browser closes the modal after auth token
 WebBrowser.maybeCompleteAuthSession();
 
 const useSpotifyAuth = () => {
   const [token, setToken] = useState(null);
+  const [expiration, setExpiration] = useState(null);
   const [request, response, promptAsync] = useAuthRequest(
     {
       responseType: ResponseType.Token,
@@ -45,9 +47,33 @@ const useSpotifyAuth = () => {
     DISCOVERY
   );
 
+  // useEffect(() => {
+  //   const checkTokenValidity = async () => {
+  //     const accessToken = await AsyncStorage.getItem(TOKEN_STORAGE_KEY);
+  //     const expirationDate = await AsyncStorage.getItem(EXPIRATION_KEY);
+  //     console.log("access token:", accessToken);
+  //     console.log("expiration date:", expirationDate);
+
+  //     if (accessToken && expirationDate) {
+  //       const currentTime = Date.now();
+  //       if (currentTime < parseInt(expirationDate)) {
+  //         // here the token is still valid
+  //         // navigation.replace("/inde");
+  //       } else {
+  //         // token would be expired so we need to remove it from the async storage
+  //         AsyncStorage.removeItem(TOKEN_STORAGE_KEY);
+  //         AsyncStorage.removeItem(EXPIRATION_KEY);
+  //       }
+  //     }
+  //   };
+  //   checkTokenValidity();
+  // }, []);
+
   useEffect(() => {
-    if (response?.type === 'success' && response.params?.access_token) {
+    console.log(response);
+    if (response?.type === "success" && response.params?.access_token) {
       setToken(response.params.access_token);
+      //setExpiration(response.params.expires_in);
       console.log("Authenticated", JSON.stringify(response.params, null, 2));
     }
   }, [response]);
@@ -60,6 +86,8 @@ const useSpotifyAuth = () => {
         if (storedToken) {
           console.log("Loaded token from storage");
           setToken(storedToken);
+          // const expirationDate = token.expires_in;
+          // console.log("expiration date", expirationDate);
         } else {
           console.log("No stored token found");
         }
@@ -67,7 +95,7 @@ const useSpotifyAuth = () => {
         console.error("Error loading token from storage:", error);
       }
     };
-    
+
     loadToken();
   }, []);
 
@@ -83,7 +111,7 @@ const useSpotifyAuth = () => {
         }
       }
     };
-    
+
     saveToken();
   }, [token]);
 
@@ -92,7 +120,6 @@ const useSpotifyAuth = () => {
     setToken(null);
     console.log("Token cleared");
   };
-
   return { token, getSpotifyAuth: promptAsync, logout };
 };
 

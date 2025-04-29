@@ -15,6 +15,8 @@ import { useRouter } from "expo-router";
 import { useSpotifyAuth } from "../utils";
 import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
+import * as AppAuth from "expo-app-auth";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
@@ -24,7 +26,8 @@ const windowHeight = Dimensions.get("window").height;
 
 export default function App() {
   const router = useRouter();
-  const { token, authError, getSpotifyAuth } = useSpotifyAuth();
+  //const { token, authError, getSpotifyAuth } = useSpotifyAuth();
+  const [token, setToken] = useState(null);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
 
   // Font loading
@@ -39,22 +42,75 @@ export default function App() {
     }
   }, [fontsLoaded]);
 
-  // Handle authentication process
-  const handleSpotifyAuth = async () => {
-    setIsAuthenticating(true);
-    await getSpotifyAuth();
-    setTimeout(() => {
-      setIsAuthenticating(false);
-    }, 1000); // Reset auth state after a short delay
-  };
+  // // Handle authentication process
+  // const handleSpotifyAuth = async () => {
+  //   setIsAuthenticating(true);
+  //   await getSpotifyAuth();
+  //   setTimeout(() => {
+  //     setIsAuthenticating(false);
+  //   }, 1000); // Reset auth state after a short delay
+  // };
 
-  // Handle navigation based on authentication state
   useEffect(() => {
-    if (token) {
+    const checkTokenValidity = async () => {
+      const accessToken = await AsyncStorage.getItem("token");
+      setToken(accessToken);
+      const expirationDate = await AsyncStorage.getItem("expirationDate");
+      console.log("access token", accessToken);
+      console.log("expiration date", expirationDate);
+
+      if (accessToken && expirationDate) {
+        const currentTime = Date.now();
+        if (currentTime < parseInt(expirationDate)) {
+          // here the token is still valid
+          navigation.replace("Main");
+        } else {
+          // token would be expired so we need to remove it from the async storage
+          AsyncStorage.removeItem("token");
+          AsyncStorage.removeItem("expirationDate");
+        }
+      }
+    };
+
+    checkTokenValidity();
+  }, []);
+
+  async function authenticate() {
+    const config = {
+      issuer: "https://accounts.spotify.com",
+      clientId: "44bc87fe29004136b77183319f56338e",
+      scopes: [
+        "user-read-email",
+        "user-library-read",
+        "user-read-recently-played",
+        "user-top-read",
+        "playlist-read-private",
+        "playlist-read-collaborative",
+        "playlist-modify-public", // or "playlist-modify-private"
+      ],
+      redirectUrl: "synth://callback",
+    };
+    const result = await AppAuth.authAsync(config);
+    console.log(result);
+    if (result.accessToken) {
+      const expirationDate = new Date(
+        result.accessTokenExpirationDate
+      ).getTime();
+      AsyncStorage.setItem("token", result.accessToken);
+      AsyncStorage.setItem("expirationDate", expirationDate.toString());
+      //navigation.navigate("Main")
       console.log("Authentication successful, navigating to home");
       router.push("home");
     }
-  }, [token, router]);
+  }
+
+  // Handle navigation based on authentication state
+  // useEffect(() => {
+  //   if (token) {
+  //     console.log("Authentication successful, navigating to home");
+  //     router.push("home");
+  //   }
+  // }, [token, router]);
 
   // Wait for fonts to load
   if (!fontsLoaded) {
@@ -77,7 +133,7 @@ export default function App() {
         <>
           <Pressable
             style={styles.connectSpotify}
-            onPress={handleSpotifyAuth}
+            onPress={authenticate}
             disabled={isAuthenticating}
           >
             <Text style={styles.text}>Login with Spotify</Text>
@@ -90,7 +146,7 @@ export default function App() {
           <Pressable
             style={styles.connectApple}
             marginTop={windowHeight * 0.01}
-            onPress={handleSpotifyAuth}
+            onPress={authenticate}
             disabled={isAuthenticating}
           >
             <Text style={styles.text}>Login with Apple Music</Text>
@@ -102,13 +158,13 @@ export default function App() {
         </>
       )}
 
-      {authError && (
+      {/* {authError && (
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>
             Authentication error. Please try again.
           </Text>
         </View>
-      )}
+      )} */}
     </View>
   );
 
