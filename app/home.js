@@ -304,6 +304,21 @@ export default function home() {
             </Text>
           </View>
         </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => router.push("/multiplayer-game")}
+        >
+          <View style={styles.iconContainer}>
+            <Ionicons name="wifi" size={32} color="white" />
+          </View>
+          <View style={styles.textContainer}>
+            <Text style={styles.cardTitle}>Multiplayer Mode</Text>
+            <Text style={styles.cardSubtitle}>
+              Play with friends on the same WiFi network in real-time.
+            </Text>
+          </View>
+        </TouchableOpacity>
 
         <TouchableOpacity style={styles.card}>
           <View

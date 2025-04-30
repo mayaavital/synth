@@ -184,7 +184,7 @@ export default function GameLobby() {
     // and then listen for a confirmation before navigating
 
     // Reuse existing gameId if returning from a previous game, otherwise generate a new one
-    const gameId = params.gameId || `game-${Date.now()}`;
+    const gameId = params.gameId || `${Date.now().toString(36).substr(-4).toUpperCase()}`; // Generate a simple 4-character code
 
     // Navigate to the game play screen with parameters
     router.push({

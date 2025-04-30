@@ -12,7 +12,7 @@ import {
   ScrollView,
 } from "react-native";
 import { useNavigation, useRouter, useLocalSearchParams } from "expo-router";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
 import Slider from "@react-native-community/slider";
@@ -412,6 +412,62 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
   },
+  songPlaybackInfo: {
+    alignItems: "center",
+    marginTop: 10,
+  },
+  playbackSongTitle: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  playbackArtistName: {
+    color: "white",
+    fontSize: 16,
+  },
+  voteButtonContainer: {
+    alignItems: "center",
+    marginTop: 20,
+  },
+  voteButtonWrapper: {
+    backgroundColor: "#333",
+    borderRadius: 20,
+    padding: 10,
+    width: "80%",
+  },
+  voteProgressBackground: {
+    backgroundColor: "#777",
+    borderRadius: 10,
+    height: 20,
+    marginBottom: 10,
+  },
+  voteProgressFill: {
+    backgroundColor: "#FFC857",
+    borderRadius: 10,
+    height: 20,
+  },
+  voteButtonContent: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  voteButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  voteButtonDisabled: {
+    opacity: 0.5,
+  },
+  voteButtonEnabled: {
+    opacity: 1,
+  },
+  voteButtonTextDisabled: {
+    color: "#777",
+  },
+  voteProgressComplete: {
+    backgroundColor: "#4BB543",
+  },
 });
 
 export default function GamePlay() {
@@ -427,14 +483,27 @@ export default function GamePlay() {
     isInitialized,
   } = useSpotifyAuth();
 
+  // Replace the existing hook initialization
   // Add websocket hook at the component level
   const { 
     castVote, 
     nextRound: requestNextRound, 
     selectSong, 
     on,
-    isConnected
+    isConnected,
+    socket,
+    connect
   } = useWebSocket();
+
+  // Add a useEffect to ensure proper WebSocket connection
+  useEffect(() => {
+    // Only attempt to connect if this is a multiplayer game and connection isn't already established
+    if (isMultiplayer && !isConnected && !socket) {
+      console.log("Initializing WebSocket connection for multiplayer game...");
+      // Connect immediately without waiting
+      connect();
+    }
+  }, [isMultiplayer, isConnected, socket, connect]);
 
   // Mock song data to fallback on if Spotify API is unavailable
   const mockSongs = [
@@ -964,6 +1033,7 @@ export default function GamePlay() {
   const loadAndPlaySong = async (song) => {
     console.log("Loading song:", song?.songTitle);
     console.log("Preview URL:", song?.previewUrl);
+    console.log("Full song object:", JSON.stringify(song, null, 2).substring(0, 300) + "...");
 
     // Verify we have a valid song object
     if (!song) {
@@ -1456,7 +1526,100 @@ export default function GamePlay() {
     });
   };
 
-  // Replace the existing multiplayer useEffect with this fixed version
+  // Replace the socketSelectSong function to improve error handling and debugging
+  const socketSelectSong = useCallback((gameId, round) => {
+    console.log(`Host selecting song for round ${round}`);
+    
+    if (!allSongs || allSongs.length === 0) {
+      console.error("No songs available for selection!");
+      return false;
+    }
+    
+    // Select a random song from available songs
+    let availableSongs = allSongs.filter(song => 
+      song.previewUrl && !playedSongs.some(played => played.songTitle === song.songTitle)
+    );
+    
+    console.log(`Found ${availableSongs.length} available songs with preview URLs`);
+    
+    if (availableSongs.length === 0) {
+      console.log("No available songs with preview URLs, using all songs with preview URLs");
+      availableSongs = allSongs.filter(song => song.previewUrl);
+      
+      if (availableSongs.length === 0) {
+        console.error("No songs with preview URLs available!");
+        Alert.alert(
+          "Error",
+          "No songs available for playback. Please try restarting the game.",
+          [{ text: "OK" }]
+        );
+        return false;
+      }
+    }
+    
+    // Explicitly log random selection details
+    const randomIndex = Math.floor(Math.random() * availableSongs.length);
+    const selectedSong = availableSongs[randomIndex];
+    const randomPlayerIndex = Math.floor(Math.random() * players.length);
+    const assignedPlayer = players[randomPlayerIndex];
+    
+    console.log(`Selected song "${selectedSong.songTitle}" for round ${round}`);
+    console.log(`Preview URL available: ${!!selectedSong.previewUrl}`);
+    console.log(`Assigning song to player: ${assignedPlayer.username}`);
+    
+    // Attempt to select the song with retry logic
+    const attemptSelection = (retryCount = 0) => {
+      console.log(`Selection attempt ${retryCount + 1} for song: ${selectedSong.songTitle}`);
+      
+      const success = selectSong(gameId, selectedSong, assignedPlayer);
+      
+      if (!success && retryCount < 2) {
+        console.log(`Selection failed, retrying in ${(retryCount + 1) * 1000}ms...`);
+        setTimeout(() => attemptSelection(retryCount + 1), (retryCount + 1) * 1000);
+      } else if (!success) {
+        console.error("Failed to select song after multiple attempts");
+        Alert.alert(
+          "Connection Issue",
+          "There was a problem selecting a song. Please check your connection and try again.",
+          [{ text: "OK" }]
+        );
+      }
+    };
+    
+    // Start selection attempt with retry logic
+    attemptSelection();
+    
+    return true;
+  }, [allSongs, players, playedSongs, selectSong]);
+
+  // Add this useEffect to handle song selection when a round is started
+  useEffect(() => {
+    if (!isMultiplayer || !isHost || !gameId) return;
+    
+    console.log(`Host effect - round: ${currentRound}, stage: ${gameStage}, connected: ${isConnected}`);
+    
+    // If we're the host in a multiplayer game and in playing stage but no song is loaded yet
+    if (gameStage === "playing" && currentRound > 0 && !currentSong && isConnected) {
+      // Add a small delay to ensure all clients are ready
+      const timer = setTimeout(() => {
+        console.log("Host selecting song for current round (delayed trigger)");
+        socketSelectSong(gameId, currentRound);
+      }, 2000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [isMultiplayer, isHost, gameId, gameStage, currentRound, currentSong, isConnected, socketSelectSong]);
+
+  // Add debug logging for state changes
+  useEffect(() => {
+    console.log(`GameStage changed: ${gameStage}, Round: ${currentRound}, Connected: ${isConnected}`);
+    
+    // Debug UI rendering conditions
+    if (gameStage === "playing") {
+      console.log(`Playing UI should show. currentSong: ${currentSong ? 'available' : 'missing'}`);
+    }
+  }, [gameStage, currentRound, isConnected, currentSong]);
+
   // Add socket event handlers for multiplayer synchronization
   useEffect(() => {
     if (!isMultiplayer) return;
@@ -1473,7 +1636,7 @@ export default function GamePlay() {
         return;
       }
       
-      console.log(`Song received: ${data.song.songTitle}, Preview URL: ${data.song.previewUrl?.substring(0, 30)}...`);
+      console.log(`Song received: ${data.song.songTitle}, Preview URL available: ${!!data.song.previewUrl}`);
       console.log(`Song assigned to: ${JSON.stringify(data.assignedPlayer)}`);
       
       // Use the song sent by the server instead of selecting our own
@@ -1497,27 +1660,30 @@ export default function GamePlay() {
         return prev;
       });
       
-      // Stop any currently playing audio before loading the new song
-      if (sound) {
+      // Load the song (with safe stopping of previous audio)
+      const safelyLoadSong = async () => {
         try {
-          sound.stopAsync().then(() => {
-            console.log("Stopped previous sound before loading new song");
-            // Load the selected song directly after stopping the previous one
-            loadAndPlaySong(songWithAssignment);
-          }).catch(err => {
-            console.error("Error stopping previous sound:", err);
-            // Still try to load the new song even if stopping failed
-            loadAndPlaySong(songWithAssignment);
-          });
+          // Stop any currently playing audio
+          if (sound) {
+            try {
+              await sound.stopAsync();
+              console.log("Stopped previous sound before loading new song");
+            } catch (err) {
+              console.error("Error stopping previous sound:", err);
+            }
+          }
+          
+          // Now load the new song
+          loadAndPlaySong(songWithAssignment);
         } catch (error) {
-          console.error("Error stopping sound:", error);
-          // Still try to load the new song even if stopping failed
+          console.error("Error during song loading sequence:", error);
+          // Still try to load the song as a fallback
           loadAndPlaySong(songWithAssignment);
         }
-      } else {
-        // No sound playing, just load the new song
-        loadAndPlaySong(songWithAssignment);
-      }
+      };
+      
+      // Execute the loading sequence
+      safelyLoadSong();
     });
     
     // Player voted event - Another player has cast their vote
@@ -1575,166 +1741,25 @@ export default function GamePlay() {
       // Stop any currently playing audio
       if (sound) {
         try {
-          sound.stopAsync();
+          sound.stopAsync().catch(err => console.error("Error stopping sound:", err));
         } catch (error) {
           console.error("Error stopping sound:", error);
         }
-      }
-      
-      // In multiplayer, only the host should select and broadcast a song
-      if (isHost) {
-        console.log("Host selecting song for round", data.round);
-        
-        // Add a slightly longer delay to ensure all clients are ready
-        setTimeout(() => {
-          // Make sure we don't select a song that's already been played
-          let availableSongs = allSongs.filter(song => 
-            song.previewUrl && !playedSongs.some(played => played.songTitle === song.songTitle)
-          );
-          
-          console.log(`Found ${availableSongs.length} available songs with preview URLs`);
-          
-          if (availableSongs.length === 0) {
-            // Reset if all songs have been played or no available songs found
-            console.log("No available songs with preview URLs, resetting played songs");
-            setPlayedSongs([]);
-            
-            // Filter out songs with no preview URL
-            availableSongs = allSongs.filter(song => song.previewUrl);
-            
-            if (availableSongs.length === 0) {
-              console.error("No songs with preview URLs available!");
-              // Alert the players
-              Alert.alert(
-                "Error",
-                "No songs available for playback. Please try restarting the game.",
-                [{ text: "OK" }]
-              );
-              return;
-            }
-          }
-          
-          // Select a random song and player with explicit logging
-          const randomIndex = Math.floor(Math.random() * availableSongs.length);
-          const selectedSong = availableSongs[randomIndex];
-          const randomPlayerIndex = Math.floor(Math.random() * players.length);
-          const assignedPlayer = players[randomPlayerIndex];
-          
-          console.log(`Selected song "${selectedSong.songTitle}" with preview URL: ${selectedSong.previewUrl?.substring(0, 30)}...`);
-          console.log(`Assigning song to player: ${assignedPlayer.username}`);
-          
-          // Send selection to server to broadcast to all players
-          const success = selectSong(gameId, selectedSong, assignedPlayer);
-          
-          if (!success) {
-            console.error("Failed to select song for round", data.round);
-            // Try again after a short delay
-            setTimeout(() => {
-              console.log("Retrying song selection...");
-              selectSong(gameId, selectedSong, assignedPlayer);
-            }, 1000);
-          }
-        }, 1000); // Increased delay for better synchronization
-      } else {
-        console.log("Client waiting for host to select song for round", data.round);
       }
     });
     
     // Clean up event listeners
     return () => {
+      console.log("Cleaning up multiplayer event handlers");
       songSelectedCleanup && songSelectedCleanup();
       playerVotedCleanup && playerVotedCleanup();
       voteResultCleanup && voteResultCleanup();
       roundCompleteCleanup && roundCompleteCleanup();
       roundStartedCleanup && roundStartedCleanup();
     };
-  }, [isMultiplayer, gameId, players, allSongs, playedSongs, currentRound, isHost, on, selectSong, requestNextRound]);
-
-  // Add a new useEffect for handling multiplayer game initialization
-  useEffect(() => {
-    // Only run this for multiplayer games when we have songs loaded
-    if (isMultiplayer && allSongs.length > 0 && !isLoading) {
-      console.log("Initializing multiplayer game with loaded songs");
-      console.log(`Current state - isHost: ${isHost}, currentRound: ${currentRound}, gameStage: ${gameStage}`);
-      console.log(`Available songs: ${allSongs.length}`);
-      
-      // If this client is the host, start the first round by selecting a song
-      if (isHost && currentRound === 1 && gameStage === "loading") {
-        console.log("Host initializing first round");
-        setGameStage("playing");
-        
-        // Make multiple attempts to select a song and start the game
-        let attempts = 0;
-        const maxAttempts = 3;
-        
-        const attemptSelectSong = () => {
-          if (attempts < maxAttempts) {
-            attempts++;
-            console.log(`Attempt ${attempts} to select initial song...`);
-            
-            setTimeout(() => {
-              if (allSongs.length > 0 && players.length > 0) {
-                // Select a random song and player for the first round
-                const randomIndex = Math.floor(Math.random() * allSongs.length);
-                const selectedSong = allSongs[randomIndex];
-                const assignedPlayer = players[Math.floor(Math.random() * players.length)];
-                
-                console.log(`Host selecting initial song: ${selectedSong.songTitle}`);
-                console.log(`Song assigned to player: ${assignedPlayer}`);
-                selectSong(gameId, selectedSong, assignedPlayer);
-              } else {
-                console.log("Cannot select song: not enough songs or players");
-                // Try again after a delay
-                setTimeout(attemptSelectSong, 1000);
-              }
-            }, 1000 * attempts); // Increasing delay for each attempt
-          } else {
-            console.log("Maximum attempts reached. Please restart the game.");
-          }
-        };
-        
-        // Start the attempt process
-        attemptSelectSong();
-      } else if (!isHost) {
-        console.log("Client waiting for host to select song");
-      }
-    }
-  }, [isMultiplayer, isHost, allSongs, isLoading, gameStage, currentRound, gameId, players, selectSong]);
-
-  // Add a useEffect to ensure proper initialization of multiplayer game UI
-  useEffect(() => {
-    if (isMultiplayer && gameStage === "loading") {
-      console.log("Initializing multiplayer game UI");
-      
-      // If songs have been loaded, move to playing state
-      if (allSongs.length > 0 && !isLoading) {
-        console.log("Songs loaded, setting game stage to playing");
-        setGameStage("playing");
-        
-        // In multiplayer, only the host should initiate the first round
-        if (isHost) {
-          console.log("Host initializing first round");
-          // Add a short delay to ensure all clients are connected
-          setTimeout(() => {
-            // Request the server to start the first round
-            requestNextRound(gameId);
-          }, 1500);
-        } else {
-          console.log("Client waiting for host to initialize first round");
-        }
-      }
-    }
-  }, [isMultiplayer, gameStage, allSongs.length, isLoading, isHost, gameId, requestNextRound]);
-
-  // Also ensure we have specific handling for when the WebSocket connection is active but UI isn't showing
-  useEffect(() => {
-    if (isMultiplayer && isConnected && gameStage === "loading" && playbackPosition > 0) {
-      console.log("Detected active playback but game still in loading state, fixing UI");
-      setGameStage("playing");
-    }
-  }, [isMultiplayer, isConnected, gameStage, playbackPosition]);
-
-  // Add a WebSocket connection monitoring and auto-reconnect system
+  }, [isMultiplayer, sound, on, isHost, currentRound, gameId, requestNextRound, loadAndPlaySong]);
+  
+  // Add WebSocket connection monitoring and auto-reconnect system
   useEffect(() => {
     if (!isMultiplayer) return;
     
@@ -1747,23 +1772,28 @@ export default function GamePlay() {
       const reconnectTimeout = setTimeout(() => {
         console.log('[GamePlay] Attempting to reconnect to the multiplayer game...');
         
-        // Navigate back to the multiplayer game screen to trigger reconnection
-        router.replace({
-          pathname: "/multiplayer-game",
-          params: {
-            returningFromGame: "true",
-            gameId: gameId,
-            gameName: gameName,
-            playerCount: playerCount
-          }
-        });
+        // Directly try to reconnect via the connect method
+        connect();
+        
+        // If that fails, navigate back to multiplayer screen as a backup approach
+        if (!isConnected) {
+          router.replace({
+            pathname: "/multiplayer-game",
+            params: {
+              returningFromGame: "true",
+              gameId: gameId,
+              gameName: gameName,
+              playerCount: playerCount
+            }
+          });
+        }
       }, 5000); // Wait 5 seconds before attempting reconnection
       
       // Clear the timeout if component unmounts or connection is restored
       return () => clearTimeout(reconnectTimeout);
     }
-  }, [isConnected, isMultiplayer, gameId, gameName, playerCount, router]);
-
+  }, [isConnected, isMultiplayer, gameId, gameName, playerCount, router, connect]);
+  
   // Modify the connection status indicator to show reconnecting state
   const renderConnectionStatus = () => {
     if (!isMultiplayer) return null;
@@ -1780,15 +1810,23 @@ export default function GamePlay() {
         {!isConnected && (
           <TouchableOpacity 
             style={styles.reconnectButton}
-            onPress={() => router.replace({
-              pathname: "/multiplayer-game",
-              params: {
-                returningFromGame: "true",
-                gameId: gameId,
-                gameName: gameName,
-                playerCount: playerCount
+            onPress={() => {
+              // Try direct reconnection first
+              connect();
+              
+              // If that doesn't work, use the router approach
+              if (!isConnected) {
+                router.replace({
+                  pathname: "/multiplayer-game",
+                  params: {
+                    returningFromGame: "true",
+                    gameId: gameId,
+                    gameName: gameName,
+                    playerCount: playerCount
+                  }
+                });
               }
-            })}
+            }}
           >
             <Text style={styles.reconnectButtonText}>Reconnect</Text>
           </TouchableOpacity>
@@ -1797,9 +1835,28 @@ export default function GamePlay() {
     );
   };
 
-  // Modify the main return statement to preserve the original layout but add our connection indicator
+  // Modify the return statement to add debugging info
   return (
     <SafeAreaView style={styles.container}>
+      {/* Debugging overlay to show component state */}
+      {__DEV__ && (
+        <View style={{ 
+          position: 'absolute', 
+          top: 40, 
+          right: 10, 
+          backgroundColor: 'rgba(0,0,0,0.7)', 
+          padding: 5, 
+          zIndex: 9999 
+        }}>
+          <Text style={{ color: 'white', fontSize: 10 }}>
+            Stage: {gameStage}, Round: {currentRound}{'\n'}
+            Connected: {isConnected ? 'Yes' : 'No'}{'\n'}
+            Song: {currentSong?.songTitle?.substring(0, 15) || 'None'}{'\n'}
+            Can Vote: {canVote ? 'Yes' : 'No'}
+          </Text>
+        </View>
+      )}
+      
       {renderConnectionStatus()}
       
       <View style={styles.gameStatusBar}>
@@ -1808,91 +1865,132 @@ export default function GamePlay() {
         </Text>
       </View>
 
-      {currentSong && gameStage === "playing" && (
-        <View style={styles.songPlaybackContainer}>
-          <View style={styles.albumArtworkWrapper}>
-            <Image
-              source={{ uri: currentSong.imageUrl }}
-              style={styles.albumArtwork}
-            />
-          </View>
+      {/* Song Playback UI */}
+      {gameStage === "playing" && (
+        <View style={styles.content}>
+          {/* Include a fallback message when currentSong is missing */}
+          {!currentSong ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#8E44AD" />
+              <Text style={styles.loadingText}>Waiting for song...</Text>
+            </View>
+          ) : (
+            <View style={styles.songPlaybackContainer}>
+              <View style={styles.albumArtworkWrapper}>
+                <Image
+                  source={{ uri: currentSong.imageUrl }}
+                  style={styles.albumArtwork}
+                />
+              </View>
 
-          {/* Audio controls */}
-          <View style={styles.audioControlsContainer}>
-            {/* Audio progress bar */}
-            <View style={styles.progressBarContainer}>
-              <Slider
-                style={styles.progressBar}
-                minimumValue={0}
-                maximumValue={
-                  playbackDuration > 0 ? playbackDuration : 30000
-                }
-                value={playbackPosition}
-                minimumTrackTintColor="#44C568"
-                maximumTrackTintColor="#333"
-                thumbTintColor="#44C568"
-                onSlidingComplete={async (value) => {
-                  if (sound) {
-                    try {
-                      await sound.setPositionAsync(value);
-                    } catch (error) {
-                      console.error(
-                        "Error seeking in audio playback:",
-                        error
-                      );
-                    }
-                  }
-                }}
-                disabled={!sound || audioLoadError}
-              />
-              <View style={styles.durationLabels}>
-                <Text style={styles.durationText}>
-                  {formatTime(playbackPosition)}
+              {/* Song info section */}
+              <View style={styles.songPlaybackInfo}>
+                <Text style={styles.playbackSongTitle}>
+                  {currentSong.songTitle}
                 </Text>
-                <Text style={styles.durationText}>
-                  {formatTime(Math.min(playbackDuration, 30000))}
+                <Text style={styles.playbackArtistName}>
+                  {currentSong.songArtists.join(", ")}
                 </Text>
               </View>
-            </View>
 
-            {/* Play/Pause button */}
-            <View style={styles.playButtonContainer}>
-              {isLoadingAudio ? (
-                <ActivityIndicator size="large" color="#44C568" />
-              ) : (
-                <TouchableOpacity
-                  style={[
-                    styles.playButton,
-                    audioLoadError && styles.playButtonDisabled,
-                  ]}
-                  onPress={togglePlayPause}
-                  disabled={audioLoadError}
-                >
-                  <Ionicons
-                    name={isPlaying ? "pause" : "play"}
-                    size={32}
-                    color="white"
+              {/* Audio controls */}
+              <View style={styles.audioControlsContainer}>
+                {/* Audio progress bar */}
+                <View style={styles.progressBarContainer}>
+                  <Slider
+                    style={styles.progressBar}
+                    minimumValue={0}
+                    maximumValue={
+                      playbackDuration > 0 ? playbackDuration : 30000
+                    }
+                    value={playbackPosition}
+                    minimumTrackTintColor="#C143FF"
+                    maximumTrackTintColor="#333"
+                    thumbTintColor="#FFC857"
+                    disabled={true}
                   />
+                  <View style={styles.durationLabels}>
+                    <Text style={styles.durationText}>
+                      {formatTime(playbackPosition)}
+                    </Text>
+                    <Text style={styles.durationText}>
+                      {formatTime(Math.min(playbackDuration, 30000))}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Audio load error message */}
+                {audioLoadError && (
+                  <Text style={styles.audioErrorText}>
+                    Error loading audio. {audioLoadError}
+                  </Text>
+                )}
+
+                {/* Countdown to voting */}
+                {!canVote && !audioLoadError && (
+                  <Text style={styles.countdownText}>
+                    {`Listen now! Voting enabled after ${Math.ceil(
+                      (MIN_PLAY_DURATION - playbackPosition) / 1000
+                    )} seconds...`}
+                  </Text>
+                )}
+              </View>
+
+              {/* Vote button section */}
+              <View style={styles.voteButtonContainer}>
+                <TouchableOpacity
+                  activeOpacity={canVote ? 0.7 : 1}
+                  onPress={() => {
+                    if (canVote) {
+                      setGameStage("voting");
+                    } else {
+                      Alert.alert(
+                        "Not Ready Yet",
+                        `Please listen to at least ${
+                          MIN_PLAY_DURATION / 1000
+                        } seconds of the song before voting.`,
+                        [{ text: "OK" }]
+                      );
+                    }
+                  }}
+                >
+                  <View style={styles.voteButtonWrapper}>
+                    {/* Progress bar background */}
+                    <View style={styles.voteProgressBackground}>
+                      {/* Progress bar fill that grows based on playback position */}
+                      <View 
+                        style={[
+                          styles.voteProgressFill, 
+                          { width: `${voteProgress}%` },
+                          canVote ? styles.voteProgressComplete : {}
+                        ]} 
+                      />
+                    </View>
+                    
+                    {/* Button content */}
+                    <View style={[
+                      styles.voteButtonContent,
+                      !canVote ? styles.voteButtonDisabled : styles.voteButtonEnabled,
+                    ]}>
+                      <Text
+                        style={[
+                          styles.voteButtonText,
+                          !canVote ? styles.voteButtonTextDisabled : {},
+                        ]}
+                      >
+                        VOTE NOW
+                      </Text>
+                      <Ionicons
+                        name="arrow-forward"
+                        size={24}
+                        color={canVote ? "black" : "#777"}
+                      />
+                    </View>
+                  </View>
                 </TouchableOpacity>
-              )}
+              </View>
             </View>
-
-            {/* Audio load error message */}
-            {audioLoadError && (
-              <Text style={styles.audioErrorText}>
-                Error loading audio. {audioLoadError}
-              </Text>
-            )}
-
-            {/* Countdown to voting */}
-            {!canVote && !audioLoadError && (
-              <Text style={styles.countdownText}>
-                {`Listen now! Voting enabled after ${Math.ceil(
-                  (MIN_PLAY_DURATION - playbackPosition) / 1000
-                )} seconds...`}
-              </Text>
-            )}
-          </View>
+          )}
         </View>
       )}
       
@@ -2098,6 +2196,14 @@ export default function GamePlay() {
             </View>
           </View>
         </ScrollView>
+      )}
+      
+      {/* Add a fallback loading state to make sure we render something */}
+      {gameStage === "loading" && (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#8E44AD" />
+          <Text style={styles.loadingText}>Loading game...</Text>
+        </View>
       )}
     </SafeAreaView>
   );
