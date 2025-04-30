@@ -160,6 +160,22 @@ const styles = StyleSheet.create({
     height: 250,
     borderRadius: 10,
   },
+  songPlaybackInfo: {
+    alignItems: "center",
+    marginTop: 20,
+  },
+  playbackSongTitle: {
+    color: "white",
+    fontSize: 24,
+    fontWeight: "bold",
+    textAlign: "center",
+  },
+  playbackArtistName: {
+    color: "#CCC",
+    fontSize: 18,
+    marginTop: 8,
+    textAlign: "center",
+  },
   audioControlsContainer: {
     marginTop: 20,
   },
@@ -216,6 +232,72 @@ const styles = StyleSheet.create({
     color: "white",
     marginTop: 20,
     fontSize: 18,
+  },
+  voteButtonContainer: {
+    marginTop: 20,
+    marginBottom: 20,
+    alignItems: "center",
+  },
+  voteButtonWrapper: {
+    width: "100%",
+    alignItems: "center",
+    position: "relative",
+  },
+  voteProgressBackground: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: "100%",
+    backgroundColor: "#333",
+    borderRadius: 30,
+    overflow: "hidden",
+    borderWidth: 2,
+    borderColor: "#555",
+  },
+  voteProgressFill: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    height: "100%",
+    backgroundColor: "#5D5D5D", // Darker shade for incomplete
+    transition: "width 0.3s",
+  },
+  voteProgressComplete: {
+    backgroundColor: "#C143FF", // Purple for complete
+  },
+  voteButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 16,
+    paddingHorizontal: 40,
+    width: "80%",
+    borderRadius: 30,
+    zIndex: 1, // Ensure content is above the progress bar
+  },
+  voteButtonDisabled: {
+    backgroundColor: "#7D7575",
+    borderColor: "#555",
+    opacity: 0.8,
+  },
+  voteButtonEnabled: {
+    backgroundColor: "#FFC857",
+    borderColor: "#E6A100",
+    shadowColor: "#FFC857",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  voteButtonText: {
+    color: "#000",
+    fontSize: 22,
+    fontWeight: "bold",
+    marginRight: 8,
+  },
+  voteButtonTextDisabled: {
+    color: "#000",
   },
   votingContainer: {
     flex: 1,
@@ -411,62 +493,6 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 16,
     fontWeight: "bold",
-  },
-  songPlaybackInfo: {
-    alignItems: "center",
-    marginTop: 10,
-  },
-  playbackSongTitle: {
-    color: "white",
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-  playbackArtistName: {
-    color: "white",
-    fontSize: 16,
-  },
-  voteButtonContainer: {
-    alignItems: "center",
-    marginTop: 20,
-  },
-  voteButtonWrapper: {
-    backgroundColor: "#333",
-    borderRadius: 20,
-    padding: 10,
-    width: "80%",
-  },
-  voteProgressBackground: {
-    backgroundColor: "#777",
-    borderRadius: 10,
-    height: 20,
-    marginBottom: 10,
-  },
-  voteProgressFill: {
-    backgroundColor: "#FFC857",
-    borderRadius: 10,
-    height: 20,
-  },
-  voteButtonContent: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  voteButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  voteButtonDisabled: {
-    opacity: 0.5,
-  },
-  voteButtonEnabled: {
-    opacity: 1,
-  },
-  voteButtonTextDisabled: {
-    color: "#777",
-  },
-  voteProgressComplete: {
-    backgroundColor: "#4BB543",
   },
 });
 
