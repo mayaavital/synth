@@ -33,6 +33,17 @@ const ALBUM_ID = "2noRn2Aes5aoNVsU6iWThc";
 const ROUNDS_TOTAL = 3;
 const MIN_PLAY_DURATION = 15000; // Set to 15 seconds as specified
 
+// Format time helper function
+const formatTime = (milliseconds) => {
+  if (!milliseconds) return "0:00";
+  
+  let totalSeconds = Math.floor(milliseconds / 1000);
+  let minutes = Math.floor(totalSeconds / 60);
+  let seconds = totalSeconds % 60;
+  
+  return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+};
+
 export default function GamePlay() {
   const navigation = useNavigation();
   const router = useRouter();
@@ -126,6 +137,9 @@ export default function GamePlay() {
   const gameName = params.gameName || "Game Name";
   const playerCount = parseInt(params.playerCount) || 4;
   const gameId = params.gameId || `game-${Date.now()}`;
+  // Set to false since we don't have WebSocket functionality
+  const isMultiplayer = false;
+  const isHost = false;
 
   // Parse player usernames from params if available
   let playerUsernames = [];
@@ -571,6 +585,7 @@ export default function GamePlay() {
   // Update loadAndPlaySong function to handle Deezer icons
   const loadAndPlaySong = async (song) => {
     console.log("Loading song:", song?.songTitle);
+    console.log("Assigned to player:", song?.assignedToPlayer?.username || "none");
 
     // Verify we have a valid song object
     if (!song) {
@@ -600,15 +615,17 @@ export default function GamePlay() {
         if (deezerTrack && deezerTrack.previewUrl) {
           console.log("Found Deezer preview URL for:", song.songTitle);
           // Update the current song with the Deezer preview URL
-          song = {
+          // Preserve the assignedToPlayer property
+          const updatedSong = {
             ...song,
             previewUrl: deezerTrack.previewUrl,
             deezerInfo: {
               trackId: deezerTrack.trackId,
               externalUrl: deezerTrack.externalUrl,
-            },
+            }
           };
-          setCurrentSong(song);
+          setCurrentSong(updatedSong);
+          song = updatedSong;
         } else {
           console.log("No Deezer preview URL found either");
           setAudioLoadError("No preview available for this song");
@@ -680,7 +697,7 @@ export default function GamePlay() {
     }
   };
 
-  // Toggle play/pause function
+  // Toggle play/pause function - simplified version
   const togglePlayPause = async () => {
     if (!sound) return;
 
@@ -695,7 +712,7 @@ export default function GamePlay() {
     }
   };
 
-  // Update selectSongForRound function to avoid repeating songs and to properly track assignments
+  // Update selectSongForRound function to properly assign a player to each song
   const selectSongForRound = (round, songs = allSongs) => {
     if (!songs || songs.length === 0) return;
 
@@ -713,7 +730,15 @@ export default function GamePlay() {
     if (availableSongs.length === 0) {
       console.log("All songs have been played, resetting tracking");
       setPlayedSongs([]);
-      loadAndPlaySong(songs[Math.floor(Math.random() * songs.length)]);
+      
+      // Assign a random player for fallback case
+      const randomPlayer = players[Math.floor(Math.random() * players.length)];
+      const songWithPlayer = {
+        ...songs[Math.floor(Math.random() * songs.length)],
+        assignedToPlayer: randomPlayer
+      };
+      
+      loadAndPlaySong(songWithPlayer);
       return;
     }
     
@@ -722,7 +747,11 @@ export default function GamePlay() {
     const selectedSong = availableSongs[randomIndex];
     
     // Assign the song to a random player
-    const assignedPlayer = players[Math.floor(Math.random() * players.length)];
+    const randomPlayerIndex = Math.floor(Math.random() * players.length);
+    const assignedPlayer = players[randomPlayerIndex];
+    
+    console.log(`Assigning song ${selectedSong.songTitle} to player: ${assignedPlayer.username}`);
+    
     const songWithAssignment = {
       ...selectedSong,
       assignedToPlayer: assignedPlayer,
@@ -746,6 +775,13 @@ export default function GamePlay() {
     // Reset voting visual state
     setSelectedPlayer(null);
     setShowVoteResult(false);
+    
+    // Log debug info about current round
+    console.log(`Round ${currentRound} completed`);
+    if (currentSong) {
+      console.log(`Song: ${currentSong.songTitle}`);
+      console.log(`Assigned to player: ${currentSong.assignedToPlayer?.username || 'none'}`);
+    }
     
     // Stop current playback
     if (sound) {
@@ -1131,6 +1167,24 @@ export default function GamePlay() {
               activeOpacity={canVote ? 0.7 : 1}
               onPress={() => {
                 if (canVote) {
+                  // Make sure we have an assigned player before going to voting stage
+                  if (!currentSong?.assignedToPlayer) {
+                    // Just in case it wasn't assigned, pick a random player now
+                    const randomPlayer = players[Math.floor(Math.random() * players.length)];
+                    console.log(`Assigning song ${currentSong.songTitle} to player ${randomPlayer.username} during vote`);
+                    setCurrentSong({
+                      ...currentSong,
+                      assignedToPlayer: randomPlayer
+                    });
+                    // Update in roundSongs state too
+                    setRoundSongs(prev => ({
+                      ...prev,
+                      [currentRound]: {
+                        ...prev[currentRound],
+                        assignedToPlayer: randomPlayer
+                      }
+                    }));
+                  }
                   setGameStage("voting");
                 } else {
                   Alert.alert(
@@ -1200,6 +1254,12 @@ export default function GamePlay() {
               // Determine style based on selection and result
               const isSelected = selectedPlayer === player.username;
               const isCorrect = currentSong?.assignedToPlayer?.username === player.username;
+              console.log('Player check:', {
+                player: player.username,
+                isCorrect,
+                assignedTo: currentSong?.assignedToPlayer?.username || 'none'
+              });
+              
               const wasVoted = isSelected && showVoteResult;
               
               // Determine the button style for dynamic feedback
@@ -1260,7 +1320,7 @@ export default function GamePlay() {
                         isCorrectGuess ? "Correct!" : "Incorrect!",
                         isCorrectGuess
                           ? `Yes, ${player.username} listened to this song!`
-                          : `Actually, ${currentSong?.assignedToPlayer?.username} listened to this song.`,
+                          : `Actually, ${currentSong?.assignedToPlayer?.username || "none"} listened to this song.`,
                         [
                           {
                             text: "Next Round",
@@ -1381,18 +1441,6 @@ export default function GamePlay() {
     </SafeAreaView>
   );
 }
-
-const formatTime = (milliseconds) => {
-  if (!milliseconds) return "00:00";
-
-  const totalSeconds = Math.floor(milliseconds / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-
-  return `${minutes.toString().padStart(2, "0")}:${seconds
-    .toString()
-    .padStart(2, "0")}`;
-};
 
 const styles = StyleSheet.create({
   container: {
