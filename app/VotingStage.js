@@ -90,7 +90,6 @@ const VotingStage = ({
   };
 
   if (showLeaderboard && showVoteResult) {
-    console.log("playerPoints", playerPoints);
     return (
       <LeaderboardScreen
         currentSong={currentSong}

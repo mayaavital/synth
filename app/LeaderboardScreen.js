@@ -25,15 +25,6 @@ const LeaderboardScreen = ({
     }, 5000);
     return () => clearTimeout(timer);
   }, [onTimeout]);
-  console.log("player points", playerPoints);
-  // Sort players by points (descending)
-  //   const sortedPlayers = Array.isArray(players)
-  //     ? [...players].sort((a, b) => {
-  //         // const aPoints = (playerPoints && playerPoints[a.username]) || 0;
-  //         // const bPoints = (playerPoints && playerPoints[b.username]) || 0;
-  //         // return bPoints - aPoints;
-  //       })
-  //     : [];
   const sortedPlayers = [...players].sort((a, b) => {
     const aPoints = playerPoints[a.username] || 0;
     const bPoints = playerPoints[b.username] || 0;
