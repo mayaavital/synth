@@ -12,7 +12,7 @@ import {
   ScrollView,
 } from "react-native";
 import { useNavigation, useRouter, useLocalSearchParams } from "expo-router";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
 import Slider from "@react-native-community/slider";
@@ -26,15 +26,27 @@ import {
 import {
   enrichTracksWithDeezerPreviews,
   findDeezerTrackFromSpotify,
+  findDeezerTrackByTitleOnly
 } from "../utils/deezerApi";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useWebSocket, EVENTS } from "../utils/useWebSocket";
+import socketService from "../utils/socketService";
+import axios from "axios";
 
-const ALBUM_ID = "2noRn2Aes5aoNVsU6iWThc";
-const ROUNDS_TOTAL = 3;
+const ROUNDS_TOTAL = 5; // Number of rounds to play in the game
 const MIN_PLAY_DURATION = 15000; // Set to 15 seconds as specified
 
-// Format time helper function
+// Add a global audio ref outside of the component
+const audioRef = {
+  isInitialized: false,
+  sound: null,
+  isLoading: false,
+  currentSongId: null
+};
+
+// Detect dev mode to add extra logging
+const DEV_MODE = true;
+
+// Format time helper function - move outside component to prevent re-creation
 const formatTime = (milliseconds) => {
   if (!milliseconds) return "0:00";
   
@@ -45,374 +57,12 @@ const formatTime = (milliseconds) => {
   return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
 };
 
-// Define styles outside the component
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#1E1E1E",
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-    backgroundColor: "#8E44AD", 
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    height: 100,
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.6,
-    shadowRadius: 7,
-    elevation: 5,
-  },
-  headerTitleContainer: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    alignItems: "center",
-    justifyContent: "center",
-    bottom: 10,
-  },
-  headerTitle: {
-    color: "#FFC857",
-    fontSize: 24,
-    fontWeight: "bold",
-    textAlign: "center",
-  },
-  menuButton: {
-    width: 44,
-    height: 44,
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 1,
-  },
-  placeholder: {
-    width: 44,
-  },
-  connectionStatusContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 10,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    borderRadius: 20,
-    position: "absolute",
-    top: 10,
-    right: 10,
-    zIndex: 10,
-  },
-  connectionIndicator: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: 8,
-  },
-  connectionActive: {
-    backgroundColor: "#4BB543",
-  },
-  connectionInactive: {
-    backgroundColor: "#FF6B6B",
-  },
-  connectionStatusText: {
-    color: "white",
-    fontSize: 14,
-    marginRight: 8,
-  },
-  reconnectButton: {
-    backgroundColor: "#8E44AD",
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 12,
-  },
-  reconnectButtonText: {
-    color: "white",
-    fontSize: 12,
-    fontWeight: "bold",
-  },
-  gameStatusBar: {
-    backgroundColor: "#282828",
-    padding: 12,
-    alignItems: "center",
-  },
-  roundText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  infoText: {
-    color: "white",
-    fontSize: 16,
-    marginTop: 10,
-  },
-  content: {
-    flex: 1,
-  },
-  songPlaybackContainer: {
-    flex: 1,
-    padding: 16,
-    justifyContent: "space-between",
-  },
-  albumArtworkWrapper: {
-    alignItems: "center",
-    marginTop: 20,
-  },
-  albumArtwork: {
-    width: 250,
-    height: 250,
-    borderRadius: 10,
-  },
-  audioControlsContainer: {
-    marginTop: 20,
-  },
-  progressBarContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    width: "100%",
-    marginBottom: 15,
-  },
-  progressBar: {
-    flex: 1,
-    height: 40,
-  },
-  durationLabels: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    width: "100%",
-  },
-  durationText: {
-    color: "#AAA",
-    fontSize: 12,
-  },
-  playButtonContainer: {
-    alignItems: "center",
-    marginVertical: 15,
-  },
-  playButton: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: "#44C568",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  playButtonDisabled: {
-    opacity: 0.5,
-  },
-  audioErrorText: {
-    color: "#FF6B6B",
-    textAlign: "center",
-    marginTop: 10,
-  },
-  countdownText: {
-    color: "white",
-    textAlign: "center",
-    marginTop: 10,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  loadingText: {
-    color: "white",
-    marginTop: 20,
-    fontSize: 18,
-  },
-  votingContainer: {
-    flex: 1,
-    padding: 20,
-  },
-  votingInstructions: {
-    color: "white",
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 20,
-  },
-  playersGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-  },
-  playerVoteButton: {
-    width: "48%",
-    height: 100,
-    borderRadius: 10,
-    backgroundColor: "#333",
-    margin: "1%",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  correctVoteButton: {
-    backgroundColor: "#4BB543",
-  },
-  incorrectVoteButton: {
-    backgroundColor: "#FF6B6B",
-  },
-  profileImageContainer: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 50,
-    overflow: "hidden",
-  },
-  profileBackground: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  profileImage: {
-    width: "100%",
-    height: "100%",
-  },
-  playerVoteName: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  resultsScrollContent: {
-    flexGrow: 1,
-    padding: 20,
-  },
-  resultsContainer: {
-    flex: 1,
-    justifyContent: "space-between",
-  },
-  resultsTitle: {
-    color: "white",
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 20,
-  },
-  gameStats: {
-    backgroundColor: "#282828",
-    padding: 20,
-    borderRadius: 10,
-    marginBottom: 20,
-  },
-  gameStatsHeader: {
-    color: "white",
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 10,
-  },
-  gameStatLine: {
-    color: "white",
-    fontSize: 16,
-  },
-  scoresContainer: {
-    backgroundColor: "#282828",
-    padding: 20,
-    borderRadius: 10,
-  },
-  scoresTitle: {
-    color: "white",
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 10,
-  },
-  scoresList: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-  },
-  scoreItem: {
-    width: "48%",
-    margin: "1%",
-  },
-  scorePlayerInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  scorePlayerAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 10,
-  },
-  scorePlayerName: {
-    color: "white",
-    fontSize: 16,
-  },
-  scoreValue: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  reviewListContainer: {
-    flex: 1,
-  },
-  reviewListTitle: {
-    color: "white",
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 10,
-  },
-  reviewListItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 10,
-  },
-  reviewSongImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 10,
-    marginRight: 10,
-  },
-  reviewSongInfo: {
-    flex: 1,
-  },
-  reviewSongTitle: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  reviewSongArtist: {
-    color: "white",
-    fontSize: 14,
-  },
-  reviewPlayerInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  reviewPlayerAvatarWrapper: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    overflow: "hidden",
-    marginRight: 10,
-  },
-  reviewPlayerAvatar: {
-    width: "100%",
-    height: "100%",
-  },
-  reviewPlayerName: {
-    color: "white",
-    fontSize: 16,
-  },
-  buttonsContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 20,
-  },
-  returnButton: {
-    backgroundColor: "#8E44AD",
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-  },
-  returnButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  playAgainButton: {
-    backgroundColor: "#4BB543",
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-  },
-  playAgainButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-});
+// Add a helper to control logging
+const debugLog = (...args) => {
+  if (DEV_MODE) {
+    console.log(...args);
+  }
+};
 
 export default function GamePlay() {
   const navigation = useNavigation();
@@ -427,124 +77,610 @@ export default function GamePlay() {
     isInitialized,
   } = useSpotifyAuth();
 
-  // Add websocket hook at the component level
-  const { 
-    castVote, 
-    nextRound: requestNextRound, 
-    selectSong, 
-    on,
-    isConnected
-  } = useWebSocket();
-
-  // Mock song data to fallback on if Spotify API is unavailable
-  const mockSongs = [
-    {
-      songTitle: "A Day in the Life",
-      songArtists: ["The Beatles"],
-      albumName: "Sgt. Pepper's Lonely Hearts Club Band",
-      imageUrl:
-        "https://i.scdn.co/image/ab67616d0000b273128450651c9f0442780d8eb8",
-      duration: 337000,
-      previewUrl:
-        "https://p.scdn.co/mp3-preview/67f504bf5b86bdcaf197aef343c2413e8ec68b1d",
-      uri: "spotify:track:0jXR9dJLlGpfYQrN0m1HLO",
-      externalUrl: "https://open.spotify.com/track/0jXR9dJLlGpfYQrN0m1HLO",
-    },
-    {
-      songTitle: "Bohemian Rhapsody",
-      songArtists: ["Queen"],
-      albumName: "A Night at the Opera",
-      imageUrl:
-        "https://i.scdn.co/image/ab67616d0000b27328581cfe196c2be2506ee6c0",
-      duration: 354000,
-      previewUrl:
-        "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview122/v4/29/96/51/2996514a-35cd-b092-c7f0-dd995b0e6071/mzaf_10909209324710493166.plus.aac.p.m4a",
-      uri: "spotify:track:7tFiyTwD0nx5a1eklYtX2J",
-      externalUrl: "https://open.spotify.com/track/7tFiyTwD0nx5a1eklYtX2J",
-    },
-    {
-      songTitle: "Hotel California",
-      songArtists: ["Eagles"],
-      albumName: "Hotel California",
-      imageUrl:
-        "https://i.scdn.co/image/ab67616d0000b273446e630d93d3fb235d70bad9",
-      duration: 391000,
-      previewUrl:
-        "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/cb/16/81/cb1681bb-a5a7-0b93-7ce0-0a55ab6dc9e5/mzaf_11284427653219671407.plus.aac.p.m4a",
-      uri: "spotify:track:40riOy7x9W7GXjyGp4pjAv",
-      externalUrl: "https://open.spotify.com/track/40riOy7x9W7GXjyGp4pjAv",
-    },
-  ];
+  // Get game details from params
+  const gameCode = params.gameCode || "";
+  const gameName = params.gameName || "Game Name";
+  const playerCount = parseInt(params.playerCount) || 4;
+  // Set multiplayer to true since we've implemented socket functionality
+  const isMultiplayer = true;
+  const isHost = params.isHost === "true";
 
   // State variables
-  const [isLoading, setIsLoading] = useState(false);
-  const [allSongs, setAllSongs] = useState([]);
-  const [currentRound, setCurrentRound] = useState(1);
+  const [isLoading, setIsLoading] = useState(true);  // Start with true to show loading screen initially
+  const [gameTracks, setGameTracks] = useState([]);
+  const [currentRound, setCurrentRound] = useState(0);
   const [currentSong, setCurrentSong] = useState(null);
-  const [gameStage, setGameStage] = useState("loading"); // loading, playing, voting, results
+  const [gameStage, setGameStage] = useState("loading"); // loading, playing, voting, results, finished
   const [error, setError] = useState(null);
-  const [playerSongs, setPlayerSongs] = useState({});
+  const [gameStarted, setGameStarted] = useState(false);
   const [hasFetchedSongs, setHasFetchedSongs] = useState(false);
+
+  // Players state
+  const [players, setPlayers] = useState([]);
+  const [playerPoints, setPlayerPoints] = useState({});
+  const [playerSongs, setPlayerSongs] = useState({});
+  const [playedSongs, setPlayedSongs] = useState([]);
+  const [roundSongs, setRoundSongs] = useState({});
 
   // Audio playback state variables
   const [sound, setSound] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackPosition, setPlaybackPosition] = useState(0);
   const [playbackDuration, setPlaybackDuration] = useState(0);
-  const [canVote, setCanVote] = useState(false);
   const [isLoadingAudio, setIsLoadingAudio] = useState(false);
   const [audioLoadError, setAudioLoadError] = useState(null);
   const audioLoadTimeoutRef = useRef(null);
 
-  // Add state variable to track played songs
-  const [playedSongs, setPlayedSongs] = useState([]);
-  const [roundSongs, setRoundSongs] = useState({});
-
-  // Add state variables for tracking voting selection and results
+  // Voting state variables
+  const [canVote, setCanVote] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState(null);
   const [showVoteResult, setShowVoteResult] = useState(false);
+  const [votesSubmitted, setVotesSubmitted] = useState(0);
+  const [totalVotes, setTotalVotes] = useState(0);
+  const [roundResults, setRoundResults] = useState(null);
+  const [hasVoted, setHasVoted] = useState(false);
+  
+  // Add ref to track Deezer search status
+  const isDeezerSearching = useRef(false);
 
-  // Track points awarded for @cole_sprout (and add state for tracking this)
-  const [playerPoints, setPlayerPoints] = useState({
-    "@cole_sprout": 0,
-  });
+  // Add ref to prevent re-renders from triggering audio playback
+  const hasInitializedRef = useRef(false);
+  const skipAudioPlaybackRef = useRef(false);
+  const ignoreEffectsRef = useRef(false);
 
-  // Add a state variable to track the voting progress percentage
-  const [voteProgress, setVoteProgress] = useState(0);
-
-  // Get game details from params
-  const gameName = params.gameName || "Game Name";
-  const playerCount = parseInt(params.playerCount) || 4;
-  const gameId = params.gameId || `${Date.now().toString(36).substr(-4).toUpperCase()}`;
-  const isMultiplayer = params.isMultiplayer === "true";
-  const isHost = params.isHost === "true";
-
-  // Parse player usernames from params if available
-  let playerUsernames = [];
-  try {
-    if (params.players) {
-      playerUsernames = JSON.parse(params.players);
+  // Initialize socket listeners
+  useEffect(() => {
+    console.log("GamePlay component initialized with params:", { gameCode, gameName, playerCount, isHost });
+    const socket = socketService.getSocket();
+    
+    if (!socket) {
+      console.error('Socket not initialized in GamePlay');
+      setError('Connection error. Please try again.');
+      setIsLoading(false);
+      return;
     }
-  } catch (e) {
-    console.error("Error parsing player data:", e);
-  }
 
-  // Create players array using player usernames if available
-  const players =
-    playerUsernames.length > 0
-      ? playerUsernames.map((username, index) => ({
-          id: index + 1,
-          username,
-          platform: "spotify",
-        }))
-      : [
-          { id: 1, username: "@luke_mcfall", platform: "spotify" },
-          { id: 2, username: "@cole_sprout", platform: "spotify" },
-          { id: 3, username: "@maya_avital", platform: "spotify" },
-          { id: 4, username: "@marcus_lintott", platform: "spotify" },
-        ].slice(0, playerCount);
+    console.log('GamePlay: Setting up socket listeners');
+    
+    // Parse track and player data if available from params - only on initial mount
+    try {
+      if (params?.tracks && gameTracks.length === 0) {
+        const parsedTracks = typeof params.tracks === 'string' 
+          ? JSON.parse(params.tracks) 
+          : params.tracks;
+          
+        if (Array.isArray(parsedTracks) && parsedTracks.length > 0) {
+          console.log(`GamePlay: Found ${parsedTracks.length} tracks in params`);
+          setGameTracks(parsedTracks);
+        }
+      }
+      
+      if (params?.players && players.length === 0) {
+        const parsedPlayers = typeof params.players === 'string'
+          ? JSON.parse(params.players)
+          : params.players;
+          
+        if (Array.isArray(parsedPlayers)) {
+          console.log(`GamePlay: Found ${parsedPlayers.length} players in params`);
+          setPlayers(parsedPlayers);
+        }
+      }
+    } catch (e) {
+      console.error('GamePlay: Error parsing params:', e);
+    }
+    
+    // Listen for game started event - improved to prevent duplicate starts
+    socket.on('game-started', (data) => {
+      console.log('[GamePlay] Received game-started event', { 
+        hasTracks: data.tracks?.length > 0, 
+        playerCount: data.players?.length 
+      });
+      
+      // Skip if we're the host or already playing
+      if (isHost || gameStage === 'playing' || currentSong) {
+        console.log('[GamePlay] Host or already playing, ignoring game-started event');
+        return;
+      }
+      
+      // Set the game as started to prevent multiple starts
+      setGameStarted(true);
+      
+      // Update players if we received them
+      if (data.players && Array.isArray(data.players)) {
+        console.log(`[GamePlay] Updating player list with ${data.players.length} players`);
+        setPlayers(data.players);
+      }
+      
+      // Set tracks and start the game
+      if (data.tracks && data.tracks.length > 0) {
+        console.log(`[GamePlay] Client received ${data.tracks.length} tracks`);
+        
+        // Update all game tracks
+        setGameTracks(data.tracks);
+        
+        // Start with the first track
+        setCurrentSong(data.tracks[0]);
+        
+        // Update the game stage to match the server
+        setGameStage('playing');
+        setIsLoading(false);
+      } else {
+        console.error('[GamePlay] No tracks received in game-started event');
+        setError('No tracks received from host. Please try again.');
+      }
+    });
 
-  // Set header options and debug token
+    // Listen for vote updates
+    socket.on("vote-update", ({ votesSubmitted: votes, totalVotes: total }) => {
+      setVotesSubmitted(votes);
+      setTotalVotes(total);
+    });
+
+    // Listen for round results
+    socket.on("round-results", ({ roundNumber, voteResults, correctAnswer }) => {
+      setRoundResults({
+        roundNumber,
+        voteResults,
+        correctAnswer
+      });
+      setShowVoteResult(true);
+      setGameStage("results");
+    });
+
+    // Listen for next round notification
+    socket.on("next-round", ({ roundNumber }) => {
+      setCurrentRound(roundNumber);
+      if (gameTracks.length > roundNumber) {
+        setCurrentSong(gameTracks[roundNumber]);
+      }
+      setGameStage("playing");
+      setShowVoteResult(false);
+      setSelectedPlayer(null);
+      setHasVoted(false);
+      setVotesSubmitted(0);
+    });
+
+    // Listen for game over
+    socket.on("game-over", ({ finalScores, tracks }) => {
+      setPlayerPoints(finalScores);
+      setGameStage("finished");
+    });
+
+    // Clean up listeners on unmount
+    const unsubscribe = () => {
+      socket.off("game-started");
+      socket.off("vote-update");
+      socket.off("round-results");
+      socket.off("next-round");
+      socket.off("game-over");
+    };
+    
+    return unsubscribe;
+  }, []); // Empty dependency array - run only once on mount
+
+  // Auto-start the game when tracks are available from params
+  useEffect(() => {
+    // This condition should only run ONCE when we first get tracks
+    if (isLoading && params.tracks && gameTracks.length > 0 && !currentSong && !gameStarted) {
+      console.log('[GamePlay] Auto-starting game with tracks from params');
+      
+      // Set gameStarted flag to prevent duplicate starts
+      setGameStarted(true);
+      
+      // Emit game started event if we're the host
+      if (isHost) {
+        console.log('[GamePlay] Host directly starting game with tracks');
+        
+        // Immediately set the first track to provide better UX
+        const firstTrack = gameTracks[0];
+        setCurrentSong(firstTrack);
+        
+        // Use the new callback functionality
+        socketService.startGameWithTracks(gameCode, gameTracks, {
+          onSuccess: (data) => {
+            console.log('[GamePlay] Host start game acknowledged by server');
+            // Ensure UI immediately updates to playing state
+            setGameStage('playing');
+            setIsLoading(false);
+          },
+          onError: (error) => {
+            console.error('[GamePlay] Error starting game:', error.message);
+            setError(`Error starting game: ${error.message}`);
+          }
+        });
+      } else {
+        // For client devices: set a failsafe timer to exit loading state
+        const failsafeTimer = setTimeout(() => {
+          if (isLoading && gameStarted) {
+            console.log('[GamePlay] Client failsafe: Stuck in loading, forcing state update');
+            setIsLoading(false);
+            if (currentSong) {
+              setGameStage('playing');
+            }
+          }
+        }, 5000); // 5 second failsafe
+        
+        return () => clearTimeout(failsafeTimer);
+      }
+    }
+  }, [isLoading, params.tracks, gameTracks, currentSong, isHost, gameCode, gameStarted]);
+
+  // Effect to handle current song changes - simplified to avoid race conditions
+  useEffect(() => {
+    // Only run this if we have a current song
+    if (currentSong) {
+      console.log("Current song set:", currentSong.name || currentSong.songTitle);
+      
+      // If we're still in loading state but have a song, transition to playing
+      if (isLoading || gameStage === "loading") {
+        console.log("Song loaded while still in loading state, transitioning to playing");
+        setIsLoading(false);
+        setGameStage("playing");
+      }
+      
+      // Only play audio on host device
+      if (isHost && gameStage === "playing") {
+        console.log("Loading song effect triggered:", currentSong.name || currentSong.songTitle);
+        loadAndPlaySong(currentSong);
+        
+        // Set a simple timer for when to enable voting - no reliance on audio position
+        const timer = setTimeout(() => {
+          console.log("Timer elapsed, enabling voting");
+          setCanVote(true);
+          setGameStage("voting");
+          
+          // Pause the song after voting starts
+          if (sound) {
+            sound.pauseAsync().catch(e => console.error("Error pausing sound:", e));
+            setIsPlaying(false);
+          }
+        }, MIN_PLAY_DURATION);
+        
+        return () => clearTimeout(timer);
+      } else if (!isHost && gameStage === "playing") {
+        // On non-host devices, just show the song info but don't play audio
+        console.log("Client showing song info without playing audio");
+        // After MIN_PLAY_DURATION, allow voting on client too
+        const timer = setTimeout(() => {
+          console.log("Client timer elapsed, enabling voting");
+          setCanVote(true);
+          setGameStage("voting");
+        }, MIN_PLAY_DURATION);
+        
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [currentSong, gameStage, isHost, sound, isLoading]);
+
+  // Replace loadAndPlaySong with a singleton pattern
+  const loadAndPlaySong = useCallback(async (song) => {
+    // Skip if no song or if this exact song is already loaded
+    if (!song) {
+      debugLog("No song provided to loadAndPlaySong");
+      return;
+    }
+    
+    // Use song id or title as unique identifier
+    const songId = song.id || song.songTitle || song.name;
+    
+    // Skip if same song already loading or loaded
+    if (audioRef.isLoading || audioRef.currentSongId === songId) {
+      debugLog(`Song ${songId} already loading or loaded, skipping`);
+      return;
+    }
+    
+    // Only host plays audio
+    if (!isHost) {
+      debugLog("Client device not playing audio, updating UI only");
+      setCurrentSong(song);
+      setIsLoading(false);
+      setGameStage('playing');
+      return;
+    }
+    
+    debugLog(`Host loading song: ${songId}`);
+    
+    // Set loading flag to prevent multiple loads
+    audioRef.isLoading = true;
+    audioRef.currentSongId = songId;
+    
+    // Always update UI immediately
+    setCurrentSong(song);
+    setIsLoadingAudio(true);
+    setAudioLoadError(null);
+    setIsLoading(false);
+    setGameStage("playing");
+    
+    // Clean up any existing audio first
+    if (audioRef.sound) {
+      try {
+        debugLog("Stopping previous sound");
+        await audioRef.sound.stopAsync().catch(() => {});
+        await audioRef.sound.unloadAsync().catch(() => {});
+        audioRef.sound = null;
+        setSound(null);
+      } catch (error) {
+        debugLog("Error stopping previous sound:", error);
+      }
+    }
+    
+    // Add a buffer to ensure audio engine has time to reset
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    try {
+      // Find the preview URL if needed
+      if (!song.previewUrl) {
+        debugLog("No preview URL, searching Deezer");
+        try {
+          const deezerTrack = await findDeezerTrackFromSpotify(song);
+          if (deezerTrack && deezerTrack.previewUrl) {
+            debugLog("Found Deezer preview URL");
+            song = {
+              ...song,
+              previewUrl: deezerTrack.previewUrl
+            };
+          } else {
+            // Last resort - try searching just by title
+            const lastResortTrack = await findDeezerTrackByTitleOnly(song.songTitle || song.name);
+            if (lastResortTrack && lastResortTrack.previewUrl) {
+              debugLog("Found preview URL via last resort search");
+              song = {
+                ...song,
+                previewUrl: lastResortTrack.previewUrl
+              };
+            }
+          }
+        } catch (deezerError) {
+          debugLog("Error finding Deezer preview:", deezerError);
+        }
+      }
+
+      // Check if we have a preview URL after all attempts
+      if (!song.previewUrl) {
+        debugLog("No preview URL available for song");
+        setAudioLoadError("No audio preview available");
+        setIsLoadingAudio(false);
+        audioRef.isLoading = false;
+        return;
+      }
+
+      // Skip if unmounted or we need to skip audio
+      if (skipAudioPlaybackRef.current) {
+        debugLog("Skipping audio playback as requested");
+        audioRef.isLoading = false;
+        return;
+      }
+
+      // Try to load the audio
+      debugLog("Loading audio from URL:", song.previewUrl);
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: song.previewUrl },
+        { shouldPlay: false }
+      );
+
+      // Skip if unmounted or we need to skip audio
+      if (skipAudioPlaybackRef.current) {
+        debugLog("Component unmounted after audio load, unloading");
+        await newSound.unloadAsync().catch(() => {});
+        audioRef.isLoading = false;
+        return;
+      }
+
+      // Store in global ref and in state
+      audioRef.sound = newSound;
+      setSound(newSound);
+      
+      debugLog("Successfully loaded audio");
+      
+      // Set up status update handler
+      newSound.setOnPlaybackStatusUpdate((status) => {
+        if (skipAudioPlaybackRef.current) return;
+        
+        if (status.isLoaded) {
+          setPlaybackPosition(status.positionMillis);
+          setPlaybackDuration(status.durationMillis);
+          setIsPlaying(status.isPlaying);
+        }
+      });
+      
+      // Play audio after a small delay
+      await new Promise(resolve => {
+        setTimeout(async () => {
+          try {
+            if (!skipAudioPlaybackRef.current && audioRef.sound) {
+              debugLog("Starting playback");
+              await audioRef.sound.playAsync();
+              setIsPlaying(true);
+            }
+            resolve();
+          } catch (playError) {
+            debugLog("Error starting playback:", playError);
+            resolve();
+          }
+        }, 300);
+      });
+    } catch (error) {
+      debugLog("Error loading audio:", error);
+      setAudioLoadError(`Couldn't load audio: ${error.message}`);
+    } finally {
+      setIsLoadingAudio(false);
+      audioRef.isLoading = false;
+    }
+  }, [isHost]);
+
+  // Completely replace the audio initialization effect
+  useEffect(() => {
+    debugLog("Setting up audio module");
+    
+    const setupAudio = async () => {
+      try {
+        // Reset the audio engine first
+        await Audio.setIsEnabledAsync(false);
+        await new Promise(resolve => setTimeout(resolve, 100));
+        await Audio.setIsEnabledAsync(true);
+        
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+          interruptionModeIOS: Audio.InterruptionModeIOS.DoNotMix,
+          interruptionModeAndroid: Audio.InterruptionModeAndroid.DoNotMix,
+          shouldDuckAndroid: false,
+          playThroughEarpieceAndroid: false,
+        });
+        
+        debugLog("Audio system initialized");
+        audioRef.isInitialized = true;
+      } catch (error) {
+        debugLog("Error setting up audio mode:", error);
+      }
+    };
+    
+    setupAudio();
+    
+    return () => {
+      debugLog("GamePlay unmounting - cleaning up audio");
+      
+      // Mark to skip any in-progress audio operations
+      skipAudioPlaybackRef.current = true;
+      
+      // Clean up in a separate async function
+      (async () => {
+        if (audioRef.sound) {
+          try {
+            await audioRef.sound.stopAsync().catch(() => {});
+            await audioRef.sound.unloadAsync().catch(() => {});
+            audioRef.sound = null;
+          } catch(e) {
+            debugLog("Error cleaning up audio:", e);
+          }
+        }
+        
+        try {
+          await Audio.setIsEnabledAsync(false);
+        } catch(e) {
+          debugLog("Error disabling audio:", e);
+        }
+      })();
+    };
+  }, []);
+
+  // Fix the first-time start effect
+  useEffect(() => {
+    if (hasInitializedRef.current || ignoreEffectsRef.current) {
+      return;  // Only run on first render
+    }
+    
+    // Mark as initialized
+    hasInitializedRef.current = true;
+    
+    // Auto-play the first track if this is the host and we have tracks
+    if (isHost && gameTracks.length > 0 && !currentSong) {
+      debugLog("Auto-starting with first track");
+      loadAndPlaySong(gameTracks[0]);
+    }
+  }, [isHost, gameTracks.length, currentSong, loadAndPlaySong]);
+  
+  // Add a specialized effect to detect when loading finishes
+  useEffect(() => {
+    // If we have a song but we're still loading, exit loading
+    if (currentSong && isLoading) {
+      debugLog("Song available, exiting loading state");
+      setIsLoading(false);
+      setGameStage('playing');
+    }
+  }, [currentSong, isLoading]);
+  
+  // Add a fail-safe for loading screen
+  useEffect(() => {
+    if (!isLoading) return;
+    
+    const timer = setTimeout(() => {
+      if (isLoading) {
+        debugLog("Force exiting loading state after timeout");
+        setIsLoading(false);
+        
+        if (gameTracks.length > 0) {
+          setGameStage('playing');
+          
+          // Only set current song if not already set
+          if (!currentSong) {
+            debugLog("Setting first track as current song");
+            setCurrentSong(gameTracks[0]);
+          }
+        }
+      }
+    }, 3000);
+    
+    return () => clearTimeout(timer);
+  }, [isLoading, currentSong, gameTracks]);
+  
+  // Fix the renderGameContent to avoid causing re-renders
+  const renderGameContent = useCallback(() => {
+    // Skip loading screen completely if we have a song
+    if (currentSong && (isLoading || gameStage === 'loading')) {
+      debugLog("DIRECT RENDER: Bypassing loading state, rendering playing UI");
+      return renderGamePlaying();
+    }
+    
+    if (isLoading) {
+      return (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#8E44AD" />
+          <Text style={styles.loadingText}>Loading game...</Text>
+          {gameStarted && <Text style={styles.debugText}>Game started, waiting for tracks...</Text>}
+        </View>
+      );
+    }
+    
+    // Rest of rendering logic...
+    
+    if (error) {
+      return (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={handleReturnToLobby}>
+            <Text style={styles.retryButtonText}>Return to Lobby</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    
+    switch (gameStage) {
+      case "playing":
+      case "voting":
+        return renderGamePlaying();
+      case "results":
+        return renderGameResults();
+      case "gameOver":
+        return renderGameOver();
+      default:
+        // If we have a song but no specific state, show playing UI
+        if (currentSong) {
+          debugLog("Default case with song, showing playing UI");
+          return renderGamePlaying();
+        }
+        return (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#8E44AD" />
+            <Text style={styles.loadingText}>Preparing game...</Text>
+            <Text style={styles.debugText}>Game stage: {gameStage}</Text>
+          </View>
+        );
+    }
+  }, [
+    currentSong, 
+    isLoading, 
+    error, 
+    gameStage, 
+    gameStarted,
+    handleReturnToLobby,
+    renderGamePlaying,
+    renderGameResults,
+    renderGameOver
+  ]);
+
+  // Set header options
   useEffect(() => {
     navigation.setOptions({
       header: (props) => (
@@ -565,567 +701,429 @@ export default function GamePlay() {
       ),
       title: gameName,
     });
+  }, [navigation, gameName]);
 
-    console.log("Game started with params:", {
-      gameName,
-      playerCount,
-      gameId,
-      players: players.map((p) => p.username),
-      albumId: ALBUM_ID,
-    });
-  }, [navigation]);
-
-  // Debug token state changes
-  useEffect(() => {
-    console.log("Token state changed:", {
-      hasToken: !!token,
-      isInitialized,
-      hasFetchedSongs,
-    });
-  }, [token, isInitialized, hasFetchedSongs]);
-
-  // Fetch songs when component mounts - but only once
-  useEffect(() => {
-    // Skip if we've already fetched songs or if still loading
-    if (allSongs.length > 0 || isLoading || !isInitialized) {
-      return;
+  // Memoize the handleSeek function to avoid re-creation on each render
+  const handleSeek = useCallback(async (position) => {
+    if (!sound) return;
+    
+    try {
+      await sound.setPositionAsync(position);
+    } catch (error) {
+      console.error("Error seeking sound:", error);
     }
-
-    const fetchSongs = async () => {
-      setIsLoading(true);
-      setError(null);
-      console.log("Starting fetchSongs function");
-      console.log(
-        "Token initialized:",
-        isInitialized,
-        "Token available:",
-        !!token
-      );
-
-      let currentToken = token;
-
-      // If we have a token, make sure it's valid before using it
-      if (token) {
-        try {
-          console.log("Validating token...");
-          // This will either return the valid token or refresh it automatically
-          currentToken = await getValidToken();
-          console.log(
-            "Using valid token for API request:",
-            currentToken ? "Token received" : "No token received"
-          );
-        } catch (error) {
-          console.error("Error validating/refreshing token:", error);
-          currentToken = null;
-        }
-      } else {
-        console.log("No initial token available after initialization");
-
-        // Give user option to authenticate if no token is available
-        Alert.alert(
-          "Spotify Authentication Needed",
-          "No Spotify token available. Would you like to connect to Spotify?",
-          [
-            {
-              text: "Use Sample Songs",
-              onPress: () => console.log("Using sample songs only"),
-              style: "cancel",
-            },
-            {
-              text: "Connect to Spotify",
-              onPress: async () => {
-                try {
-                  setIsLoading(false); // Reset loading state
-                  await getSpotifyAuth(); // Start auth process
-                  // Note: After successful auth, the token will be set and this effect will run again
-                } catch (authError) {
-                  console.error("Authentication error:", authError);
-                  setIsLoading(false);
-                  setError("Authentication failed. Using sample songs.");
-                }
-              },
-            },
-          ]
-        );
-      }
-
-      let tracks;
-
-      // If we don't have a valid token, use mock data
-      if (!currentToken) {
-        console.log("No valid Spotify token, using mock song data");
-        console.log("Mock songs available:", mockSongs?.length || 0);
-        tracks = mockSongs;
-      } else {
-        try {
-          // First try getting recently played tracks as they often have preview URLs
-          console.log("Fetching recently played tracks...");
-          try {
-            tracks = await getMyRecentlyPlayedTracks(currentToken);
-            console.log(
-              "Successfully fetched recently played tracks:",
-              tracks?.length || 0
-            );
-          } catch (recentError) {
-            console.error(
-              "Error fetching recently played tracks:",
-              recentError
-            );
-            tracks = null;
-          }
-
-          // If no recent tracks or error, try the album tracks
-          if (!tracks || tracks.length === 0) {
-            console.log("Fetching tracks from specified album:", ALBUM_ID);
-            tracks = await getAlbumTracks(ALBUM_ID, currentToken);
-            console.log(
-              "Successfully fetched album tracks:",
-              tracks?.length || 0
-            );
-          }
-
-          if (!tracks || tracks.length === 0) {
-            console.log("No tracks found, using mock data");
-            console.log("Mock songs available:", mockSongs?.length || 0);
-            tracks = mockSongs;
-          } else {
-            // Debug all tracks and their preview URLs
-            console.log("=== TRACK PREVIEW URL DEBUG ===");
-            tracks.forEach((track, index) => {
-              console.log(
-                `Track ${index + 1}: ${track.songTitle} - Preview URL: ${
-                  track.previewUrl || "None"
-                }`
-              );
-            });
-
-            // Filter out tracks without valid preview URLs
-            const validTracks = tracks.filter((track) => {
-              const hasValidPreview =
-                track.previewUrl && track.previewUrl.trim() !== "";
-              if (!hasValidPreview) {
-                console.log(
-                  `Track filtered out (no preview URL): ${track.songTitle}`
-                );
-              }
-              return hasValidPreview;
-            });
-            console.log(
-              `Found ${validTracks.length}/${tracks.length} tracks with preview URLs`
-            );
-
-            if (validTracks.length < 3) {
-              console.log(
-                "Not enough tracks with preview URLs, trying individual track API..."
-              );
-
-              // Try fetching individual tracks to see if we can get preview URLs
-              const individualTracks = [];
-              const trackPromises = [];
-
-              // Try to get more tracks than we need in case some fail
-              const maxTracksToTry = 10;
-              const tracksToTry = tracks.slice(0, maxTracksToTry);
-
-              // Use Promise.all with a timeout to avoid waiting too long
-              const fetchWithTimeout = async (trackId) => {
-                try {
-                  return await Promise.race([
-                    getTrackDetails(trackId, currentToken),
-                    new Promise((_, reject) =>
-                      setTimeout(() => reject(new Error("Timeout")), 5000)
-                    ),
-                  ]);
-                } catch (e) {
-                  console.log(`Fetch timed out or failed for track ${trackId}`);
-                  return null;
-                }
-              };
-
-              for (const track of tracksToTry) {
-                if (track.trackId) {
-                  trackPromises.push(fetchWithTimeout(track.trackId));
-                }
-              }
-
-              try {
-                const results = await Promise.all(trackPromises);
-                for (const trackDetails of results) {
-                  if (trackDetails && trackDetails.previewUrl) {
-                    console.log(
-                      `Found preview URL for track ${trackDetails.songTitle}`
-                    );
-                    individualTracks.push(trackDetails);
-                  }
-                }
-              } catch (batchError) {
-                console.error("Error in batch track fetching:", batchError);
-              }
-
-              // If we still don't have at least 3 valid tracks with preview URLs, try Deezer
-              const combinedTracks = [...validTracks, ...individualTracks];
-              if (combinedTracks.length < 3) {
-                console.log(
-                  "Not enough preview URLs from Spotify, trying Deezer API"
-                );
-
-                try {
-                  // Try to enrich tracks with Deezer preview URLs
-                  const deezerEnrichedTracks =
-                    await enrichTracksWithDeezerPreviews(tracksToTry);
-
-                  // Filter tracks that now have preview URLs
-                  const validDeezerTracks = deezerEnrichedTracks.filter(
-                    (track) => track.previewUrl
-                  );
-                  console.log(
-                    `Found ${validDeezerTracks.length} tracks with Deezer preview URLs`
-                  );
-
-                  if (validDeezerTracks.length >= 3) {
-                    console.log("Using Deezer preview URLs");
-                    tracks = validDeezerTracks;
-                  } else {
-                    // Combine all tracks with valid preview URLs
-                    const allValidTracks = [
-                      ...combinedTracks,
-                      ...validDeezerTracks,
-                    ];
-                    if (allValidTracks.length >= 3) {
-                      console.log(
-                        `Using combined ${allValidTracks.length} tracks with preview URLs from Spotify and Deezer`
-                      );
-                      tracks = allValidTracks;
-                    } else {
-                      console.log(
-                        "Still not enough preview URLs, falling back to mock data"
-                      );
-                      tracks = mockSongs;
-                    }
-                  }
-                } catch (deezerError) {
-                  console.error(
-                    "Error enriching tracks with Deezer:",
-                    deezerError
-                  );
-
-                  if (combinedTracks.length >= 3) {
-                    tracks = combinedTracks;
-                  } else {
-                    console.log("Using mock songs after Deezer error");
-                    tracks = mockSongs;
-                  }
-                }
-              } else {
-                // Use the combined tracks if we have enough
-                tracks = combinedTracks;
-              }
-            } else {
-              tracks = validTracks;
-            }
-
-            // Add additional data fields as needed
-            tracks = tracks.map((track) => ({
-              ...track,
-              uri: track.uri || null,
-              externalUrl: track.externalUrl || null,
-              _debug: {
-                title: track.songTitle,
-                artists: track.songArtists,
-                duration: track.duration,
-                albumArt: track.imageUrl ? "Available" : "Unavailable",
-                previewUrl: track.previewUrl ? "Available" : "Unavailable",
-              },
-            }));
-
-            console.log(
-              "Sample track data:",
-              JSON.stringify(tracks[0], null, 2)
-            );
-          }
-        } catch (apiError) {
-          console.error("Error fetching from Spotify API:", apiError);
-          console.log("Using fallback mock data");
-          console.log("Mock songs available:", mockSongs?.length || 0);
-          tracks = mockSongs;
-
-          // Handle API errors
-          if (apiError?.response?.status === 401) {
-            console.log("Authentication error (401)");
-            // We don't need to handle token refresh here since getValidToken already did that
-            // Just notify the user and use mock data
-            Alert.alert(
-              "Spotify Authentication Issue",
-              "There was a problem with your Spotify authentication. Using sample songs instead.",
-              [{ text: "OK" }]
-            );
-          } else if (apiError?.response?.status === 403) {
-            console.log("Authorization error (403): Missing required scope");
-            Alert.alert(
-              "Permission Error",
-              "This app needs permission to access your tracks. Please reconnect to Spotify with all permissions.",
-              [{ text: "OK", onPress: () => handleReturnToLobby() }]
-            );
-          } else if (apiError?.response?.status === 429) {
-            console.log("Rate limit reached (429)");
-            Alert.alert(
-              "Too Many Requests",
-              "You've made too many requests to Spotify. Please try again later.",
-              [{ text: "OK" }]
-            );
-          }
-        }
-      }
-
-      // Final check to make sure we have tracks to use
-      if (!tracks || tracks.length === 0) {
-        console.error("No tracks available, even after trying mock data!");
-        // Create emergency fallback track if all else fails
-        tracks = [
-          {
-            songTitle: "Emergency Fallback Song",
-            songArtists: ["Synth App"],
-            albumName: "Fallback Album",
-            imageUrl: "https://via.placeholder.com/300",
-            duration: 30000,
-            previewUrl: null, // No audio available for fallback
-            uri: null,
-            externalUrl: null,
-          },
-        ];
-
-        setError("Could not load song data. Using emergency fallback.");
-      }
-
-      console.log(`Using ${tracks.length} tracks for the game`);
-
-      // Process the tracks for the game
-      const processedSongs = tracks.slice(0, 15).map((track) => ({
-        ...track,
-        // We'll assign players to songs when they are selected for a round, not in advance
-      }));
-
-      setAllSongs(processedSongs);
-      selectSongForRound(1, processedSongs);
-      setIsLoading(false);
-      setGameStage("playing");
-      setHasFetchedSongs(true);
-    };
-
-    // Only fetch songs once and after auth is initialized
-    fetchSongs();
-  }, [token, players, hasFetchedSongs, isInitialized]);
-
-  // Cleanup audio resources when unmounting
-  useEffect(() => {
-    return () => {
-      if (sound) {
-        sound
-          .unloadAsync()
-          .catch((e) => console.log("Error unloading sound", e));
-      }
-
-      if (audioLoadTimeoutRef.current) {
-        clearTimeout(audioLoadTimeoutRef.current);
-      }
-    };
   }, [sound]);
 
-  // Audio status update handler
-  const onPlaybackStatusUpdate = (status) => {
-    if (!status.isLoaded) return;
-
-    setPlaybackPosition(status.positionMillis);
-    setPlaybackDuration(status.durationMillis);
-
-    // Set play/pause state based on audio status
-    setIsPlaying(status.isPlaying);
-
-    // Calculate vote progress as a percentage (0-100)
-    const progress = Math.min(100, (status.positionMillis / MIN_PLAY_DURATION) * 100);
-    setVoteProgress(progress);
-
-    // Enable voting after at least 15 seconds
-    console.log(
-      `Playback position: ${status.positionMillis}, MIN_PLAY_DURATION: ${MIN_PLAY_DURATION}, canVote: ${canVote}`
-    );
-    if (status.positionMillis >= MIN_PLAY_DURATION && !canVote) {
-      console.log("Enabling vote button");
-      setCanVote(true);
-    }
-
-    // Handle song completion
-    if (status.didJustFinish) {
-      setIsPlaying(false);
-    }
+  // Handle player selection for voting
+  const handlePlayerSelect = (player) => {
+    if (gameStage !== "voting" || hasVoted) return;
+    
+    setSelectedPlayer(player);
   };
 
-  // Update loadAndPlaySong function to handle Deezer icons
-  const loadAndPlaySong = async (song) => {
-    console.log("Loading song:", song?.songTitle);
-    console.log("Preview URL:", song?.previewUrl);
-
-    // Verify we have a valid song object
-    if (!song) {
-      console.error("No song provided to loadAndPlaySong");
-      setAudioLoadError("No song data available");
-      setIsLoadingAudio(false);
-      return;
-    }
-
-    // Set current song for display regardless of audio playback success
-    setCurrentSong(song);
-    setIsLoadingAudio(true);
-    setAudioLoadError(null);
-
-    // Explicitly reset voting state for the new song
-    setCanVote(false);
-    setPlaybackPosition(0);
-    setPlaybackDuration(0);
-
-    // Unload any existing sound first to avoid conflicts
-    if (sound) {
-      try {
-        await sound.unloadAsync();
-        console.log("Previous sound unloaded successfully");
-      } catch (error) {
-        console.error("Error unloading previous sound:", error);
-      }
-      setSound(null);
-    }
-
-    // Check if we have a valid preview URL
-    if (!song.previewUrl) {
-      console.log(
-        "No preview URL available for this song, trying Deezer as last resort"
-      );
-
-      try {
-        // Try to find this track on Deezer as a last attempt
-        const deezerTrack = await findDeezerTrackFromSpotify(song);
-        if (deezerTrack && deezerTrack.previewUrl) {
-          console.log("Found Deezer preview URL for:", song.songTitle);
-          console.log("Deezer preview URL:", deezerTrack.previewUrl);
-          
-          // Update the current song with the Deezer preview URL
-          song = {
-            ...song,
-            previewUrl: deezerTrack.previewUrl,
-            deezerInfo: {
-              trackId: deezerTrack.trackId,
-              externalUrl: deezerTrack.externalUrl,
-            },
-          };
-          setCurrentSong(song);
-        } else {
-          console.log("No Deezer preview URL found either");
-          setAudioLoadError("No preview available for this song");
-          setIsLoadingAudio(false);
-
-          // Enable voting even without audio
-          setTimeout(() => {
-            setCanVote(true);
-          }, 5000);
-          return;
-        }
-      } catch (deezerError) {
-        console.error("Error finding Deezer preview:", deezerError);
-        setAudioLoadError("No preview available for this song");
-        setIsLoadingAudio(false);
-
-        // Enable voting even without audio
-        setTimeout(() => {
-          setCanVote(true);
-        }, 5000);
-        return;
-      }
-    }
-
-    try {
-      // Set timeout to handle case where audio loading takes too long
-      if (audioLoadTimeoutRef.current) {
-        clearTimeout(audioLoadTimeoutRef.current);
-      }
-
-      audioLoadTimeoutRef.current = setTimeout(() => {
-        setIsLoadingAudio(false);
-        setAudioLoadError("Audio loading timed out. You can still vote.");
-        setCanVote(true);
-      }, 15000);
-
-      console.log("Creating new sound object for:", song.previewUrl);
-      
-      // Create a new sound object - in multiplayer mode, always autoplay
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: song.previewUrl },
-        { shouldPlay: true, progressUpdateIntervalMillis: 100 },
-        onPlaybackStatusUpdate
-      );
-
-      console.log("Sound created successfully, starting playback");
-      setSound(newSound);
-      setIsPlaying(true);
-      setIsLoadingAudio(false);
-
-      // Clear the timeout if audio loaded successfully
-      clearTimeout(audioLoadTimeoutRef.current);
-      audioLoadTimeoutRef.current = null;
-
-      console.log("Audio loaded and playing successfully");
-      
-      // Make a test play to verify audio works
-      try {
-        await newSound.setPositionAsync(0);
-        await newSound.playAsync();
-        console.log("Audio playback test successful");
-      } catch (playError) {
-        console.error("Error testing audio playback:", playError);
-      }
-    } catch (error) {
-      console.error("Error loading audio:", error);
-      console.error("Error details:", JSON.stringify(error));
-      setIsLoadingAudio(false);
-      setAudioLoadError("Error loading audio. You can still vote.");
-      setCanVote(true);
-
-      // Clear the timeout if we've already handled the error
-      if (audioLoadTimeoutRef.current) {
-        clearTimeout(audioLoadTimeoutRef.current);
-        audioLoadTimeoutRef.current = null;
-      }
-      
-      // Try loading the audio again after a short delay (retry once)
-      setTimeout(async () => {
-        console.log("Retrying audio playback...");
-        try {
-          const { sound: retrySound } = await Audio.Sound.createAsync(
-            { uri: song.previewUrl },
-            { shouldPlay: true, progressUpdateIntervalMillis: 100 },
-            onPlaybackStatusUpdate
-          );
-          
-          setSound(retrySound);
-          setIsPlaying(true);
-          setAudioLoadError(null);
-          console.log("Retry successful!");
-        } catch (retryError) {
-          console.error("Retry also failed:", retryError);
-          // Still allow voting even though audio failed
-          setCanVote(true);
-        }
-      }, 2000);
-    }
+  // Submit a vote
+  const handleVoteSubmit = () => {
+    if (!selectedPlayer || hasVoted || gameStage !== "voting") return;
+    
+    // Send vote to the server
+    socketService.submitVote(selectedPlayer.id);
+    setHasVoted(true);
+    
+    // Update local votes count for UI feedback
+    setVotesSubmitted(prevVotes => prevVotes + 1);
   };
 
-  // Toggle play/pause function - only usable in single player mode
-  const togglePlayPause = async () => {
-    // In multiplayer mode, don't allow manual play/pause
-    if (isMultiplayer) {
+  // Memoize selectSongForRound to prevent recreation on each render
+  const selectSongForRound = useCallback((roundNum) => {
+    // Check if we have enough tracks
+    if (!gameTracks || roundNum >= gameTracks.length) {
+      console.error(`Not enough tracks for round ${roundNum}`);
+      setError("Not enough tracks to continue the game");
       return;
     }
     
-    if (!sound) return;
+    // Stop any existing audio first
+    (async () => {
+      if (sound) {
+        try {
+          console.log("Stopping existing audio before loading new song");
+          await sound.stopAsync();
+          await sound.unloadAsync();
+          setSound(null);
+        } catch (error) {
+          console.error("Error stopping sound in selectSongForRound:", error);
+        }
+      }
+      
+      // Use a small timeout to ensure audio is fully stopped
+      setTimeout(() => {
+        const selectedTrack = gameTracks[roundNum];
+        console.log(`Selected song for round ${roundNum}:`, selectedTrack.name || selectedTrack.songTitle);
+        setCurrentSong(selectedTrack);
+      }, 100);
+    })();
+  }, [gameTracks, sound]);
 
+  // Memoize handleReturnToLobby
+  const handleReturnToLobby = useCallback(() => {
+    // Clean up any existing audio
+    if (sound) {
+      sound.unloadAsync().catch(e => console.log("Error unloading sound", e));
+    }
+    
+    // Navigate back to the lobby
+    router.replace({
+      pathname: "/game-lobby",
+      params: {
+        gameName,
+        playerCount,
+        players: JSON.stringify(players.map(p => p.username)),
+        returningFromGame: "true",
+      }
+    });
+  }, [sound, router, gameName, playerCount, players]);
+
+  // Memoize the getProfilePhotoForUser function
+  const getProfilePhotoForUser = useCallback((player) => {
+    // Default or placeholder image
+    const defaultImage = require("../assets/pfp.png");
+    
+    // If player has a profile image URL, use it
+    if (player.profileImage) {
+      return { uri: player.profileImage };
+    }
+    
+    // Otherwise return default image
+    return defaultImage;
+  }, []);
+  
+  // Memoize the getPlayerNameDisplay function
+  const getPlayerNameDisplay = useCallback((player) => {
+    if (!player) return "";
+    return player.username;
+  }, []);
+  
+  // Memoize the isPlayerTrackOwner function
+  const isPlayerTrackOwner = useCallback((playerId) => {
+    if (!currentSong) return false;
+    return currentSong.ownerId === playerId;
+  }, [currentSong]);
+
+  // Memoize the handlePlayAgain function
+  const handlePlayAgain = useCallback(() => {
+    // Reset the game state
+    setCurrentRound(1);
+    setGameStage("loading");
+    setPlayerSongs({});
+    setRoundSongs({});
+    
+    // Stop any playing audio
+    if (sound) {
+      sound.stopAsync().catch(e => console.log("Error stopping sound", e));
+      sound.unloadAsync().catch(e => console.log("Error unloading sound", e));
+      setSound(null);
+    }
+    
+    // Reset audio playback state
+    setIsPlaying(false);
+    setPlaybackPosition(0);
+    setPlaybackDuration(0);
+    setCanVote(false);
+    
+    // Reset voting state
+    setSelectedPlayer(null);
+    setShowVoteResult(false);
+    
+    // Reset points
+    setPlayerPoints(players.reduce((acc, player) => {
+      acc[player.username] = 0;
+      return acc;
+    }, {}));
+    
+    // Restart the game
+    setIsLoading(true);
+    
+    // Add a small delay to ensure state updates have propagated
+    setTimeout(() => {
+      // Select a song for the first round
+      if (gameTracks.length > 0) {
+        selectSongForRound(1);
+      }
+      setIsLoading(false);
+      setGameStage("playing");
+    }, 500);
+  }, [sound, players, gameTracks, selectSongForRound]);
+
+  // Ensure the renderGamePlaying function handles the UI correctly without causing re-renders
+  const renderGamePlaying = useCallback(() => {
+    console.log("Rendering game playing UI", {
+      hasCurrentSong: !!currentSong,
+      gameStage,
+      audioState: isPlaying ? "playing" : "paused",
+      audioLoading: isLoadingAudio
+    });
+    
+    return (
+      <View style={styles.gameContainer}>
+        {/* Round info */}
+        <View style={styles.roundInfo}>
+          <Text style={styles.roundText}>
+            Round {currentRound || 1} of {ROUNDS_TOTAL}
+          </Text>
+        </View>
+
+        {/* Song Player Section */}
+        <View style={styles.playerSection}>
+          {currentSong ? (
+            <>
+              <View style={styles.albumArtContainer}>
+                <Image
+                  source={
+                    currentSong.albumArt || currentSong.imageUrl
+                      ? { uri: currentSong.albumArt || currentSong.imageUrl }
+                      : require("../assets/default-album-art.png")
+                  }
+                  style={styles.albumArt}
+                  resizeMode="cover"
+                  // Add key to ensure image refreshes when the song changes
+                  key={`album-art-${currentSong.id || currentSong.songTitle}`}
+                />
+              </View>
+
+              <View style={styles.trackInfo}>
+                <Text style={styles.trackTitle}>Who's song is this?</Text>
+                <Text style={styles.debugText}>
+                  {currentSong.name || currentSong.songTitle || "Unknown Song"}
+                </Text>
+              </View>
+
+              {audioLoadError ? (
+                <View style={styles.audioErrorContainer}>
+                  <Text style={styles.audioErrorText}>{audioLoadError}</Text>
+                </View>
+              ) : isLoadingAudio ? (
+                <View style={styles.loadingAudioContainer}>
+                  <ActivityIndicator color="#8E44AD" />
+                  <Text style={styles.loadingAudioText}>
+                    Loading audio...
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.playbackContainer}>
+                  <Slider
+                    style={styles.slider}
+                    minimumValue={0}
+                    maximumValue={playbackDuration || 1}
+                    value={playbackPosition || 0}
+                    onSlidingComplete={handleSeek}
+                    minimumTrackTintColor="#8E44AD"
+                    maximumTrackTintColor="#333"
+                    thumbTintColor="#FFC857"
+                  />
+
+                  <View style={styles.timeContainer}>
+                    <Text style={styles.timeText}>
+                      {formatTime(playbackPosition)}
+                    </Text>
+                    <Text style={styles.timeText}>
+                      {formatTime(playbackDuration)}
+                    </Text>
+                  </View>
+
+                  {isHost && (
+                    <TouchableOpacity
+                      style={styles.playButton}
+                      onPress={togglePlayPause}
+                    >
+                      <Ionicons
+                        name={isPlaying ? "pause" : "play"}
+                        size={32}
+                        color="white"
+                      />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+            </>
+          ) : (
+            <View style={styles.noSongContainer}>
+              <Text style={styles.noSongText}>Waiting for song to load...</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Player voting section - only show if in voting stage */}
+        {gameStage === "voting" && (
+          <View style={styles.votingSection}>
+            <Text style={styles.votingPrompt}>
+              Whose song is this? Vote now!
+            </Text>
+            
+            <ScrollView>
+              <View style={styles.playersGrid}>
+                {players.map((player) => {
+                  const isSelected = selectedPlayer === player.username;
+                  const isCorrect = showVoteResult && 
+                    player.username === currentSong?.assignedToPlayer?.username;
+                  
+                  const buttonStyle = [
+                    styles.playerVoteCard,
+                    isSelected && styles.selectedPlayerCard,
+                    isCorrect && styles.correctPlayerCard
+                  ];
+                  
+                  return (
+                    <Pressable
+                      key={player.id}
+                      style={buttonStyle}
+                      onPress={() => {
+                        // Only allow selection if no result is shown yet
+                        if (showVoteResult) return;
+                        
+                        // Set the selected player
+                        setSelectedPlayer(player.username);
+                        setShowVoteResult(true);
+                        
+                        // Create the vote record
+                        const isCorrectGuess = player.username === currentSong?.assignedToPlayer?.username;
+                        const newVote = {
+                          round: currentRound,
+                          songId: currentSong?.songTitle,
+                          votedFor: player.username,
+                          correctPlayer: currentSong?.assignedToPlayer?.username,
+                          isCorrect: isCorrectGuess
+                        };
+
+                        // Update player scores tracking
+                        setPlayerSongs(prev => ({
+                          ...prev,
+                          [player.username]: [...(prev[player.username] || []), newVote]
+                        }));
+
+                        console.log("Vote cast:", newVote);
+                      }}
+                    >
+                      <View style={styles.playerAvatarContainer}>
+                        <Image
+                          source={getProfilePhotoForUser(player)}
+                          style={styles.playerAvatar}
+                        />
+                      </View>
+                      <Text style={styles.playerUsername}>{player.username}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Next round button (only visible after voting) */}
+        {showVoteResult && (
+          <View style={styles.nextRoundContainer}>
+            <Pressable style={styles.nextRoundButton} onPress={nextRound}>
+              <Text style={styles.nextRoundButtonText}>
+                {currentRound >= ROUNDS_TOTAL ? "See Final Results" : "Next Round"}
+              </Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
+    );
+  }, [
+    currentRound, 
+    ROUNDS_TOTAL, 
+    currentSong, 
+    audioLoadError, 
+    isLoadingAudio, 
+    playbackDuration, 
+    playbackPosition, 
+    handleSeek, 
+    isPlaying, 
+    togglePlayPause, 
+    players, 
+    selectedPlayer, 
+    showVoteResult, 
+    nextRound,
+    getProfilePhotoForUser,
+    setPlayerSongs,
+    setSelectedPlayer,
+    setShowVoteResult,
+    gameStage,
+    isHost
+  ]);
+
+  const renderGameResults = useCallback(() => {
+    // Create a sorted list of players by points
+    const sortedPlayers = [...players].sort((a, b) => {
+      const aPoints = playerPoints[a.username] || 0;
+      const bPoints = playerPoints[b.username] || 0;
+      return bPoints - aPoints; // Sort descending
+    });
+
+    return (
+      <View style={styles.resultsContainer}>
+        <Text style={styles.resultsTitle}>Game Results</Text>
+        
+        <ScrollView style={styles.finalResultsScroll}>
+          {sortedPlayers.map((player, index) => (
+            <View 
+              key={player.id} 
+              style={[
+                styles.playerResultRow,
+                index === 0 && styles.winnerRow
+              ]}
+            >
+              <View style={styles.rankContainer}>
+                <Text style={styles.rankText}>{index + 1}</Text>
+              </View>
+              
+              <View style={styles.playerResultInfo}>
+                <Image
+                  source={getProfilePhotoForUser(player)}
+                  style={[
+                    styles.resultAvatar,
+                    index === 0 && styles.winnerAvatar
+                  ]}
+                />
+                <Text style={styles.resultUsername}>{player.username}</Text>
+              </View>
+              
+              <View style={styles.scoreContainer}>
+                <Text style={styles.scoreText}>{playerPoints[player.username] || 0}</Text>
+                <Text style={styles.pointsLabel}>pts</Text>
+              </View>
+            </View>
+          ))}
+        </ScrollView>
+        
+        <View style={styles.gameOverButtonsContainer}>
+          <Pressable
+            style={styles.playAgainButton}
+            onPress={handlePlayAgain}
+          >
+            <Text style={styles.playAgainButtonText}>Play Again</Text>
+          </Pressable>
+          
+          <Pressable
+            style={styles.returnToHomeButton}
+            onPress={handleReturnToLobby}
+          >
+            <Text style={styles.returnToHomeButtonText}>Return to Lobby</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }, [players, playerPoints, getProfilePhotoForUser, handlePlayAgain, handleReturnToLobby]);
+
+  const renderGameOver = useCallback(() => {
+    return renderGameResults(); // Just reuse the results renderer for game over
+  }, [renderGameResults]);
+
+  // Memoize the togglePlayPause function
+  const togglePlayPause = useCallback(async () => {
+    if (!sound) return;
+    
     try {
       if (isPlaying) {
         await sound.pauseAsync();
@@ -1135,70 +1133,10 @@ export default function GamePlay() {
     } catch (error) {
       console.error("Error toggling playback:", error);
     }
-  };
+  }, [sound, isPlaying]);
 
-  // Update selectSongForRound function to handle multiplayer correctly
-  const selectSongForRound = (round, songs = allSongs) => {
-    if (!songs || songs.length === 0) return;
-
-    console.log("Selecting song for round", round);
-    
-    // In multiplayer mode, only the host should select songs
-    if (isMultiplayer) {
-      if (isHost) {
-        console.log("Host will select song in multiplayer mode");
-        // Let the multiplayer event handlers handle this
-        // The song selection will happen in the round_started event handler
-      } else {
-        console.log("Client waiting for host to select song");
-      }
-      return;
-    }
-    
-    // Single player mode - continue with existing logic
-    console.log("Already played songs:", playedSongs.map(s => s.songTitle));
-    
-    // Filter out songs that have already been played
-    const availableSongs = songs.filter(song => 
-      !playedSongs.some(played => played.songTitle === song.songTitle)
-    );
-    
-    console.log("Available songs:", availableSongs.length);
-    
-    // If we've played all songs, reset the played songs tracking
-    if (availableSongs.length === 0) {
-      console.log("All songs have been played, resetting tracking");
-      setPlayedSongs([]);
-      loadAndPlaySong(songs[Math.floor(Math.random() * songs.length)]);
-      return;
-    }
-    
-    // Select a random song from available songs
-    const randomIndex = Math.floor(Math.random() * availableSongs.length);
-    const selectedSong = availableSongs[randomIndex];
-    
-    // Assign the song to a random player
-    const assignedPlayer = players[Math.floor(Math.random() * players.length)];
-    const songWithAssignment = {
-      ...selectedSong,
-      assignedToPlayer: assignedPlayer,
-    };
-    
-    // Track this song for the current round
-    setRoundSongs(prev => ({
-      ...prev,
-      [round]: songWithAssignment
-    }));
-    
-    // Add to played songs list to avoid repeating
-    setPlayedSongs(prev => [...prev, songWithAssignment]);
-    
-    // Load the selected song
-    loadAndPlaySong(songWithAssignment);
-  };
-
-  // Update nextRound function to reset vote selection state
-  const nextRound = async () => {
+  // Fix the useEffect dependency for nextRound - restore the proper function format
+  const nextRound = useCallback(async () => {
     // Reset voting visual state
     setSelectedPlayer(null);
     setShowVoteResult(false);
@@ -1207,6 +1145,8 @@ export default function GamePlay() {
     if (sound) {
       try {
         await sound.stopAsync();
+        await sound.unloadAsync();
+        setSound(null);
       } catch (error) {
         console.error("Error stopping sound:", error);
       }
@@ -1215,7 +1155,7 @@ export default function GamePlay() {
     // Reset playback-related states
     setPlaybackPosition(0);
     setPlaybackDuration(0);
-    setCanVote(false); // Make sure voting is disabled for the new round
+    setCanVote(false); 
     setIsPlaying(false);
     setAudioLoadError(null);
 
@@ -1231,874 +1171,535 @@ export default function GamePlay() {
     } else {
       // Game over - would show final results
       setGameStage("results");
-      
-      // Calculate player scores
-      const playerScores = {};
-      
-      // Count correct votes for each player
-      Object.entries(playerSongs).forEach(([playerName, votes]) => {
-        playerScores[playerName] = votes.filter(vote => vote.isCorrect).length;
-      });
-      
-      console.log("Final scores:", playerScores);
     }
-  };
+  }, [currentRound, sound, selectSongForRound, ROUNDS_TOTAL]);
 
-  const handleReturnToLobby = () => {
-    // For multiplayer games, return to the multiplayer game lobby to maintain connection
-    if (isMultiplayer) {
-      console.log("Returning to multiplayer lobby with gameId:", gameId);
-      // Navigate back to the multiplayer game component with the original game ID
-      router.replace({
-        pathname: "/multiplayer-game",
-        params: {
-          returningFromGame: "true",
-          gameId: gameId,
-          gameName: gameName,
-          playerCount: playerCount
-        }
-      });
-    } else {
-      // For single-player games, use the existing behavior
-      router.replace({
-        pathname: "/game-lobby",
-        params: {
-          gameName,
-          playerCount,
-          players: JSON.stringify(players.map(p => p.username)),
-          returningFromGame: true, // Flag to indicate returning from a game
-          gameId: gameId // Preserve the game ID for continuity
-        }
-      });
-    }
-  };
-
-  const handleTokenError = async (error) => {
-    console.log("Token error:", error);
-
-    if (error?.response?.status === 401) {
-      try {
-        // Try to automatically refresh the token
-        console.log("Attempting to refresh expired token");
-        const newToken = await getValidToken();
-
-        if (newToken) {
-          // Successfully refreshed, continue with the game
-          console.log("Token refreshed successfully");
-          Alert.alert(
-            "Spotify Connection Refreshed",
-            "Your Spotify connection has been refreshed. You can continue playing.",
-            [{ text: "Continue" }]
-          );
-          return;
-        } else {
-          // Failed to refresh automatically, prompt for manual authentication
-          Alert.alert(
-            "Spotify Session Expired",
-            "Your Spotify session has expired. Would you like to reconnect?",
-            [
-              {
-                text: "Cancel",
-                onPress: () => handleReturnToLobby(),
-                style: "cancel",
-              },
-              {
-                text: "Reconnect",
-                onPress: async () => {
-                  await logout();
-                  await getSpotifyAuth();
-                  Alert.alert(
-                    "Authentication Started",
-                    "Please complete the authentication in the browser. Return to the lobby when finished.",
-                    [{ text: "OK", onPress: () => handleReturnToLobby() }]
-                  );
-                },
-              },
-            ]
-          );
-        }
-      } catch (refreshError) {
-        console.error("Error refreshing token:", refreshError);
-        // Show manual re-authentication dialog
-        Alert.alert(
-          "Authentication Failed",
-          "There was a problem refreshing your Spotify session. Would you like to reconnect manually?",
-          [
-            {
-              text: "Cancel",
-              onPress: () => handleReturnToLobby(),
-              style: "cancel",
-            },
-            {
-              text: "Reconnect",
-              onPress: async () => {
-                await logout();
-                await getSpotifyAuth();
-                Alert.alert(
-                  "Authentication Started",
-                  "Please complete the authentication in the browser. Return to the lobby when finished.",
-                  [{ text: "OK", onPress: () => handleReturnToLobby() }]
-                );
-              },
-            },
-          ]
-        );
-      }
-    } else {
-      // Some other error
-      Alert.alert(
-        "Spotify Connection Error",
-        "There was a problem connecting to Spotify. Please try again later.",
-        [{ text: "OK", onPress: () => handleReturnToLobby() }]
-      );
-    }
-  };
-
-  // Add a useEffect hook that watches playbackPosition to enable voting after MIN_PLAY_DURATION
-  useEffect(() => {
-    // If we have a valid playback position that exceeds MIN_PLAY_DURATION, enable voting
-    if (playbackPosition >= MIN_PLAY_DURATION && !canVote && currentSong) {
-      console.log(`Enabling voting at position ${playbackPosition}ms`);
-      setCanVote(true);
-    }
-  }, [playbackPosition, canVote, currentSong]);
-
-  // Helper function to get the profile photo based on username
-  const getProfilePhotoForUser = (username) => {
-    // Remove @ symbol if present
-    const name = username.replace("@", "");
-
-    // Map usernames to their profile photos
-    switch (name) {
-      case "luke_mcfall":
-        return require("../assets/photos/lukepfp.png");
-      case "cole_sprout":
-        return require("../assets/photos/colepfp.png");
-      case "maya_avital":
-        return require("../assets/photos/mayapfp.png");
-      case "marcus_lintott":
-        return require("../assets/photos/marcuspfp.png");
-      default:
-        return require("../assets/pfp.png"); // Default fallback
-    }
-  };
-
-  // Add a useEffect hook to persist playedSongs in AsyncStorage
-  useEffect(() => {
-    // Load previously played songs from storage when component mounts
-    const loadPlayedSongs = async () => {
-      try {
-        const storedPlayedSongs = await AsyncStorage.getItem('playedSongs');
-        if (storedPlayedSongs) {
-          const parsedSongs = JSON.parse(storedPlayedSongs);
-          console.log(`Loaded ${parsedSongs.length} previously played songs from storage`);
-          setPlayedSongs(parsedSongs);
-        }
-      } catch (error) {
-        console.error('Error loading played songs from storage:', error);
-      }
-    };
-    
-    loadPlayedSongs();
-  }, []);
-
-  // Save played songs to storage whenever the list changes
-  useEffect(() => {
-    if (playedSongs.length > 0) {
-      const savePlayedSongs = async () => {
-        try {
-          await AsyncStorage.setItem('playedSongs', JSON.stringify(playedSongs));
-          console.log(`Saved ${playedSongs.length} played songs to storage`);
-        } catch (error) {
-          console.error('Error saving played songs to storage:', error);
-        }
-      };
-      
-      savePlayedSongs();
-    }
-  }, [playedSongs]);
-
-  // Update handlePlayAgain to reset vote selection state as well
-  const handlePlayAgain = () => {
-    // Reset voting visual state
-    setSelectedPlayer(null);
-    setShowVoteResult(false);
-    
-    // Reset the game state
-    setCurrentRound(1);
-    setGameStage("loading");
-    setPlayerSongs({});
-    setRoundSongs({});
-    
-    // Stop any playing audio
-    if (sound) {
-      sound.stopAsync();
-      sound.unloadAsync();
-      setSound(null);
-    }
-    
-    // Reset audio playback state
-    setIsPlaying(false);
-    setPlaybackPosition(0);
-    setPlaybackDuration(0);
-    setCanVote(false);
-    
-    // Use router.push instead of replace to ensure component fully remounts
-    router.push({
-      pathname: "/game-play",
-      params: {
-        gameName,
-        playerCount, 
-        gameId,
-        players: JSON.stringify(players.map(p => p.username)),
-        timestamp: Date.now(), // Add timestamp to force a refresh
-      }
-    });
-  };
-
-  // Replace the existing multiplayer useEffect with this fixed version
-  // Add socket event handlers for multiplayer synchronization
-  useEffect(() => {
-    if (!isMultiplayer) return;
-    
-    console.log("Setting up multiplayer event handlers");
-    
-    // Song selected event handler - When server broadcasts a song selection
-    const songSelectedCleanup = on(EVENTS.SONG_SELECTED, (data) => {
-      console.log("Received song_selected event:", data);
-      
-      // Verify the data has the necessary fields
-      if (!data?.song) {
-        console.error("Received incomplete song_selected data:", data);
-        return;
-      }
-      
-      console.log(`Song received: ${data.song.songTitle}, Preview URL: ${data.song.previewUrl?.substring(0, 30)}...`);
-      console.log(`Song assigned to: ${JSON.stringify(data.assignedPlayer)}`);
-      
-      // Use the song sent by the server instead of selecting our own
-      const songWithAssignment = {
-        ...data.song,
-        assignedToPlayer: data.assignedPlayer
-      };
-      
-      // Track this song for the current round
-      setRoundSongs(prev => ({
-        ...prev,
-        [data.round]: songWithAssignment
-      }));
-      
-      // Add to played songs list to avoid repeating
-      setPlayedSongs(prev => {
-        // Avoid duplicates by checking if this song is already in the list
-        if (!prev.some(s => s.songTitle === songWithAssignment.songTitle)) {
-          return [...prev, songWithAssignment];
-        }
-        return prev;
-      });
-      
-      // Stop any currently playing audio before loading the new song
-      if (sound) {
-        try {
-          sound.stopAsync().then(() => {
-            console.log("Stopped previous sound before loading new song");
-            // Load the selected song directly after stopping the previous one
-            loadAndPlaySong(songWithAssignment);
-          }).catch(err => {
-            console.error("Error stopping previous sound:", err);
-            // Still try to load the new song even if stopping failed
-            loadAndPlaySong(songWithAssignment);
-          });
-        } catch (error) {
-          console.error("Error stopping sound:", error);
-          // Still try to load the new song even if stopping failed
-          loadAndPlaySong(songWithAssignment);
-        }
-      } else {
-        // No sound playing, just load the new song
-        loadAndPlaySong(songWithAssignment);
-      }
-    });
-    
-    // Player voted event - Another player has cast their vote
-    const playerVotedCleanup = on(EVENTS.PLAYER_VOTED, (data) => {
-      console.log("Player voted:", data);
-      // Could add some visual feedback showing which players have voted
-    });
-    
-    // Vote result event - Result of your own vote
-    const voteResultCleanup = on(EVENTS.VOTE_RESULT, (data) => {
-      console.log("Vote result:", data);
-      // This event is sent only to the player who voted
-    });
-    
-    // Round complete event - All players have voted
-    const roundCompleteCleanup = on(EVENTS.ROUND_COMPLETE, (data) => {
-      console.log("Round complete:", data);
-      
-      // Show the round results to all players
-      Alert.alert(
-        "Round Complete",
-        `Everyone has voted! ${data.correctPlayer ? `${data.correctPlayer.username} listened to this song.` : ""}`,
-        [
-          {
-            text: "Next Round",
-            onPress: () => {
-              if (currentRound < ROUNDS_TOTAL) {
-                // In multiplayer, only the host can advance to the next round
-                if (isHost) {
-                  console.log("Host requesting next round");
-                  requestNextRound(gameId);
-                } else {
-                  console.log("Waiting for host to start next round");
-                }
-              } else {
-                setGameStage("results");
-              }
-            },
-          },
-        ]
-      );
-    });
-    
-    // Round started event - Server has started a new round
-    const roundStartedCleanup = on(EVENTS.ROUND_STARTED, (data) => {
-      console.log("Round started:", data);
-      
-      // Update client with new round information
-      setCurrentRound(data.round);
-      setGameStage("playing");
-      setSelectedPlayer(null);
-      setShowVoteResult(false);
-      setCanVote(false);
-      
-      // Stop any currently playing audio
-      if (sound) {
-        try {
-          sound.stopAsync();
-        } catch (error) {
-          console.error("Error stopping sound:", error);
-        }
-      }
-      
-      // In multiplayer, only the host should select and broadcast a song
-      if (isHost) {
-        console.log("Host selecting song for round", data.round);
-        
-        // Add a slightly longer delay to ensure all clients are ready
-        setTimeout(() => {
-          // Make sure we don't select a song that's already been played
-          let availableSongs = allSongs.filter(song => 
-            song.previewUrl && !playedSongs.some(played => played.songTitle === song.songTitle)
-          );
-          
-          console.log(`Found ${availableSongs.length} available songs with preview URLs`);
-          
-          if (availableSongs.length === 0) {
-            // Reset if all songs have been played or no available songs found
-            console.log("No available songs with preview URLs, resetting played songs");
-            setPlayedSongs([]);
-            
-            // Filter out songs with no preview URL
-            availableSongs = allSongs.filter(song => song.previewUrl);
-            
-            if (availableSongs.length === 0) {
-              console.error("No songs with preview URLs available!");
-              // Alert the players
-              Alert.alert(
-                "Error",
-                "No songs available for playback. Please try restarting the game.",
-                [{ text: "OK" }]
-              );
-              return;
-            }
-          }
-          
-          // Select a random song and player with explicit logging
-          const randomIndex = Math.floor(Math.random() * availableSongs.length);
-          const selectedSong = availableSongs[randomIndex];
-          const randomPlayerIndex = Math.floor(Math.random() * players.length);
-          const assignedPlayer = players[randomPlayerIndex];
-          
-          console.log(`Selected song "${selectedSong.songTitle}" with preview URL: ${selectedSong.previewUrl?.substring(0, 30)}...`);
-          console.log(`Assigning song to player: ${assignedPlayer.username}`);
-          
-          // Send selection to server to broadcast to all players
-          const success = selectSong(gameId, selectedSong, assignedPlayer);
-          
-          if (!success) {
-            console.error("Failed to select song for round", data.round);
-            // Try again after a short delay
-            setTimeout(() => {
-              console.log("Retrying song selection...");
-              selectSong(gameId, selectedSong, assignedPlayer);
-            }, 1000);
-          }
-        }, 1000); // Increased delay for better synchronization
-      } else {
-        console.log("Client waiting for host to select song for round", data.round);
-      }
-    });
-    
-    // Clean up event listeners
-    return () => {
-      songSelectedCleanup && songSelectedCleanup();
-      playerVotedCleanup && playerVotedCleanup();
-      voteResultCleanup && voteResultCleanup();
-      roundCompleteCleanup && roundCompleteCleanup();
-      roundStartedCleanup && roundStartedCleanup();
-    };
-  }, [isMultiplayer, gameId, players, allSongs, playedSongs, currentRound, isHost, on, selectSong, requestNextRound]);
-
-  // Add a new useEffect for handling multiplayer game initialization
-  useEffect(() => {
-    // Only run this for multiplayer games when we have songs loaded
-    if (isMultiplayer && allSongs.length > 0 && !isLoading) {
-      console.log("Initializing multiplayer game with loaded songs");
-      console.log(`Current state - isHost: ${isHost}, currentRound: ${currentRound}, gameStage: ${gameStage}`);
-      console.log(`Available songs: ${allSongs.length}`);
-      
-      // If this client is the host, start the first round by selecting a song
-      if (isHost && currentRound === 1 && gameStage === "loading") {
-        console.log("Host initializing first round");
-        setGameStage("playing");
-        
-        // Make multiple attempts to select a song and start the game
-        let attempts = 0;
-        const maxAttempts = 3;
-        
-        const attemptSelectSong = () => {
-          if (attempts < maxAttempts) {
-            attempts++;
-            console.log(`Attempt ${attempts} to select initial song...`);
-            
-            setTimeout(() => {
-              if (allSongs.length > 0 && players.length > 0) {
-                // Select a random song and player for the first round
-                const randomIndex = Math.floor(Math.random() * allSongs.length);
-                const selectedSong = allSongs[randomIndex];
-                const assignedPlayer = players[Math.floor(Math.random() * players.length)];
-                
-                console.log(`Host selecting initial song: ${selectedSong.songTitle}`);
-                console.log(`Song assigned to player: ${assignedPlayer}`);
-                selectSong(gameId, selectedSong, assignedPlayer);
-              } else {
-                console.log("Cannot select song: not enough songs or players");
-                // Try again after a delay
-                setTimeout(attemptSelectSong, 1000);
-              }
-            }, 1000 * attempts); // Increasing delay for each attempt
-          } else {
-            console.log("Maximum attempts reached. Please restart the game.");
-          }
-        };
-        
-        // Start the attempt process
-        attemptSelectSong();
-      } else if (!isHost) {
-        console.log("Client waiting for host to select song");
-      }
-    }
-  }, [isMultiplayer, isHost, allSongs, isLoading, gameStage, currentRound, gameId, players, selectSong]);
-
-  // Add a useEffect to ensure proper initialization of multiplayer game UI
-  useEffect(() => {
-    if (isMultiplayer && gameStage === "loading") {
-      console.log("Initializing multiplayer game UI");
-      
-      // If songs have been loaded, move to playing state
-      if (allSongs.length > 0 && !isLoading) {
-        console.log("Songs loaded, setting game stage to playing");
-        setGameStage("playing");
-        
-        // In multiplayer, only the host should initiate the first round
-        if (isHost) {
-          console.log("Host initializing first round");
-          // Add a short delay to ensure all clients are connected
-          setTimeout(() => {
-            // Request the server to start the first round
-            requestNextRound(gameId);
-          }, 1500);
-        } else {
-          console.log("Client waiting for host to initialize first round");
-        }
-      }
-    }
-  }, [isMultiplayer, gameStage, allSongs.length, isLoading, isHost, gameId, requestNextRound]);
-
-  // Also ensure we have specific handling for when the WebSocket connection is active but UI isn't showing
-  useEffect(() => {
-    if (isMultiplayer && isConnected && gameStage === "loading" && playbackPosition > 0) {
-      console.log("Detected active playback but game still in loading state, fixing UI");
-      setGameStage("playing");
-    }
-  }, [isMultiplayer, isConnected, gameStage, playbackPosition]);
-
-  // Add a WebSocket connection monitoring and auto-reconnect system
-  useEffect(() => {
-    if (!isMultiplayer) return;
-    
-    // Log connection status for debugging
-    console.log(`[GamePlay] WebSocket connection status: ${isConnected ? 'Connected' : 'Disconnected'}`);
-    
-    // If we're disconnected but in a multiplayer game, try to reconnect
-    if (!isConnected && gameId) {
-      // Set a timeout to prevent too frequent reconnection attempts
-      const reconnectTimeout = setTimeout(() => {
-        console.log('[GamePlay] Attempting to reconnect to the multiplayer game...');
-        
-        // Navigate back to the multiplayer game screen to trigger reconnection
-        router.replace({
-          pathname: "/multiplayer-game",
-          params: {
-            returningFromGame: "true",
-            gameId: gameId,
-            gameName: gameName,
-            playerCount: playerCount
-          }
-        });
-      }, 5000); // Wait 5 seconds before attempting reconnection
-      
-      // Clear the timeout if component unmounts or connection is restored
-      return () => clearTimeout(reconnectTimeout);
-    }
-  }, [isConnected, isMultiplayer, gameId, gameName, playerCount, router]);
-
-  // Modify the connection status indicator to show reconnecting state
-  const renderConnectionStatus = () => {
-    if (!isMultiplayer) return null;
-    
-    return (
-      <View style={styles.connectionStatusContainer}>
-        <View style={[
-          styles.connectionIndicator, 
-          isConnected ? styles.connectionActive : styles.connectionInactive
-        ]} />
-        <Text style={styles.connectionStatusText}>
-          {isConnected ? 'Connected' : 'Disconnected'}
-        </Text>
-        {!isConnected && (
-          <TouchableOpacity 
-            style={styles.reconnectButton}
-            onPress={() => router.replace({
-              pathname: "/multiplayer-game",
-              params: {
-                returningFromGame: "true",
-                gameId: gameId,
-                gameName: gameName,
-                playerCount: playerCount
-              }
-            })}
-          >
-            <Text style={styles.reconnectButtonText}>Reconnect</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    );
-  };
-
-  // Modify the main return statement to preserve the original layout but add our connection indicator
   return (
     <SafeAreaView style={styles.container}>
-      {renderConnectionStatus()}
-      
-      <View style={styles.gameStatusBar}>
-        <Text style={styles.roundText}>
-          Round {currentRound} of {ROUNDS_TOTAL}
-        </Text>
-      </View>
-
-      {currentSong && gameStage === "playing" && (
-        <View style={styles.songPlaybackContainer}>
-          <View style={styles.albumArtworkWrapper}>
-            <Image
-              source={{ uri: currentSong.imageUrl }}
-              style={styles.albumArtwork}
-            />
-          </View>
-
-          {/* Audio controls */}
-          <View style={styles.audioControlsContainer}>
-            {/* Audio progress bar */}
-            <View style={styles.progressBarContainer}>
-              <Slider
-                style={styles.progressBar}
-                minimumValue={0}
-                maximumValue={
-                  playbackDuration > 0 ? playbackDuration : 30000
-                }
-                value={playbackPosition}
-                minimumTrackTintColor="#44C568"
-                maximumTrackTintColor="#333"
-                thumbTintColor="#44C568"
-                onSlidingComplete={async (value) => {
-                  if (sound) {
-                    try {
-                      await sound.setPositionAsync(value);
-                    } catch (error) {
-                      console.error(
-                        "Error seeking in audio playback:",
-                        error
-                      );
-                    }
-                  }
-                }}
-                disabled={!sound || audioLoadError}
-              />
-              <View style={styles.durationLabels}>
-                <Text style={styles.durationText}>
-                  {formatTime(playbackPosition)}
-                </Text>
-                <Text style={styles.durationText}>
-                  {formatTime(Math.min(playbackDuration, 30000))}
-                </Text>
-              </View>
-            </View>
-
-            {/* Play/Pause button */}
-            <View style={styles.playButtonContainer}>
-              {isLoadingAudio ? (
-                <ActivityIndicator size="large" color="#44C568" />
-              ) : (
-                <TouchableOpacity
-                  style={[
-                    styles.playButton,
-                    audioLoadError && styles.playButtonDisabled,
-                  ]}
-                  onPress={togglePlayPause}
-                  disabled={audioLoadError}
-                >
-                  <Ionicons
-                    name={isPlaying ? "pause" : "play"}
-                    size={32}
-                    color="white"
-                  />
-                </TouchableOpacity>
-              )}
-            </View>
-
-            {/* Audio load error message */}
-            {audioLoadError && (
-              <Text style={styles.audioErrorText}>
-                Error loading audio. {audioLoadError}
-              </Text>
-            )}
-
-            {/* Countdown to voting */}
-            {!canVote && !audioLoadError && (
-              <Text style={styles.countdownText}>
-                {`Listen now! Voting enabled after ${Math.ceil(
-                  (MIN_PLAY_DURATION - playbackPosition) / 1000
-                )} seconds...`}
-              </Text>
-            )}
-          </View>
-        </View>
-      )}
-      
-      {/* Rest of the UI remains the same */}
-      {gameStage === "voting" && (
-        <View style={styles.votingContainer}>
-          <Text style={styles.votingInstructions}>
-            Who do you think listened to this song?
-          </Text>
-
-          <View style={styles.playersGrid}>
-            {players.map((player) => {
-              // Determine style based on selection and result
-              const isSelected = selectedPlayer === player.username;
-              const isCorrect = currentSong?.assignedToPlayer?.username === player.username;
-              const wasVoted = isSelected && showVoteResult;
-              
-              // Determine the button style for dynamic feedback
-              let buttonStyle = styles.playerVoteButton;
-              if (wasVoted) {
-                if (isCorrect) {
-                  buttonStyle = [styles.playerVoteButton, styles.correctVoteButton];
-                } else {
-                  buttonStyle = [styles.playerVoteButton, styles.incorrectVoteButton];
-                }
-              } else if (showVoteResult && isCorrect) {
-                // Show correct answer even if not selected
-                buttonStyle = [styles.playerVoteButton, styles.correctVoteButton];
-              }
-              
-              return (
-                <Pressable
-                  key={player.id}
-                  style={buttonStyle}
-                  onPress={() => {
-                    // Only allow selection if no result is shown yet
-                    if (showVoteResult) return;
-                    
-                    // Set the selected player
-                    setSelectedPlayer(player.username);
-                    setShowVoteResult(true);
-                    
-                    // Create the vote record
-                    const isCorrectGuess = player.username === currentSong?.assignedToPlayer?.username;
-                    const newVote = {
-                      round: currentRound,
-                      songId: currentSong?.songTitle,
-                      votedFor: player.username,
-                      correctPlayer: currentSong?.assignedToPlayer?.username,
-                      isCorrect: isCorrectGuess
-                    };
-
-                    // Update player scores tracking
-                    setPlayerSongs(prev => ({
-                      ...prev,
-                      [player.username]: [...(prev[player.username] || []), newVote]
-                    }));
-
-                    // Update points for @cole_sprout if the current user makes a correct guess
-                    if (isCorrectGuess) {
-                      setPlayerPoints(prev => ({
-                        ...prev,
-                        "@cole_sprout": (prev["@cole_sprout"] || 0) + 1
-                      }));
-                      console.log("Point awarded to @cole_sprout! New score:", playerPoints["@cole_sprout"] + 1);
-                    }
-
-                    console.log("Vote cast:", newVote);
-                    
-                    // In multiplayer mode, send the vote to the server
-                    if (isMultiplayer) {
-                      castVote(gameId, player.username);
-                      
-                      // In multiplayer, wait for the server's round_complete event
-                      // Do not show the result alert or advance to next round immediately
-                      Alert.alert(
-                        isCorrectGuess ? "Vote Submitted" : "Vote Submitted",
-                        "Waiting for other players to vote...",
-                        [{ text: "OK" }]
-                      );
-                    } else {
-                      // In single player mode, show result and allow advancing to next round immediately
-                      setTimeout(() => {
-                        Alert.alert(
-                          isCorrectGuess ? "Correct!" : "Incorrect!",
-                          isCorrectGuess
-                            ? `Yes, ${player.username} listened to this song!`
-                            : `Actually, ${currentSong?.assignedToPlayer?.username} listened to this song.`,
-                          [
-                            {
-                              text: "Next Round",
-                              onPress: () => {
-                                // Reset voting states before moving to next round
-                                nextRound(); // Call local nextRound function
-                              },
-                            },
-                          ]
-                        );
-                      }, 800);
-                    }
-                  }}
-                >
-                  <View style={styles.profileImageContainer}>
-                    <View style={styles.profileBackground}>
-                      <Image
-                        source={getProfilePhotoForUser(player.username)}
-                        style={styles.profileImage}
-                      />
-                    </View>
-                  </View>
-                  <Text style={styles.playerVoteName}>{player.username}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-      )}
-      
-      {gameStage === "results" && (
-        <ScrollView contentContainerStyle={styles.resultsScrollContent}>
-          <View style={styles.resultsContainer}>
-            <Text style={styles.resultsTitle}>Game Complete!</Text>
-
-            <View style={styles.gameStats}>
-              <Text style={styles.gameStatsHeader}>
-              </Text>
-
-              <Text style={styles.gameStatLine}>
-                Players: {players.map((p) => p.username).join(", ")}
-              </Text>
-
-              <Text style={styles.gameStatLine}>
-                Songs played: {currentRound}
-              </Text>
-
-              <Text style={styles.gameStatLine}>
-                Game type: Guess The Listener
-              </Text>
-            </View>
-            
-            {/* Player scores section */}
-            <View style={styles.scoresContainer}>
-              <Text style={styles.scoresTitle}>Player Scores</Text>
-              <View style={styles.scoresList}>
-                {players.map(player => (
-                  <View key={player.id} style={styles.scoreItem}>
-                    <View style={styles.scorePlayerInfo}>
-                      <Image 
-                        source={getProfilePhotoForUser(player.username)}
-                        style={styles.scorePlayerAvatar}
-                      />
-                      <Text style={styles.scorePlayerName}>{player.username}</Text>
-                    </View>
-                    <Text style={styles.scoreValue}>
-                      {player.username === "@cole_sprout" 
-                        ? playerPoints["@cole_sprout"] || 0 
-                        : 0} 
-                      points
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-
-            <View style={styles.reviewListContainer}>
-              <Text style={styles.reviewListTitle}>Who listened to what?</Text>
-              {Object.keys(roundSongs).map((round) => (
-                <View key={round} style={styles.reviewListItem}>
-                  <Image
-                    source={{ uri: roundSongs[round].imageUrl }}
-                    style={styles.reviewSongImage}
-                  />
-                  <View style={styles.reviewSongInfo}>
-                    <Text style={styles.reviewSongTitle}>{roundSongs[round].songTitle}</Text>
-                    <Text style={styles.reviewSongArtist}>
-                      {roundSongs[round].songArtists.join(", ")}
-                    </Text>
-                  </View>
-                  <View style={styles.reviewPlayerInfo}>
-                    <View style={styles.reviewPlayerAvatarWrapper}>
-                      <Image
-                        source={getProfilePhotoForUser(
-                          roundSongs[round].assignedToPlayer?.username || ""
-                        )}
-                        style={styles.reviewPlayerAvatar}
-                      />
-                    </View>
-                    <Text style={styles.reviewPlayerName}>
-                      {roundSongs[round].assignedToPlayer?.username}
-                    </Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-
-            <View style={styles.buttonsContainer}>
-              <Pressable style={styles.returnButton} onPress={handleReturnToLobby}>
-                <Text style={styles.returnButtonText}>Return to Lobby</Text>
-              </Pressable>
-              <Pressable style={styles.playAgainButton} onPress={handlePlayAgain}>
-                <Text style={styles.playAgainButtonText}>Play Again</Text>
-              </Pressable>
-            </View>
-          </View>
-        </ScrollView>
-      )}
+      {renderGameContent()}
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#1E1E1E",
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    backgroundColor: "#8E44AD",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    height: 100,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.6,
+    shadowRadius: 7,
+    elevation: 5,
+  },
+  headerTitleContainer: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 10,
+    alignItems: "center",
+  },
+  headerTitle: {
+    color: "#FFC857",
+    fontSize: 24,
+    fontWeight: "bold",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    color: "white",
+    fontSize: 18,
+    marginTop: 16,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  errorTitle: {
+    color: "#FF6B6B",
+    fontSize: 24,
+    fontWeight: "bold",
+    marginTop: 16,
+  },
+  errorMessage: {
+    color: "white",
+    fontSize: 16,
+    textAlign: "center",
+    marginTop: 8,
+    marginBottom: 24,
+  },
+  errorButton: {
+    backgroundColor: "#8E44AD",
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 50,
+  },
+  errorButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  gameContainer: {
+    flex: 1,
+    padding: 16,
+  },
+  roundInfo: {
+    alignItems: "center",
+    marginVertical: 8,
+  },
+  roundText: {
+    color: "#FFC857",
+    fontSize: 20,
+    fontWeight: "bold",
+  },
+  playerSection: {
+    backgroundColor: "#242424",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    alignItems: "center",
+  },
+  albumArtContainer: {
+    width: 200,
+    height: 200,
+    borderRadius: 8,
+    overflow: "hidden",
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  albumArt: {
+    width: "100%",
+    height: "100%",
+  },
+  trackInfo: {
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  trackTitle: {
+    color: "white",
+    fontSize: 20,
+    fontWeight: "bold",
+    textAlign: "center",
+  },
+  trackArtist: {
+    color: "#BBB",
+    fontSize: 16,
+    textAlign: "center",
+    marginTop: 4,
+  },
+  audioErrorContainer: {
+    backgroundColor: "rgba(255, 107, 107, 0.2)",
+    padding: 10,
+    borderRadius: 8,
+    marginVertical: 16,
+    width: "100%",
+    alignItems: "center",
+  },
+  audioErrorText: {
+    color: "#FF6B6B",
+    textAlign: "center",
+  },
+  loadingAudioContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginVertical: 16,
+  },
+  loadingAudioText: {
+    color: "white",
+    marginLeft: 10,
+  },
+  playbackContainer: {
+    width: "100%",
+    alignItems: "center",
+  },
+  slider: {
+    width: "100%",
+    height: 40,
+  },
+  timeContainer: {
+    width: "100%",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 16,
+  },
+  timeText: {
+    color: "#BBB",
+    fontSize: 12,
+  },
+  playButton: {
+    backgroundColor: "#8E44AD",
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  votingSection: {
+    flex: 1,
+  },
+  votingPrompt: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 16,
+  },
+  playersGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+  },
+  playerVoteCard: {
+    backgroundColor: "#242424",
+    width: "48%",
+    aspectRatio: 1,
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "transparent",
+  },
+  selectedPlayerCard: {
+    borderColor: "#8E44AD",
+    backgroundColor: "#341547",
+  },
+  playerAvatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    marginBottom: 12,
+  },
+  playerUsername: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
+    textAlign: "center",
+  },
+  voteButtonContainer: {
+    alignItems: "center",
+    marginTop: 16,
+    marginBottom: 24,
+  },
+  voteButton: {
+    backgroundColor: "#8E44AD",
+    paddingHorizontal: 32,
+    paddingVertical: 16,
+    borderRadius: 50,
+    minWidth: 200,
+    alignItems: "center",
+  },
+  voteButtonDisabled: {
+    backgroundColor: "#3E2844",
+    opacity: 0.7,
+  },
+  voteButtonText: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  waitingForVotesContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 16,
+  },
+  waitingForVotesText: {
+    color: "#BBB",
+    fontSize: 14,
+  },
+  resultsSection: {
+    backgroundColor: "#242424",
+    borderRadius: 16,
+    padding: 16,
+    flex: 1,
+  },
+  resultsTitle: {
+    color: "#FFC857",
+    fontSize: 22,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 16,
+  },
+  correctAnswerContainer: {
+    backgroundColor: "#1E1E1E",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  correctAnswerLabel: {
+    color: "#FFC857",
+    fontSize: 16,
+    fontWeight: "bold",
+    marginBottom: 12,
+  },
+  ownerContainer: {
+    alignItems: "center",
+  },
+  ownerInfoContainer: {
+    alignItems: "center",
+  },
+  ownerAvatar: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    marginBottom: 8,
+  },
+  ownerUsername: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  votesTitle: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 12,
+  },
+  votesScrollView: {
+    flex: 1,
+  },
+  voteResultRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#1E1E1E",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+  },
+  playerVoteInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  voteResultAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 12,
+  },
+  voteResultUsername: {
+    color: "white",
+    fontSize: 16,
+  },
+  voteCountContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#2A2A2A",
+    borderRadius: 16,
+    padding: 8,
+  },
+  voteCount: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
+    marginRight: 4,
+  },
+  gameOverContainer: {
+    flex: 1,
+    padding: 24,
+  },
+  gameOverTitle: {
+    color: "#FFC857",
+    fontSize: 36,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  gameOverSubtitle: {
+    color: "white",
+    fontSize: 24,
+    textAlign: "center",
+    marginBottom: 24,
+  },
+  scoresScrollView: {
+    flex: 1,
+    marginBottom: 24,
+  },
+  playerScoreRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#242424",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  winnerRow: {
+    borderColor: "#FFC857",
+    borderWidth: 2,
+    backgroundColor: "#312912",
+  },
+  rankContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#3A3A3A",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  rankText: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  playerScoreInfo: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  scoreAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    marginRight: 12,
+  },
+  scoreUsername: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  pointsContainer: {
+    alignItems: "flex-end",
+  },
+  pointsText: {
+    color: "#FFC857",
+    fontSize: 24,
+    fontWeight: "bold",
+  },
+  pointsLabel: {
+    color: "#BBB",
+    fontSize: 14,
+  },
+  gameOverButtonsContainer: {
+    marginBottom: 24,
+  },
+  playAgainButton: {
+    backgroundColor: "#8E44AD",
+    borderRadius: 50,
+    paddingVertical: 16,
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  playAgainButtonText: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  returnToHomeButton: {
+    backgroundColor: "#333",
+    borderRadius: 50,
+    paddingVertical: 16,
+    alignItems: "center",
+  },
+  returnToHomeButtonText: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  resultsContainer: {
+    flex: 1,
+    padding: 24,
+  },
+  finalResultsScroll: {
+    flex: 1,
+    marginBottom: 24,
+  },
+  playerResultRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#242424",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  winnerAvatar: {
+    borderColor: "#FFC857",
+    borderWidth: 2,
+    backgroundColor: "#312912",
+  },
+  playerResultInfo: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  resultAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    marginRight: 12,
+  },
+  resultUsername: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  scoreContainer: {
+    alignItems: "flex-end",
+  },
+  scoreText: {
+    color: "#FFC857",
+    fontSize: 24,
+    fontWeight: "bold",
+  },
+  nextRoundContainer: {
+    alignItems: "center",
+    marginTop: 16,
+  },
+  nextRoundButton: {
+    backgroundColor: "#8E44AD",
+    borderRadius: 50,
+    paddingVertical: 16,
+    alignItems: "center",
+  },
+  nextRoundButtonText: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  correctPlayerCard: {
+    borderColor: "#00FF00",
+    backgroundColor: "#003300",
+  },
+  playerAvatarContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    marginBottom: 12,
+  },
+  debugText: {
+    color: "#AAA",
+    fontSize: 12,
+    marginTop: 8,
+    textAlign: "center",
+  },
+  noSongContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  noSongText: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+});
