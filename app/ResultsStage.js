@@ -42,7 +42,7 @@ const ResultsStage = ({
         </View>
         {/* Player scores section */}
         <View style={resultsStyles.scoresContainer}>
-          <Text style={resultsStyles.scoresTitle}>Player Scores</Text>
+          <Text style={resultsStyles.scoresTitle}>Final Scores</Text>
           <View style={resultsStyles.scoresList}>
             {sortedPlayers.map((player, idx) => (
               <View

@@ -42,8 +42,14 @@ const LeaderboardScreen = ({
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.revealTitle}>THE REVEAL</Text>
+      {/* <Text style={styles.revealTitle}>THE REVEAL</Text> */}
       <View style={styles.revealSection}>
+        <View style={styles.albumArtWrapper}>
+          <Image
+            source={{ uri: currentSong?.imageUrl }}
+            style={styles.albumArt}
+          />
+        </View>
         <View style={styles.profileCircleWrapper}>
           <View style={styles.profileCircle}>
             <Image
@@ -53,17 +59,11 @@ const LeaderboardScreen = ({
           </View>
           <Text style={styles.assignedUserName}>{assignedUser?.username}</Text>
         </View>
-        <View style={styles.albumArtWrapper}>
-          <Image
-            source={{ uri: currentSong?.imageUrl }}
-            style={styles.albumArt}
-          />
-        </View>
       </View>
       <Text style={styles.roundText}>ROUND {currentRound}</Text>
       {/* Player scores section */}
       <View style={styles.scoresContainer}>
-        <Text style={styles.scoresTitle}>Player Scores</Text>
+        <Text style={styles.scoresTitle}>Leaderboard</Text>
         <View style={styles.scoresList}>
           {sortedPlayers.map((player, idx) => (
             <View
@@ -102,27 +102,30 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     alignSelf: "flex-start",
     marginBottom: deviceHeight * 0.01,
-    marginLeft: deviceWidth * 0.01,
-    fontFamily: "MarkerFelt-Thin",
+    marginLeft: deviceWidth * 0.02,
+    //fontFamily: "MarkerFelt-Thin",
     letterSpacing: 1.5,
-    transform: [{ rotate: "-10deg" }],
+    //transform: [{ rotate: "-10deg" }],
   },
   revealSection: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: deviceHeight * 0.025,
     width: "100%",
-    justifyContent: "flex-start",
+    justifyContent: "center",
   },
   profileCircleWrapper: {
     alignItems: "center",
-    marginRight: deviceWidth * 0.025,
+    // marginRight: deviceWidth * 0.025,
+    position: "absolute",
+    left: deviceWidth * 0.025,
+    bottom: deviceHeight * -0.06,
   },
   profileCircle: {
-    width: deviceWidth * 0.22,
-    height: deviceWidth * 0.22,
-    borderRadius: deviceWidth * 0.11,
-    borderWidth: 4,
+    width: deviceWidth * 0.2,
+    height: deviceWidth * 0.2,
+    borderRadius: 500,
+    borderWidth: 1,
     borderColor: "#8E44AD",
     backgroundColor: "#232323",
     justifyContent: "center",
@@ -135,24 +138,22 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   profileImage: {
-    width: deviceWidth * 0.17,
-    height: deviceWidth * 0.17,
+    width: deviceWidth * 0.2,
+    height: deviceWidth * 0.2,
     borderRadius: deviceWidth * 0.085,
     resizeMode: "cover",
   },
   assignedUserName: {
     color: "#8E44AD",
     fontSize: deviceWidth * 0.05,
-    fontWeight: "bold",
-    marginTop: 2,
-    transform: [{ rotate: "-20deg" }],
-    fontFamily: "MarkerFelt-Thin",
+    transform: [{ rotate: "-10deg" }],
+    //fontFamily: "MarkerFelt-Thin",
   },
   albumArtWrapper: {
-    borderWidth: 4,
+    borderWidth: 1,
     borderColor: "#8E44AD",
     borderRadius: deviceWidth * 0.045,
-    marginLeft: deviceWidth * 0.025,
+    //marginLeft: deviceWidth * 0.025,
     shadowColor: "#8E44AD",
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.5,
@@ -160,8 +161,8 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   albumArt: {
-    width: deviceWidth * 0.32,
-    height: deviceWidth * 0.32,
+    width: deviceWidth * 0.6,
+    height: deviceWidth * 0.6,
     borderRadius: deviceWidth * 0.035,
   },
   roundText: {
@@ -169,9 +170,9 @@ const styles = StyleSheet.create({
     fontSize: deviceWidth * 0.055,
     fontWeight: "bold",
     alignSelf: "flex-end",
-    marginRight: deviceWidth * 0.025,
+    // marginRight: deviceWidth * 0.025,
     marginBottom: deviceHeight * 0.02,
-    fontFamily: "MarkerFelt-Thin",
+    //fontFamily: "MarkerFelt-Thin",
     transform: [{ rotate: "8deg" }],
   },
   scoresContainer: {
