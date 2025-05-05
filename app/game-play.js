@@ -28,20 +28,22 @@ import {
   findDeezerTrackFromSpotify,
 } from "../utils/deezerApi";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import VotingStage from "./VotingStage";
+import ResultsStage from "./ResultsStage";
 
 const ALBUM_ID = "2noRn2Aes5aoNVsU6iWThc";
-const ROUNDS_TOTAL = 3;
+const ROUNDS_TOTAL = 2;
 const MIN_PLAY_DURATION = 15000; // Set to 15 seconds as specified
 
 // Format time helper function
 const formatTime = (milliseconds) => {
   if (!milliseconds) return "0:00";
-  
+
   let totalSeconds = Math.floor(milliseconds / 1000);
   let minutes = Math.floor(totalSeconds / 60);
   let seconds = totalSeconds % 60;
-  
-  return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+
+  return `${minutes}:${seconds < 10 ? "0" : ""}${seconds}`;
 };
 
 export default function GamePlay() {
@@ -129,6 +131,10 @@ export default function GamePlay() {
   const [playerPoints, setPlayerPoints] = useState({
     "@cole_sprout": 0,
   });
+
+  // const [playerPoints, setPlayerPoints] = useState(
+  //   Object.fromEntries(players.map((p) => [p.username, 0]))
+  // );
 
   // Add a state variable to track the voting progress percentage
   const [voteProgress, setVoteProgress] = useState(0);
@@ -564,7 +570,10 @@ export default function GamePlay() {
     setIsPlaying(status.isPlaying);
 
     // Calculate vote progress as a percentage (0-100)
-    const progress = Math.min(100, (status.positionMillis / MIN_PLAY_DURATION) * 100);
+    const progress = Math.min(
+      100,
+      (status.positionMillis / MIN_PLAY_DURATION) * 100
+    );
     setVoteProgress(progress);
 
     // Enable voting after at least 15 seconds
@@ -585,7 +594,10 @@ export default function GamePlay() {
   // Update loadAndPlaySong function to handle Deezer icons
   const loadAndPlaySong = async (song) => {
     console.log("Loading song:", song?.songTitle);
-    console.log("Assigned to player:", song?.assignedToPlayer?.username || "none");
+    console.log(
+      "Assigned to player:",
+      song?.assignedToPlayer?.username || "none"
+    );
 
     // Verify we have a valid song object
     if (!song) {
@@ -622,7 +634,7 @@ export default function GamePlay() {
             deezerInfo: {
               trackId: deezerTrack.trackId,
               externalUrl: deezerTrack.externalUrl,
-            }
+            },
           };
           setCurrentSong(updatedSong);
           song = updatedSong;
@@ -717,55 +729,61 @@ export default function GamePlay() {
     if (!songs || songs.length === 0) return;
 
     console.log("Selecting song for round", round);
-    console.log("Already played songs:", playedSongs.map(s => s.songTitle));
-    
-    // Filter out songs that have already been played
-    const availableSongs = songs.filter(song => 
-      !playedSongs.some(played => played.songTitle === song.songTitle)
+    console.log(
+      "Already played songs:",
+      playedSongs.map((s) => s.songTitle)
     );
-    
+
+    // Filter out songs that have already been played
+    const availableSongs = songs.filter(
+      (song) =>
+        !playedSongs.some((played) => played.songTitle === song.songTitle)
+    );
+
     console.log("Available songs:", availableSongs.length);
-    
+
     // If we've played all songs, reset the played songs tracking
     if (availableSongs.length === 0) {
       console.log("All songs have been played, resetting tracking");
       setPlayedSongs([]);
-      
+
       // Assign a random player for fallback case
       const randomPlayer = players[Math.floor(Math.random() * players.length)];
       const songWithPlayer = {
         ...songs[Math.floor(Math.random() * songs.length)],
-        assignedToPlayer: randomPlayer
+        assignedToPlayer: randomPlayer,
       };
-      
+
       loadAndPlaySong(songWithPlayer);
       return;
     }
-    
+
     // Select a random song from available songs
     const randomIndex = Math.floor(Math.random() * availableSongs.length);
     const selectedSong = availableSongs[randomIndex];
-    
+
     // Assign the song to a random player
     const randomPlayerIndex = Math.floor(Math.random() * players.length);
     const assignedPlayer = players[randomPlayerIndex];
-    
-    console.log(`Assigning song ${selectedSong.songTitle} to player: ${assignedPlayer.username}`);
-    
+
+    console.log(
+      `Assigning song ${selectedSong.songTitle} to player: ${assignedPlayer.username}`
+    );
+
     const songWithAssignment = {
       ...selectedSong,
       assignedToPlayer: assignedPlayer,
     };
-    
+
     // Track this song for the current round
-    setRoundSongs(prev => ({
+    setRoundSongs((prev) => ({
       ...prev,
-      [round]: songWithAssignment
+      [round]: songWithAssignment,
     }));
-    
+
     // Add to played songs list to avoid repeating
-    setPlayedSongs(prev => [...prev, songWithAssignment]);
-    
+    setPlayedSongs((prev) => [...prev, songWithAssignment]);
+
     // Load the selected song
     loadAndPlaySong(songWithAssignment);
   };
@@ -775,14 +793,18 @@ export default function GamePlay() {
     // Reset voting visual state
     setSelectedPlayer(null);
     setShowVoteResult(false);
-    
+
     // Log debug info about current round
     console.log(`Round ${currentRound} completed`);
     if (currentSong) {
       console.log(`Song: ${currentSong.songTitle}`);
-      console.log(`Assigned to player: ${currentSong.assignedToPlayer?.username || 'none'}`);
+      console.log(
+        `Assigned to player: ${
+          currentSong.assignedToPlayer?.username || "none"
+        }`
+      );
     }
-    
+
     // Stop current playback
     if (sound) {
       try {
@@ -811,15 +833,17 @@ export default function GamePlay() {
     } else {
       // Game over - would show final results
       setGameStage("results");
-      
+
       // Calculate player scores
       const playerScores = {};
-      
+
       // Count correct votes for each player
       Object.entries(playerSongs).forEach(([playerName, votes]) => {
-        playerScores[playerName] = votes.filter(vote => vote.isCorrect).length;
+        playerScores[playerName] = votes.filter(
+          (vote) => vote.isCorrect
+        ).length;
       });
-      
+
       console.log("Final scores:", playerScores);
     }
   };
@@ -831,10 +855,10 @@ export default function GamePlay() {
       params: {
         gameName,
         playerCount,
-        players: JSON.stringify(players.map(p => p.username)),
+        players: JSON.stringify(players.map((p) => p.username)),
         returningFromGame: true, // Flag to indicate returning from a game
-        gameId: gameId // Preserve the game ID for continuity
-      }
+        gameId: gameId, // Preserve the game ID for continuity
+      },
     });
   };
 
@@ -953,17 +977,19 @@ export default function GamePlay() {
     // Load previously played songs from storage when component mounts
     const loadPlayedSongs = async () => {
       try {
-        const storedPlayedSongs = await AsyncStorage.getItem('playedSongs');
+        const storedPlayedSongs = await AsyncStorage.getItem("playedSongs");
         if (storedPlayedSongs) {
           const parsedSongs = JSON.parse(storedPlayedSongs);
-          console.log(`Loaded ${parsedSongs.length} previously played songs from storage`);
+          console.log(
+            `Loaded ${parsedSongs.length} previously played songs from storage`
+          );
           setPlayedSongs(parsedSongs);
         }
       } catch (error) {
-        console.error('Error loading played songs from storage:', error);
+        console.error("Error loading played songs from storage:", error);
       }
     };
-    
+
     loadPlayedSongs();
   }, []);
 
@@ -972,13 +998,16 @@ export default function GamePlay() {
     if (playedSongs.length > 0) {
       const savePlayedSongs = async () => {
         try {
-          await AsyncStorage.setItem('playedSongs', JSON.stringify(playedSongs));
+          await AsyncStorage.setItem(
+            "playedSongs",
+            JSON.stringify(playedSongs)
+          );
           console.log(`Saved ${playedSongs.length} played songs to storage`);
         } catch (error) {
-          console.error('Error saving played songs to storage:', error);
+          console.error("Error saving played songs to storage:", error);
         }
       };
-      
+
       savePlayedSongs();
     }
   }, [playedSongs]);
@@ -988,36 +1017,36 @@ export default function GamePlay() {
     // Reset voting visual state
     setSelectedPlayer(null);
     setShowVoteResult(false);
-    
+
     // Reset the game state
     setCurrentRound(1);
     setGameStage("loading");
     setPlayerSongs({});
     setRoundSongs({});
-    
+
     // Stop any playing audio
     if (sound) {
       sound.stopAsync();
       sound.unloadAsync();
       setSound(null);
     }
-    
+
     // Reset audio playback state
     setIsPlaying(false);
     setPlaybackPosition(0);
     setPlaybackDuration(0);
     setCanVote(false);
-    
+
     // Use router.push instead of replace to ensure component fully remounts
     router.push({
       pathname: "/game-play",
       params: {
         gameName,
-        playerCount, 
+        playerCount,
         gameId,
-        players: JSON.stringify(players.map(p => p.username)),
+        players: JSON.stringify(players.map((p) => p.username)),
         timestamp: Date.now(), // Add timestamp to force a refresh
-      }
+      },
     });
   };
 
@@ -1038,9 +1067,12 @@ export default function GamePlay() {
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle" size={64} color="#FF6B6B" />
           <Text style={styles.errorText}>{error}</Text>
-          
+
           <View style={styles.buttonsContainer}>
-            <Pressable style={styles.returnButton} onPress={handleReturnToLobby}>
+            <Pressable
+              style={styles.returnButton}
+              onPress={handleReturnToLobby}
+            >
               <Text style={styles.returnButtonText}>Back to Lobby</Text>
             </Pressable>
             <Pressable style={styles.playAgainButton} onPress={handlePlayAgain}>
@@ -1090,15 +1122,19 @@ export default function GamePlay() {
             ) : audioLoadError ? (
               <View style={styles.audioErrorContainer}>
                 <Ionicons name="alert-circle" size={64} color="#FF6B6B" />
-                <Text style={styles.errorText}>
-                  {audioLoadError}
-                </Text>
-                
+                <Text style={styles.errorText}>{audioLoadError}</Text>
+
                 <View style={styles.buttonsContainer}>
-                  <Pressable style={styles.returnButton} onPress={handleReturnToLobby}>
+                  <Pressable
+                    style={styles.returnButton}
+                    onPress={handleReturnToLobby}
+                  >
                     <Text style={styles.returnButtonText}>Back to Lobby</Text>
                   </Pressable>
-                  <Pressable style={styles.playAgainButton} onPress={handlePlayAgain}>
+                  <Pressable
+                    style={styles.playAgainButton}
+                    onPress={handlePlayAgain}
+                  >
                     <Text style={styles.playAgainButtonText}>Try Again</Text>
                   </Pressable>
                 </View>
@@ -1145,11 +1181,7 @@ export default function GamePlay() {
                       styles.externalLinkButton,
                       styles.spotifyLinkButton,
                     ]}
-                    onPress={() =>
-                      Linking.openURL(
-                        currentSong.externalUrl
-                      )
-                    }
+                    onPress={() => Linking.openURL(currentSong.externalUrl)}
                   >
                     <Image
                       source={require("../assets/white-spotify-logo.png")}
@@ -1170,19 +1202,22 @@ export default function GamePlay() {
                   // Make sure we have an assigned player before going to voting stage
                   if (!currentSong?.assignedToPlayer) {
                     // Just in case it wasn't assigned, pick a random player now
-                    const randomPlayer = players[Math.floor(Math.random() * players.length)];
-                    console.log(`Assigning song ${currentSong.songTitle} to player ${randomPlayer.username} during vote`);
+                    const randomPlayer =
+                      players[Math.floor(Math.random() * players.length)];
+                    console.log(
+                      `Assigning song ${currentSong.songTitle} to player ${randomPlayer.username} during vote`
+                    );
                     setCurrentSong({
                       ...currentSong,
-                      assignedToPlayer: randomPlayer
+                      assignedToPlayer: randomPlayer,
                     });
                     // Update in roundSongs state too
-                    setRoundSongs(prev => ({
+                    setRoundSongs((prev) => ({
                       ...prev,
                       [currentRound]: {
                         ...prev[currentRound],
-                        assignedToPlayer: randomPlayer
-                      }
+                        assignedToPlayer: randomPlayer,
+                      },
                     }));
                   }
                   setGameStage("voting");
@@ -1201,20 +1236,24 @@ export default function GamePlay() {
                 {/* Progress bar background */}
                 <View style={styles.voteProgressBackground}>
                   {/* Progress bar fill that grows based on playback position */}
-                  <View 
+                  <View
                     style={[
-                      styles.voteProgressFill, 
+                      styles.voteProgressFill,
                       { width: `${voteProgress}%` },
-                      canVote ? styles.voteProgressComplete : {}
-                    ]} 
+                      canVote ? styles.voteProgressComplete : {},
+                    ]}
                   />
                 </View>
-                
+
                 {/* Button content */}
-                <View style={[
-                  styles.voteButtonContent,
-                  !canVote ? styles.voteButtonDisabled : styles.voteButtonEnabled,
-                ]}>
+                <View
+                  style={[
+                    styles.voteButtonContent,
+                    !canVote
+                      ? styles.voteButtonDisabled
+                      : styles.voteButtonEnabled,
+                  ]}
+                >
                   <Text
                     style={[
                       styles.voteButtonText,
@@ -1231,7 +1270,7 @@ export default function GamePlay() {
                 </View>
               </View>
             </TouchableOpacity>
-            
+
             {/* <Text style={styles.voteHintText}>
               {canVote
                 ? "Make your guess about who listened to this song"
@@ -1244,199 +1283,36 @@ export default function GamePlay() {
       )}
 
       {gameStage === "voting" && (
-        <View style={styles.votingContainer}>
-          <Text style={styles.votingInstructions}>
-            Who do you think listened to this song?
-          </Text>
-
-          <View style={styles.playersGrid}>
-            {players.map((player) => {
-              // Determine style based on selection and result
-              const isSelected = selectedPlayer === player.username;
-              const isCorrect = currentSong?.assignedToPlayer?.username === player.username;
-              console.log('Player check:', {
-                player: player.username,
-                isCorrect,
-                assignedTo: currentSong?.assignedToPlayer?.username || 'none'
-              });
-              
-              const wasVoted = isSelected && showVoteResult;
-              
-              // Determine the button style for dynamic feedback
-              let buttonStyle = styles.playerVoteButton;
-              if (wasVoted) {
-                if (isCorrect) {
-                  buttonStyle = [styles.playerVoteButton, styles.correctVoteButton];
-                } else {
-                  buttonStyle = [styles.playerVoteButton, styles.incorrectVoteButton];
-                }
-              } else if (showVoteResult && isCorrect) {
-                // Show correct answer even if not selected
-                buttonStyle = [styles.playerVoteButton, styles.correctVoteButton];
-              }
-              
-              return (
-                <Pressable
-                  key={player.id}
-                  style={buttonStyle}
-                  onPress={() => {
-                    // Only allow selection if no result is shown yet
-                    if (showVoteResult) return;
-                    
-                    // Set the selected player
-                    setSelectedPlayer(player.username);
-                    setShowVoteResult(true);
-                    
-                    // Create the vote record
-                    const isCorrectGuess = player.username === currentSong?.assignedToPlayer?.username;
-                    const newVote = {
-                      round: currentRound,
-                      songId: currentSong?.songTitle,
-                      votedFor: player.username,
-                      correctPlayer: currentSong?.assignedToPlayer?.username,
-                      isCorrect: isCorrectGuess
-                    };
-
-                    // Update player scores tracking
-                    setPlayerSongs(prev => ({
-                      ...prev,
-                      [player.username]: [...(prev[player.username] || []), newVote]
-                    }));
-
-                    // Update points for @cole_sprout if the current user makes a correct guess
-                    if (isCorrectGuess) {
-                      setPlayerPoints(prev => ({
-                        ...prev,
-                        "@cole_sprout": (prev["@cole_sprout"] || 0) + 1
-                      }));
-                      console.log("Point awarded to @cole_sprout! New score:", playerPoints["@cole_sprout"] + 1);
-                    }
-
-                    console.log("Vote cast:", newVote);
-                    
-                    // Show result alert after a short delay to allow seeing the color changes
-                    setTimeout(() => {
-                      Alert.alert(
-                        isCorrectGuess ? "Correct!" : "Incorrect!",
-                        isCorrectGuess
-                          ? `Yes, ${player.username} listened to this song!`
-                          : `Actually, ${currentSong?.assignedToPlayer?.username || "none"} listened to this song.`,
-                        [
-                          {
-                            text: "Next Round",
-                            onPress: () => {
-                              // Reset voting states before moving to next round
-                              nextRound(); // Call nextRound directly since it now handles the reset
-                            },
-                          },
-                        ]
-                      );
-                    }, 800); // Slightly shorter delay for better UX
-                  }}
-                >
-                  <View style={styles.profileImageContainer}>
-                    <View style={styles.profileBackground}>
-                      <Image
-                        source={getProfilePhotoForUser(player.username)}
-                        style={styles.profileImage}
-                      />
-                    </View>
-                  </View>
-                  <Text style={styles.playerVoteName}>{player.username}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
+        <VotingStage
+          players={players}
+          currentSong={currentSong}
+          currentRound={currentRound}
+          selectedPlayer={selectedPlayer}
+          showVoteResult={showVoteResult}
+          setSelectedPlayer={setSelectedPlayer}
+          setShowVoteResult={setShowVoteResult}
+          setPlayerSongs={setPlayerSongs}
+          setPlayerPoints={setPlayerPoints}
+          nextRound={nextRound}
+          getProfilePhotoForUser={getProfilePhotoForUser}
+          isMultiplayer={isMultiplayer}
+          gameId={gameId}
+          playerPoints={playerPoints}
+          //castVote={castVote}
+        />
       )}
 
       {gameStage === "results" && (
-        <ScrollView contentContainerStyle={styles.resultsScrollContent}>
-          <View style={styles.resultsContainer}>
-            <Text style={styles.resultsTitle}>Game Complete!</Text>
-
-            <View style={styles.gameStats}>
-              <Text style={styles.gameStatsHeader}>
-              </Text>
-
-              <Text style={styles.gameStatLine}>
-                Players: {players.map((p) => p.username).join(", ")}
-              </Text>
-
-              <Text style={styles.gameStatLine}>
-                Songs played: {currentRound}
-              </Text>
-
-              <Text style={styles.gameStatLine}>
-                Game type: Guess The Listener
-              </Text>
-            </View>
-            
-            {/* Player scores section */}
-            <View style={styles.scoresContainer}>
-              <Text style={styles.scoresTitle}>Player Scores</Text>
-              <View style={styles.scoresList}>
-                {players.map(player => (
-                  <View key={player.id} style={styles.scoreItem}>
-                    <View style={styles.scorePlayerInfo}>
-                      <Image 
-                        source={getProfilePhotoForUser(player.username)}
-                        style={styles.scorePlayerAvatar}
-                      />
-                      <Text style={styles.scorePlayerName}>{player.username}</Text>
-                    </View>
-                    <Text style={styles.scoreValue}>
-                      {player.username === "@cole_sprout" 
-                        ? playerPoints["@cole_sprout"] || 0 
-                        : 0} 
-                      points
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-
-            <View style={styles.reviewListContainer}>
-              <Text style={styles.reviewListTitle}>Who listened to what?</Text>
-              {Object.keys(roundSongs).map((round) => (
-                <View key={round} style={styles.reviewListItem}>
-                  <Image
-                    source={{ uri: roundSongs[round].imageUrl }}
-                    style={styles.reviewSongImage}
-                  />
-                  <View style={styles.reviewSongInfo}>
-                    <Text style={styles.reviewSongTitle}>{roundSongs[round].songTitle}</Text>
-                    <Text style={styles.reviewSongArtist}>
-                      {roundSongs[round].songArtists.join(", ")}
-                    </Text>
-                  </View>
-                  <View style={styles.reviewPlayerInfo}>
-                    <View style={styles.reviewPlayerAvatarWrapper}>
-                      <Image
-                        source={getProfilePhotoForUser(
-                          roundSongs[round].assignedToPlayer?.username || ""
-                        )}
-                        style={styles.reviewPlayerAvatar}
-                      />
-                    </View>
-                    <Text style={styles.reviewPlayerName}>
-                      {roundSongs[round].assignedToPlayer?.username}
-                    </Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-
-            <View style={styles.buttonsContainer}>
-              <Pressable style={styles.returnButton} onPress={handleReturnToLobby}>
-                <Text style={styles.returnButtonText}>Return to Lobby</Text>
-              </Pressable>
-              <Pressable style={styles.playAgainButton} onPress={handlePlayAgain}>
-                <Text style={styles.playAgainButtonText}>Play Again</Text>
-              </Pressable>
-            </View>
-          </View>
-        </ScrollView>
+        <ResultsStage
+          players={players}
+          playerPoints={playerPoints}
+          roundSongs={roundSongs}
+          getProfilePhotoForUser={getProfilePhotoForUser}
+          handleReturnToLobby={handleReturnToLobby}
+          handlePlayAgain={handlePlayAgain}
+          currentRound={currentRound}
+          styles={styles}
+        />
       )}
     </SafeAreaView>
   );
