@@ -45,431 +45,6 @@ const formatTime = (milliseconds) => {
   return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
 };
 
-// Define styles outside the component
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#1E1E1E",
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-    backgroundColor: "#8E44AD", 
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    height: 100,
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.6,
-    shadowRadius: 7,
-    elevation: 5,
-  },
-  headerTitleContainer: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    alignItems: "center",
-    justifyContent: "center",
-    bottom: 10,
-  },
-  headerTitle: {
-    color: "#FFC857",
-    fontSize: 24,
-    fontWeight: "bold",
-    textAlign: "center",
-  },
-  menuButton: {
-    width: 44,
-    height: 44,
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 1,
-  },
-  placeholder: {
-    width: 44,
-  },
-  connectionStatusContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 10,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    borderRadius: 20,
-    position: "absolute",
-    top: 10,
-    right: 10,
-    zIndex: 10,
-  },
-  connectionIndicator: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: 8,
-  },
-  connectionActive: {
-    backgroundColor: "#4BB543",
-  },
-  connectionInactive: {
-    backgroundColor: "#FF6B6B",
-  },
-  connectionStatusText: {
-    color: "white",
-    fontSize: 14,
-    marginRight: 8,
-  },
-  reconnectButton: {
-    backgroundColor: "#8E44AD",
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 12,
-  },
-  reconnectButtonText: {
-    color: "white",
-    fontSize: 12,
-    fontWeight: "bold",
-  },
-  gameStatusBar: {
-    backgroundColor: "#282828",
-    padding: 12,
-    alignItems: "center",
-  },
-  roundText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  infoText: {
-    color: "white",
-    fontSize: 16,
-    marginTop: 10,
-  },
-  content: {
-    flex: 1,
-  },
-  songPlaybackContainer: {
-    flex: 1,
-    padding: 16,
-    justifyContent: "space-between",
-  },
-  albumArtworkWrapper: {
-    alignItems: "center",
-    marginTop: 20,
-  },
-  albumArtwork: {
-    width: 250,
-    height: 250,
-    borderRadius: 10,
-  },
-  audioControlsContainer: {
-    marginTop: 20,
-  },
-  progressBarContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    width: "100%",
-    marginBottom: 15,
-  },
-  progressBar: {
-    flex: 1,
-    height: 40,
-  },
-  durationLabels: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    width: "100%",
-  },
-  durationText: {
-    color: "#AAA",
-    fontSize: 12,
-  },
-  playButtonContainer: {
-    alignItems: "center",
-    marginVertical: 15,
-  },
-  playButton: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: "#44C568",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  playButtonDisabled: {
-    opacity: 0.5,
-  },
-  audioErrorText: {
-    color: "#FF6B6B",
-    textAlign: "center",
-    marginTop: 10,
-  },
-  countdownText: {
-    color: "white",
-    textAlign: "center",
-    marginTop: 10,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  loadingText: {
-    color: "white",
-    marginTop: 20,
-    fontSize: 18,
-  },
-  votingContainer: {
-    flex: 1,
-    padding: 20,
-  },
-  votingInstructions: {
-    color: "white",
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 20,
-  },
-  playersGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-  },
-  playerVoteButton: {
-    width: "48%",
-    height: 100,
-    borderRadius: 10,
-    backgroundColor: "#333",
-    margin: "1%",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  correctVoteButton: {
-    backgroundColor: "#4BB543",
-  },
-  incorrectVoteButton: {
-    backgroundColor: "#FF6B6B",
-  },
-  profileImageContainer: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 50,
-    overflow: "hidden",
-  },
-  profileBackground: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  profileImage: {
-    width: "100%",
-    height: "100%",
-  },
-  playerVoteName: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  resultsScrollContent: {
-    flexGrow: 1,
-    padding: 20,
-  },
-  resultsContainer: {
-    flex: 1,
-    justifyContent: "space-between",
-  },
-  resultsTitle: {
-    color: "white",
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 20,
-  },
-  gameStats: {
-    backgroundColor: "#282828",
-    padding: 20,
-    borderRadius: 10,
-    marginBottom: 20,
-  },
-  gameStatsHeader: {
-    color: "white",
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 10,
-  },
-  gameStatLine: {
-    color: "white",
-    fontSize: 16,
-  },
-  scoresContainer: {
-    backgroundColor: "#282828",
-    padding: 20,
-    borderRadius: 10,
-  },
-  scoresTitle: {
-    color: "white",
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 10,
-  },
-  scoresList: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-  },
-  scoreItem: {
-    width: "48%",
-    margin: "1%",
-  },
-  scorePlayerInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  scorePlayerAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 10,
-  },
-  scorePlayerName: {
-    color: "white",
-    fontSize: 16,
-  },
-  scoreValue: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  reviewListContainer: {
-    flex: 1,
-  },
-  reviewListTitle: {
-    color: "white",
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 10,
-  },
-  reviewListItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 10,
-  },
-  reviewSongImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 10,
-    marginRight: 10,
-  },
-  reviewSongInfo: {
-    flex: 1,
-  },
-  reviewSongTitle: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  reviewSongArtist: {
-    color: "white",
-    fontSize: 14,
-  },
-  reviewPlayerInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  reviewPlayerAvatarWrapper: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    overflow: "hidden",
-    marginRight: 10,
-  },
-  reviewPlayerAvatar: {
-    width: "100%",
-    height: "100%",
-  },
-  reviewPlayerName: {
-    color: "white",
-    fontSize: 16,
-  },
-  buttonsContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 20,
-  },
-  returnButton: {
-    backgroundColor: "#8E44AD",
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-  },
-  returnButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  playAgainButton: {
-    backgroundColor: "#4BB543",
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-  },
-  playAgainButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  songPlaybackInfo: {
-    alignItems: "center",
-    marginTop: 10,
-  },
-  playbackSongTitle: {
-    color: "white",
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-  playbackArtistName: {
-    color: "white",
-    fontSize: 16,
-  },
-  voteButtonContainer: {
-    alignItems: "center",
-    marginTop: 20,
-  },
-  voteButtonWrapper: {
-    backgroundColor: "#333",
-    borderRadius: 20,
-    padding: 10,
-    width: "80%",
-  },
-  voteProgressBackground: {
-    backgroundColor: "#777",
-    borderRadius: 10,
-    height: 20,
-    marginBottom: 10,
-  },
-  voteProgressFill: {
-    backgroundColor: "#FFC857",
-    borderRadius: 10,
-    height: 20,
-  },
-  voteButtonContent: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  voteButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  voteButtonDisabled: {
-    opacity: 0.5,
-  },
-  voteButtonEnabled: {
-    opacity: 1,
-  },
-  voteButtonTextDisabled: {
-    color: "#777",
-  },
-  voteProgressComplete: {
-    backgroundColor: "#4BB543",
-  },
-});
-
 export default function GamePlay() {
   const navigation = useNavigation();
   const router = useRouter();
@@ -584,9 +159,10 @@ export default function GamePlay() {
   // Get game details from params
   const gameName = params.gameName || "Game Name";
   const playerCount = parseInt(params.playerCount) || 4;
-  const gameId = params.gameId || `${Date.now().toString(36).substr(-4).toUpperCase()}`;
-  const isMultiplayer = params.isMultiplayer === "true";
-  const isHost = params.isHost === "true";
+  const gameId = params.gameId || `game-${Date.now()}`;
+  // Set to false since we don't have WebSocket functionality
+  const isMultiplayer = false;
+  const isHost = false;
 
   // Parse player usernames from params if available
   let playerUsernames = [];
@@ -1032,8 +608,7 @@ export default function GamePlay() {
   // Update loadAndPlaySong function to handle Deezer icons
   const loadAndPlaySong = async (song) => {
     console.log("Loading song:", song?.songTitle);
-    console.log("Preview URL:", song?.previewUrl);
-    console.log("Full song object:", JSON.stringify(song, null, 2).substring(0, 300) + "...");
+    console.log("Assigned to player:", song?.assignedToPlayer?.username || "none");
 
     // Verify we have a valid song object
     if (!song) {
@@ -1078,15 +653,17 @@ export default function GamePlay() {
           console.log("Deezer preview URL:", deezerTrack.previewUrl);
           
           // Update the current song with the Deezer preview URL
-          song = {
+          // Preserve the assignedToPlayer property
+          const updatedSong = {
             ...song,
             previewUrl: deezerTrack.previewUrl,
             deezerInfo: {
               trackId: deezerTrack.trackId,
               externalUrl: deezerTrack.externalUrl,
-            },
+            }
           };
-          setCurrentSong(song);
+          setCurrentSong(updatedSong);
+          song = updatedSong;
         } else {
           console.log("No Deezer preview URL found either");
           setAudioLoadError("No preview available for this song");
@@ -1187,7 +764,7 @@ export default function GamePlay() {
     }
   };
 
-  // Toggle play/pause function - only usable in single player mode
+  // Toggle play/pause function - simplified version
   const togglePlayPause = async () => {
     // In multiplayer mode, don't allow manual play/pause
     if (isMultiplayer) {
@@ -1207,7 +784,7 @@ export default function GamePlay() {
     }
   };
 
-  // Update selectSongForRound function to handle multiplayer correctly
+  // Update selectSongForRound function to properly assign a player to each song
   const selectSongForRound = (round, songs = allSongs) => {
     if (!songs || songs.length === 0) return;
 
@@ -1239,7 +816,15 @@ export default function GamePlay() {
     if (availableSongs.length === 0) {
       console.log("All songs have been played, resetting tracking");
       setPlayedSongs([]);
-      loadAndPlaySong(songs[Math.floor(Math.random() * songs.length)]);
+      
+      // Assign a random player for fallback case
+      const randomPlayer = players[Math.floor(Math.random() * players.length)];
+      const songWithPlayer = {
+        ...songs[Math.floor(Math.random() * songs.length)],
+        assignedToPlayer: randomPlayer
+      };
+      
+      loadAndPlaySong(songWithPlayer);
       return;
     }
     
@@ -1248,7 +833,11 @@ export default function GamePlay() {
     const selectedSong = availableSongs[randomIndex];
     
     // Assign the song to a random player
-    const assignedPlayer = players[Math.floor(Math.random() * players.length)];
+    const randomPlayerIndex = Math.floor(Math.random() * players.length);
+    const assignedPlayer = players[randomPlayerIndex];
+    
+    console.log(`Assigning song ${selectedSong.songTitle} to player: ${assignedPlayer.username}`);
+    
     const songWithAssignment = {
       ...selectedSong,
       assignedToPlayer: assignedPlayer,
@@ -1272,6 +861,13 @@ export default function GamePlay() {
     // Reset voting visual state
     setSelectedPlayer(null);
     setShowVoteResult(false);
+    
+    // Log debug info about current round
+    console.log(`Round ${currentRound} completed`);
+    if (currentSong) {
+      console.log(`Song: ${currentSong.songTitle}`);
+      console.log(`Assigned to player: ${currentSong.assignedToPlayer?.username || 'none'}`);
+    }
     
     // Stop current playback
     if (sound) {
@@ -1936,61 +1532,84 @@ export default function GamePlay() {
                 )}
               </View>
 
-              {/* Vote button section */}
-              <View style={styles.voteButtonContainer}>
-                <TouchableOpacity
-                  activeOpacity={canVote ? 0.7 : 1}
-                  onPress={() => {
-                    if (canVote) {
-                      setGameStage("voting");
-                    } else {
-                      Alert.alert(
-                        "Not Ready Yet",
-                        `Please listen to at least ${
-                          MIN_PLAY_DURATION / 1000
-                        } seconds of the song before voting.`,
-                        [{ text: "OK" }]
-                      );
-                    }
-                  }}
-                >
-                  <View style={styles.voteButtonWrapper}>
-                    {/* Progress bar background */}
-                    <View style={styles.voteProgressBackground}>
-                      {/* Progress bar fill that grows based on playback position */}
-                      <View 
-                        style={[
-                          styles.voteProgressFill, 
-                          { width: `${voteProgress}%` },
-                          canVote ? styles.voteProgressComplete : {}
-                        ]} 
-                      />
-                    </View>
-                    
-                    {/* Button content */}
-                    <View style={[
-                      styles.voteButtonContent,
-                      !canVote ? styles.voteButtonDisabled : styles.voteButtonEnabled,
-                    ]}>
-                      <Text
-                        style={[
-                          styles.voteButtonText,
-                          !canVote ? styles.voteButtonTextDisabled : {},
-                        ]}
-                      >
-                        VOTE NOW
-                      </Text>
-                      <Ionicons
-                        name="arrow-forward"
-                        size={24}
-                        color={canVote ? "black" : "#777"}
-                      />
-                    </View>
-                  </View>
-                </TouchableOpacity>
+          <View style={styles.voteButtonContainer}>
+            <TouchableOpacity
+              activeOpacity={canVote ? 0.7 : 1}
+              onPress={() => {
+                if (canVote) {
+                  // Make sure we have an assigned player before going to voting stage
+                  if (!currentSong?.assignedToPlayer) {
+                    // Just in case it wasn't assigned, pick a random player now
+                    const randomPlayer = players[Math.floor(Math.random() * players.length)];
+                    console.log(`Assigning song ${currentSong.songTitle} to player ${randomPlayer.username} during vote`);
+                    setCurrentSong({
+                      ...currentSong,
+                      assignedToPlayer: randomPlayer
+                    });
+                    // Update in roundSongs state too
+                    setRoundSongs(prev => ({
+                      ...prev,
+                      [currentRound]: {
+                        ...prev[currentRound],
+                        assignedToPlayer: randomPlayer
+                      }
+                    }));
+                  }
+                  setGameStage("voting");
+                } else {
+                  Alert.alert(
+                    "Not Ready Yet",
+                    `Please listen to at least ${
+                      MIN_PLAY_DURATION / 1000
+                    } seconds of the song before voting.`,
+                    [{ text: "OK" }]
+                  );
+                }
+              }}
+            >
+              <View style={styles.voteButtonWrapper}>
+                {/* Progress bar background */}
+                <View style={styles.voteProgressBackground}>
+                  {/* Progress bar fill that grows based on playback position */}
+                  <View 
+                    style={[
+                      styles.voteProgressFill, 
+                      { width: `${voteProgress}%` },
+                      canVote ? styles.voteProgressComplete : {}
+                    ]} 
+                  />
+                </View>
+                
+                {/* Button content */}
+                <View style={[
+                  styles.voteButtonContent,
+                  !canVote ? styles.voteButtonDisabled : styles.voteButtonEnabled,
+                ]}>
+                  <Text
+                    style={[
+                      styles.voteButtonText,
+                      !canVote ? styles.voteButtonTextDisabled : {},
+                    ]}
+                  >
+                    VOTE NOW
+                  </Text>
+                  <Ionicons
+                    name="arrow-forward"
+                    size={24}
+                    color={canVote ? "black" : "#777"}
+                  />
+                </View>
               </View>
-            </View>
-          )}
+            </TouchableOpacity>
+            
+            {/* <Text style={styles.voteHintText}>
+              {canVote
+                ? "Make your guess about who listened to this song"
+                : `Listen for ${
+                    MIN_PLAY_DURATION / 1000
+                  } seconds before voting...`}
+            </Text> */}
+          </View>
         </View>
       )}
       
@@ -2006,6 +1625,12 @@ export default function GamePlay() {
               // Determine style based on selection and result
               const isSelected = selectedPlayer === player.username;
               const isCorrect = currentSong?.assignedToPlayer?.username === player.username;
+              console.log('Player check:', {
+                player: player.username,
+                isCorrect,
+                assignedTo: currentSong?.assignedToPlayer?.username || 'none'
+              });
+              
               const wasVoted = isSelected && showVoteResult;
               
               // Determine the button style for dynamic feedback
@@ -2060,37 +1685,24 @@ export default function GamePlay() {
 
                     console.log("Vote cast:", newVote);
                     
-                    // In multiplayer mode, send the vote to the server
-                    if (isMultiplayer) {
-                      castVote(gameId, player.username);
-                      
-                      // In multiplayer, wait for the server's round_complete event
-                      // Do not show the result alert or advance to next round immediately
+                    // Show result alert after a short delay to allow seeing the color changes
+                    setTimeout(() => {
                       Alert.alert(
-                        isCorrectGuess ? "Vote Submitted" : "Vote Submitted",
-                        "Waiting for other players to vote...",
-                        [{ text: "OK" }]
-                      );
-                    } else {
-                      // In single player mode, show result and allow advancing to next round immediately
-                      setTimeout(() => {
-                        Alert.alert(
-                          isCorrectGuess ? "Correct!" : "Incorrect!",
-                          isCorrectGuess
-                            ? `Yes, ${player.username} listened to this song!`
-                            : `Actually, ${currentSong?.assignedToPlayer?.username} listened to this song.`,
-                          [
-                            {
-                              text: "Next Round",
-                              onPress: () => {
-                                // Reset voting states before moving to next round
-                                nextRound(); // Call local nextRound function
-                              },
+                        isCorrectGuess ? "Correct!" : "Incorrect!",
+                        isCorrectGuess
+                          ? `Yes, ${player.username} listened to this song!`
+                          : `Actually, ${currentSong?.assignedToPlayer?.username || "none"} listened to this song.`,
+                        [
+                          {
+                            text: "Next Round",
+                            onPress: () => {
+                              // Reset voting states before moving to next round
+                              nextRound(); // Call nextRound directly since it now handles the reset
                             },
-                          ]
-                        );
-                      }, 800);
-                    }
+                          },
+                        ]
+                      );
+                    }, 800); // Slightly shorter delay for better UX
                   }}
                 >
                   <View style={styles.profileImageContainer}>
@@ -2208,3 +1820,622 @@ export default function GamePlay() {
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#1E1E1E",
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    backgroundColor: "#8E44AD",
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    height: 100,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.6,
+    shadowRadius: 7,
+    elevation: 5,
+  },
+  menuButton: {
+    width: 44,
+    height: 44,
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 1,
+  },
+  headerTitleContainer: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerTitle: {
+    color: "#FFC857",
+    fontSize: 24,
+    fontWeight: "bold",
+    textAlign: "center",
+    bottom: 10,
+  },
+  placeholder: {
+    width: 44,
+  },
+  gameStatusBar: {
+    backgroundColor: "#282828",
+    padding: 12,
+    alignItems: "center",
+  },
+  roundText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    color: "white",
+    marginTop: 20,
+    fontSize: 18,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  errorText: {
+    color: "white",
+    textAlign: "center",
+    marginTop: 16,
+    marginBottom: 30,
+    fontSize: 16,
+  },
+  retryButton: {
+    backgroundColor: "#C143FF",
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 20,
+  },
+  retryButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  songPlaybackContainer: {
+    flex: 1,
+    padding: 16,
+    justifyContent: "space-between",
+  },
+  albumArtworkWrapper: {
+    alignItems: "center",
+    marginTop: 20,
+  },
+  albumArtworkBackground: {
+    width: 300,
+    height: 300,
+    borderRadius: 20,
+    padding: 6,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "transparent",
+    shadowColor: "#8E44AD",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 15,
+    elevation: 10,
+  },
+  albumCover: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 15,
+  },
+  songPlaybackInfo: {
+    alignItems: "center",
+    marginTop: 20,
+  },
+  playbackSongTitle: {
+    color: "white",
+    fontSize: 24,
+    fontWeight: "bold",
+    textAlign: "center",
+  },
+  playbackArtistName: {
+    color: "#CCC",
+    fontSize: 18,
+    marginTop: 8,
+    textAlign: "center",
+  },
+  waveformContainer: {
+    height: 80,
+    marginTop: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  waveformBars: {
+    width: "100%",
+    height: 60,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  waveformBar: {
+    width: 8,
+    backgroundColor: "#8E44AD",
+    borderRadius: 4,
+  },
+  playbackControlsContainer: {
+    marginTop: 20,
+  },
+  spotifyPromptContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    marginVertical: 20,
+  },
+  spotifyPromptText: {
+    color: "white",
+    fontSize: 16,
+    marginBottom: 15,
+    textAlign: "center",
+  },
+  spotifyButton: {
+    backgroundColor: "#1DB954",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 25,
+    marginVertical: 10,
+  },
+  spotifyButtonText: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "bold",
+    marginLeft: 8,
+  },
+  noLinkText: {
+    color: "#999",
+    fontSize: 14,
+    fontStyle: "italic",
+  },
+  voteButtonContainer: {
+    marginTop: 20,
+    marginBottom: 20,
+    alignItems: "center",
+  },
+  voteButtonWrapper: {
+    width: "100%",
+    alignItems: "center",
+    position: "relative",
+  },
+  voteProgressBackground: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: "100%",
+    backgroundColor: "#333",
+    borderRadius: 30,
+    overflow: "hidden",
+    borderWidth: 2,
+    borderColor: "#555",
+  },
+  voteProgressFill: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    height: "100%",
+    backgroundColor: "#5D5D5D", // Darker shade for incomplete
+    transition: "width 0.3s",
+  },
+  voteProgressComplete: {
+    backgroundColor: "#C143FF", // Purple for complete
+  },
+  voteButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 16,
+    paddingHorizontal: 40,
+    width: "80%",
+    borderRadius: 30,
+    zIndex: 1, // Ensure content is above the progress bar
+  },
+  voteButtonDisabled: {
+    backgroundColor: "#7D7575",
+    borderColor: "#555",
+    opacity: 0.8,
+  },
+  voteButtonEnabled: {
+    backgroundColor: "#FFC857",
+    borderColor: "#E6A100",
+    shadowColor: "#FFC857",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  voteButtonText: {
+    color: "#000",
+    fontSize: 22,
+    fontWeight: "bold",
+    marginRight: 8,
+  },
+  voteButtonTextDisabled: {
+    color: "#000",
+  },
+  voteHintText: {
+    color: "#AAA",
+    fontSize: 14,
+    marginTop: 10,
+    textAlign: "center",
+  },
+  votingContainer: {
+    flex: 1,
+    padding: 20,
+  },
+  votingInstructions: {
+    color: "white",
+    fontSize: 20,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginVertical: 20,
+  },
+  playersGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    marginTop: 20,
+  },
+  playerVoteButton: {
+    backgroundColor: "#282828",
+    borderRadius: 16,
+    padding: 16,
+    alignItems: "center",
+    width: "48%",
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: "#444",
+  },
+  correctVoteButton: {
+    backgroundColor: "rgba(75, 181, 67, 0.2)",
+    borderColor: "#4BB543",
+    shadowColor: "#4BB543",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  incorrectVoteButton: {
+    backgroundColor: "rgba(255, 107, 107, 0.2)",
+    borderColor: "#FF6B6B",
+    shadowColor: "#FF6B6B",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  profileImageContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  profileBackground: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: "white",
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden",
+  },
+  profileImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+  },
+  playerVoteName: {
+    color: "white",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  resultsContainer: {
+    padding: 20,
+    alignItems: "center",
+    width: "100%",
+  },
+  resultsTitle: {
+    color: "white",
+    fontSize: 24,
+    fontWeight: "bold",
+    marginBottom: 30,
+  },
+  gameStats: {
+    marginBottom: 30,
+  },
+  gameStatsHeader: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 10,
+  },
+  gameStatLine: {
+    color: "white",
+    fontSize: 16,
+  },
+  returnButton: {
+    backgroundColor: "#333",
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 20,
+  },
+  returnButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  externalLinkButton: {
+    padding: 10,
+    borderRadius: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 10,
+    alignSelf: "center",
+    backgroundColor: "#1DB954",
+  },
+  spotifyLinkButton: {
+    backgroundColor: "#1DB954",
+  },
+  externalLinkText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
+    marginLeft: 5,
+  },
+  spotifyEmbedContainer: {
+    width: "100%",
+    height: 80,
+    marginBottom: 10,
+    borderRadius: 10,
+    overflow: "hidden",
+  },
+  playerToggleContainer: {
+    alignItems: "center",
+    marginVertical: 10,
+  },
+  playerToggleButton: {
+    backgroundColor: "rgba(0, 0, 0, 0.3)",
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  playerToggleText: {
+    color: "white",
+    fontSize: 12,
+  },
+  progressContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    width: "100%",
+    paddingHorizontal: 10,
+  },
+  progressBar: {
+    flex: 1,
+    height: 40,
+    marginHorizontal: 10,
+  },
+  timeText: {
+    color: "#AAA",
+    fontSize: 12,
+  },
+  controlButtonsContainer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    marginVertical: 10,
+  },
+  playPauseButton: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "#C143FF",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 0,
+    shadowColor: "#C143FF",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
+    elevation: 10,
+    // borderColor: "#FFC857",
+  },
+  loadingAudioContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+  },
+  loadingAudioText: {
+    color: "white",
+    marginTop: 10,
+    fontSize: 14,
+  },
+  audioErrorContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+  },
+  audioErrorText: {
+    color: "#FF6B6B",
+    marginBottom: 15,
+    fontSize: 14,
+    textAlign: "center",
+  },
+  countdownContainer: {
+    width: "80%",
+    marginTop: 10,
+    marginBottom: 5,
+  },
+  countdownTrack: {
+    height: 4,
+    backgroundColor: "#444",
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  countdownProgress: {
+    height: "100%",
+    backgroundColor: "#C143FF",
+  },
+  reviewListContainer: {
+    width: "100%",
+    backgroundColor: "#232323",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 30,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+  },
+  reviewListTitle: {
+    color: "#FFC857",
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  reviewListItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#282828",
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 10,
+  },
+  reviewSongImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    marginRight: 12,
+    backgroundColor: "#444",
+  },
+  reviewSongInfo: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  reviewSongTitle: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  reviewSongArtist: {
+    color: "#AAA",
+    fontSize: 14,
+  },
+  reviewPlayerInfo: {
+    alignItems: "center",
+    marginLeft: 10,
+  },
+  reviewPlayerAvatarWrapper: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "white",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 2,
+    overflow: "hidden",
+  },
+  reviewPlayerAvatar: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+  },
+  reviewPlayerName: {
+    color: "#FFC857",
+    fontSize: 12,
+    fontWeight: "bold",
+    textAlign: "center",
+  },
+  buttonsContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    width: "100%",
+    marginTop: 20,
+  },
+  playAgainButton: {
+    backgroundColor: "#8E44AD",
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 20,
+  },
+  playAgainButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  scoresContainer: {
+    width: "100%",
+    backgroundColor: "#232323",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+  },
+  scoresTitle: {
+    color: "#FFC857",
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  scoresList: {
+    width: "100%",
+  },
+  scoreItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#282828",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#444",
+  },
+  scorePlayerInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  scorePlayerAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 10,
+  },
+  scorePlayerName: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  scoreValue: {
+    color: "#FFC857",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  resultsScrollContent: {
+    flexGrow: 1,
+    paddingBottom: 30,
+  },
+});
