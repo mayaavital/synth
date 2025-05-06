@@ -30,6 +30,8 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import VotingStage from "./VotingStage";
 import ResultsStage from "./ResultsStage";
+// Import useWebSocket for multiplayer functionality
+import { useWebSocket, EVENTS } from "../utils/useWebSocket";
 
 const ALBUM_ID = "2noRn2Aes5aoNVsU6iWThc";
 const ROUNDS_TOTAL = 2;
@@ -58,6 +60,15 @@ export default function GamePlay() {
     getValidToken,
     isInitialized,
   } = useSpotifyAuth();
+
+  // Initialize the WebSocket hook for multiplayer
+  const { 
+    on, 
+    emit, 
+    nextRound: sendNextRound, 
+    castVote,
+    isConnected 
+  } = useWebSocket();
 
   // Mock song data to fallback on if Spotify API is unavailable
   const mockSongs = [
@@ -126,6 +137,7 @@ export default function GamePlay() {
   // Add state variables for tracking voting selection and results
   const [selectedPlayer, setSelectedPlayer] = useState(null);
   const [showVoteResult, setShowVoteResult] = useState(false);
+  const [trackAssignments, setTrackAssignments] = useState({});
 
   // Track points awarded for @cole_sprout (and add state for tracking this)
   const [playerPoints, setPlayerPoints] = useState({
@@ -143,9 +155,9 @@ export default function GamePlay() {
   const gameName = params.gameName || "Game Name";
   const playerCount = parseInt(params.playerCount) || 4;
   const gameId = params.gameId || `game-${Date.now()}`;
-  // Set to false since we don't have WebSocket functionality
-  const isMultiplayer = false;
-  const isHost = false;
+  // Update to read the multiplayer flag from params
+  const isMultiplayer = params.isMultiplayer === "true";
+  const isHost = params.isHost === "true";
 
   // Parse player usernames from params if available
   let playerUsernames = [];
@@ -788,22 +800,141 @@ export default function GamePlay() {
     loadAndPlaySong(songWithAssignment);
   };
 
-  // Update nextRound function to reset vote selection state
-  const nextRound = async () => {
+  // WebSocket event listeners for multiplayer
+  useEffect(() => {
+    if (!isMultiplayer || !isConnected) return;
+
+    console.log("Setting up WebSocket event listeners for multiplayer game");
+    
+    // Handle round started event (server sends song to play)
+    const roundStartedCleanup = on(EVENTS.ROUND_STARTED, (data) => {
+      console.log('Round started event received:', data);
+      
+      if (data.gameId !== gameId) return;
+      
+      setCurrentRound(data.roundNumber);
+      
+      // Set up the song for this round
+      if (data.song) {
+        const songData = {
+          ...data.song,
+          // Assign the song to the player that owns it (not included in event to avoid revealing)
+          assignedToPlayer: null // This will be revealed during voting results
+        };
+        
+        setCurrentSong(songData);
+        setRoundSongs(prev => ({
+          ...prev,
+          [data.roundNumber]: songData
+        }));
+        
+        // Load and play the song
+        loadAndPlaySong(songData);
+        
+        // Update game stage
+        setGameStage("playing");
+        setCanVote(false);
+      }
+    });
+    
+    // Handle player voted event (updates during voting)
+    const playerVotedCleanup = on(EVENTS.PLAYER_VOTED, (data) => {
+      console.log('Player voted event received:', data);
+      
+      if (data.gameId !== gameId) return;
+      
+      // Update UI to show someone voted (this doesn't reveal who voted for whom)
+      // This could update a progress indicator or counter
+      console.log(`Votes received: ${data.totalVotes}/${data.totalPlayers}`);
+    });
+    
+    // Handle vote result event (reveals correct answer and scores)
+    const voteResultCleanup = on(EVENTS.VOTE_RESULT, (data) => {
+      console.log('Vote result event received:', data);
+      
+      if (data.gameId !== gameId) return;
+      
+      // Get the correct player
+      const correctPlayerId = data.correctPlayerId;
+      const correctPlayerUsername = data.correctPlayerUsername;
+      
+      // Update the current song with the correct player
+      const correctPlayer = players.find(p => p.username === correctPlayerUsername);
+      
+      if (correctPlayer) {
+        // Update the current song with the correct player
+        setCurrentSong(prev => ({
+          ...prev,
+          assignedToPlayer: correctPlayer
+        }));
+        
+        // Also update in roundSongs state
+        setRoundSongs(prev => ({
+          ...prev,
+          [data.round]: {
+            ...prev[data.round],
+            assignedToPlayer: correctPlayer
+          }
+        }));
+      }
+      
+      // Update scores
+      if (data.scores) {
+        // Convert server's score format (by ID) to our format (by username)
+        const updatedPoints = {};
+        Object.entries(data.scores).forEach(([playerId, score]) => {
+          const player = players.find(p => p.id === playerId);
+          if (player) {
+            updatedPoints[player.username] = score;
+          }
+        });
+        
+        setPlayerPoints(updatedPoints);
+      }
+      
+      // Show the vote result
+      setShowVoteResult(true);
+    });
+    
+    // Handle game completed event (end of game)
+    const gameCompletedCleanup = on(EVENTS.GAME_COMPLETED, (data) => {
+      console.log('Game completed event received:', data);
+      
+      if (data.gameId !== gameId) return;
+      
+      // Update final scores
+      if (data.results) {
+        const finalPoints = {};
+        data.results.forEach(result => {
+          finalPoints[result.username] = result.score;
+        });
+        
+        setPlayerPoints(finalPoints);
+      }
+      
+      // Store track assignments if available
+      if (data.trackAssignments) {
+        setTrackAssignments(data.trackAssignments);
+      }
+      
+      // Show the final results screen
+      setGameStage("results");
+    });
+    
+    // Cleanup all event listeners on unmount
+    return () => {
+      roundStartedCleanup();
+      playerVotedCleanup();
+      voteResultCleanup();
+      gameCompletedCleanup();
+    };
+  }, [isMultiplayer, isConnected, gameId, on, players]);
+
+  // Modified nextRound function for multiplayer
+  const handleNextRound = async () => {
     // Reset voting visual state
     setSelectedPlayer(null);
     setShowVoteResult(false);
-
-    // Log debug info about current round
-    console.log(`Round ${currentRound} completed`);
-    if (currentSong) {
-      console.log(`Song: ${currentSong.songTitle}`);
-      console.log(
-        `Assigned to player: ${
-          currentSong.assignedToPlayer?.username || "none"
-        }`
-      );
-    }
 
     // Stop current playback
     if (sound) {
@@ -817,34 +948,32 @@ export default function GamePlay() {
     // Reset playback-related states
     setPlaybackPosition(0);
     setPlaybackDuration(0);
-    setCanVote(false); // Make sure voting is disabled for the new round
+    setCanVote(false); 
     setIsPlaying(false);
     setAudioLoadError(null);
-
-    if (currentRound < ROUNDS_TOTAL) {
-      const nextRoundNum = currentRound + 1;
-      setCurrentRound(nextRoundNum);
-      setGameStage("playing");
-
-      // Add a small delay to make sure UI updates before loading the next song
-      setTimeout(() => {
-        selectSongForRound(nextRoundNum);
-      }, 100);
+    
+    if (isMultiplayer) {
+      if (isHost) {
+        // Only the host can advance rounds in multiplayer
+        console.log(`Sending nextRound request for game ${gameId}`);
+        sendNextRound(gameId);
+      }
+      // The next song will come via the ROUND_STARTED event
     } else {
-      // Game over - would show final results
-      setGameStage("results");
+      // Single player mode logic
+      if (currentRound < ROUNDS_TOTAL) {
+        const nextRoundNum = currentRound + 1;
+        setCurrentRound(nextRoundNum);
+        setGameStage("playing");
 
-      // Calculate player scores
-      const playerScores = {};
-
-      // Count correct votes for each player
-      Object.entries(playerSongs).forEach(([playerName, votes]) => {
-        playerScores[playerName] = votes.filter(
-          (vote) => vote.isCorrect
-        ).length;
-      });
-
-      console.log("Final scores:", playerScores);
+        // Add a small delay to make sure UI updates before loading the next song
+        setTimeout(() => {
+          selectSongForRound(nextRoundNum);
+        }, 100);
+      } else {
+        // Game over - show final results
+        setGameStage("results");
+      }
     }
   };
 
@@ -1293,12 +1422,12 @@ export default function GamePlay() {
           setShowVoteResult={setShowVoteResult}
           setPlayerSongs={setPlayerSongs}
           setPlayerPoints={setPlayerPoints}
-          nextRound={nextRound}
+          nextRound={handleNextRound}
           getProfilePhotoForUser={getProfilePhotoForUser}
           isMultiplayer={isMultiplayer}
           gameId={gameId}
           playerPoints={playerPoints}
-          //castVote={castVote}
+          castVote={castVote}
         />
       )}
 
@@ -1311,6 +1440,8 @@ export default function GamePlay() {
           handleReturnToLobby={handleReturnToLobby}
           handlePlayAgain={handlePlayAgain}
           currentRound={currentRound}
+          isMultiplayer={isMultiplayer}
+          trackAssignments={trackAssignments}
           styles={styles}
         />
       )}

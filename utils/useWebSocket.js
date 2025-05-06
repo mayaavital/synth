@@ -21,6 +21,7 @@ export const EVENTS = {
   GAME_RESTARTED: 'game_restarted',
   HOST_CHANGED: 'host_changed',
   PLAYER_LEFT: 'player_left',
+  PLAYER_TRACKS_RECEIVED: 'player_tracks_received',
   ERROR: 'error',
   
   // Client events
@@ -37,7 +38,8 @@ export const EVENTS = {
 // Constants
 // For development, you can use 'http://localhost:3000'
 // For production, you'll need to use the actual server IP
-const DEFAULT_SERVER_URL = 'http://10.32.120.87:3000'; // Updated to match your current IP
+// Use your specific IP address when you want to test with multiple devices
+const DEFAULT_SERVER_URL = 'http://10.27.145.110:3000'; 
 const CONNECTION_TIMEOUT = 10000; // 10 seconds
 
 // Create a singleton socket instance that persists across component mounts

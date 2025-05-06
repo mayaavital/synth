@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from "react";
-import { View, Text, Pressable, Image, Alert } from "react-native";
-import { votingStyles } from "../assets/styles/votingStyles";
-import LeaderboardScreen from "./LeaderboardScreen";
+import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, Image, ScrollView, StyleSheet, Animated } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import Colors from '../constants/Colors';
 
-const VotingStage = ({
+export default function VotingStage({
   players,
   currentSong,
   currentRound,
@@ -11,190 +11,272 @@ const VotingStage = ({
   showVoteResult,
   setSelectedPlayer,
   setShowVoteResult,
-  setPlayerSongs,
-  setPlayerPoints,
   nextRound,
   getProfilePhotoForUser,
   isMultiplayer,
   gameId,
-  castVote,
   playerPoints,
-}) => {
-  const [voteLocked, setVoteLocked] = useState(false);
-  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  castVote
+}) {
+  const [voteSubmitted, setVoteSubmitted] = useState(false);
+  const [scaleAnim] = useState(new Animated.Value(1));
 
-  // When results are revealed, show leaderboard after 5 seconds
   useEffect(() => {
-    if (showVoteResult && !showLeaderboard) {
-      const timer = setTimeout(() => {
-        setShowLeaderboard(true);
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [showVoteResult, showLeaderboard]);
+    // Reset vote state when starting a new round
+    setVoteSubmitted(false);
+    setSelectedPlayer(null);
+    setShowVoteResult(false);
+  }, [currentRound, setSelectedPlayer, setShowVoteResult]);
 
-  // Handle vote submission
-  const handleSubmitVote = () => {
-    if (!selectedPlayer) return;
-    setVoteLocked(true);
+  const handleVote = () => {
+    if (!selectedPlayer || voteSubmitted) return;
+    
+    // Animate the button press
+    Animated.sequence([
+      Animated.timing(scaleAnim, {
+        toValue: 0.95,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+    ]).start();
 
-    // Create the vote record
-    const isCorrectGuess =
-      selectedPlayer === currentSong?.assignedToPlayer?.username;
-    const newVote = {
-      round: currentRound,
-      songId: currentSong?.songTitle,
-      votedFor: selectedPlayer,
-      correctPlayer: currentSong?.assignedToPlayer?.username,
-      isCorrect: isCorrectGuess,
-    };
-
-    // Update player scores tracking
-    setPlayerSongs((prev) => ({
-      ...prev,
-      [selectedPlayer]: [...(prev[selectedPlayer] || []), newVote],
-    }));
-
-    // Update points for @cole_sprout if the current user makes a correct guess
-    if (isCorrectGuess) {
-      setPlayerPoints((prev) => ({
-        ...prev,
-        "@cole_sprout": (prev["@cole_sprout"] || 0) + 1,
-      }));
-    }
-
-    //     // Instead of only updating @cole_sprout:
-    // if (isCorrectGuess) {
-    //     setPlayerPoints((prev) => ({
-    //       ...prev,
-    //       [selectedPlayer]: (prev[selectedPlayer] || 0) + 1,
-    //     }));
-    //   }
-
-    // In multiplayer mode, send the vote to the server
-    if (isMultiplayer) {
-      castVote(gameId, selectedPlayer);
+    // Submit vote
+    setVoteSubmitted(true);
+    
+    // If multiplayer, send vote to server
+    if (isMultiplayer && gameId && castVote) {
+      console.log(`Casting vote for player ${selectedPlayer.username} in game ${gameId}`);
+      castVote({
+        gameId,
+        votedForPlayerId: selectedPlayer.id
+      });
     } else {
-      // In single player mode, reveal result immediately
-      setShowVoteResult(true);
+      // For single player, show result immediately
+      setTimeout(() => {
+        setShowVoteResult(true);
+      }, 500);
     }
   };
 
-  // Handler for leaderboard timeout
-  const handleLeaderboardTimeout = () => {
-    setShowLeaderboard(false);
-    setVoteLocked(false);
-    setSelectedPlayer(null);
-    setShowVoteResult(false);
+  const handleSelectPlayer = (player) => {
+    if (voteSubmitted) return;
+    setSelectedPlayer(player);
+  };
+
+  const handleNextRound = () => {
     nextRound();
   };
 
-  if (showLeaderboard && showVoteResult) {
-    return (
-      <LeaderboardScreen
-        currentSong={currentSong}
-        assignedUser={currentSong?.assignedToPlayer}
-        currentRound={currentRound}
-        players={players}
-        playerPoints={playerPoints}
-        getProfilePhotoForUser={getProfilePhotoForUser}
-        onTimeout={handleLeaderboardTimeout}
-      />
-    );
-  }
-
   return (
-    <View style={votingStyles.votingContainer}>
-      <Text style={votingStyles.votingInstructions}>
-        Who do you think listened to this song?
-      </Text>
-
-      <View style={votingStyles.playersGrid}>
-        {players.map((player) => {
-          // Determine style based on selection and result
-          const isSelected = selectedPlayer === player.username;
-          const isCorrect =
-            currentSong?.assignedToPlayer?.username === player.username;
-          const wasVoted = isSelected && showVoteResult;
-
-          // Determine the button style for dynamic feedback
-          let buttonStyle = votingStyles.playerVoteButton;
-          if (showVoteResult) {
-            if (wasVoted) {
-              if (isCorrect) {
-                buttonStyle = [
-                  votingStyles.playerVoteButton,
-                  votingStyles.correctVoteButton,
-                ];
-              } else {
-                buttonStyle = [
-                  votingStyles.playerVoteButton,
-                  votingStyles.incorrectVoteButton,
-                ];
-              }
-            } else if (isCorrect) {
-              // Show correct answer even if not selected
-              buttonStyle = [
-                votingStyles.playerVoteButton,
-                votingStyles.correctVoteButton,
-              ];
-            }
-          } else if (isSelected) {
-            buttonStyle = [
-              votingStyles.playerVoteButton,
-              { borderColor: "#6C3EB6", borderWidth: 3 },
-            ];
-          }
-
-          return (
-            <Pressable
-              key={player.id}
-              style={buttonStyle}
-              onPress={() => {
-                if (voteLocked || showVoteResult) return;
-                setSelectedPlayer(player.username);
-              }}
-            >
-              <View style={votingStyles.profileImageContainer}>
-                <View style={votingStyles.profileBackground}>
-                  <Image
-                    source={getProfilePhotoForUser(player.username)}
-                    style={votingStyles.profileImage}
-                  />
-                </View>
-              </View>
-              <Text style={votingStyles.playerVoteName}>{player.username}</Text>
-            </Pressable>
-          );
-        })}
-        {/* Overlay when vote is locked but results not shown */}
-        {voteLocked && !showVoteResult && (
-          <View style={votingStyles.voteLockedOverlay}>
-            <View style={votingStyles.lockedMessageContainer}>
-              <Text style={votingStyles.lockIcon}>🔒</Text>
-              <Text style={votingStyles.lockedMessage}>
-                Your vote{"\n"}is locked!
-              </Text>
-            </View>
-          </View>
-        )}
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Who added this song?</Text>
+        <Text style={styles.songInfo}>
+          {currentSong?.songTitle} • {currentSong?.songArtists?.join(', ')}
+        </Text>
       </View>
-      {/* Submit button, only show if vote not locked and a player is selected */}
-      {!voteLocked && !showVoteResult && selectedPlayer && (
-        <Pressable style={votingStyles.submitButton} onPress={handleSubmitVote}>
-          <Text style={votingStyles.submitButtonText}>Submit</Text>
-        </Pressable>
-      )}
-      {/* Waiting banner at the bottom */}
-      {voteLocked && !showVoteResult && (
-        <View style={votingStyles.waitingBanner}>
-          <Text style={votingStyles.waitingBannerText}>
-            Waiting for all votes…
+
+      <ScrollView style={styles.playersContainer}>
+        {players.map((player) => (
+          <TouchableOpacity
+            key={player.username}
+            style={[
+              styles.playerItem,
+              selectedPlayer?.username === player.username && styles.selectedPlayer,
+              voteSubmitted && selectedPlayer?.username === player.username && styles.votedPlayer
+            ]}
+            onPress={() => handleSelectPlayer(player)}
+            disabled={voteSubmitted}
+          >
+            <Image
+              source={getProfilePhotoForUser(player.username)}
+              style={styles.playerAvatar}
+            />
+            <View style={styles.playerInfo}>
+              <Text style={styles.playerName}>{player.username}</Text>
+              {playerPoints && <Text style={styles.playerPoints}>{playerPoints[player.username] || 0} pts</Text>}
+            </View>
+            {selectedPlayer?.username === player.username && (
+              <Ionicons name="checkmark-circle" size={24} color={Colors.primary} />
+            )}
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      {showVoteResult ? (
+        <View style={styles.resultContainer}>
+          <Text style={styles.resultTitle}>
+            {currentSong?.assignedToPlayer?.username === selectedPlayer?.username
+              ? 'Correct! +1 point'
+              : 'Wrong!'}
           </Text>
+          <View style={styles.correctAnswer}>
+            <Image
+              source={getProfilePhotoForUser(currentSong?.assignedToPlayer?.username)}
+              style={styles.resultAvatar}
+            />
+            <Text style={styles.resultText}>
+              This song was added by {currentSong?.assignedToPlayer?.username}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.nextButton}
+            onPress={handleNextRound}
+          >
+            <Text style={styles.nextButtonText}>Next Round</Text>
+          </TouchableOpacity>
         </View>
+      ) : (
+        <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+          <TouchableOpacity
+            style={[
+              styles.voteButton,
+              (!selectedPlayer || voteSubmitted) && styles.disabledButton
+            ]}
+            onPress={handleVote}
+            disabled={!selectedPlayer || voteSubmitted}
+          >
+            <Text style={styles.voteButtonText}>
+              {voteSubmitted ? 'Vote Submitted' : 'Submit Vote'}
+            </Text>
+          </TouchableOpacity>
+        </Animated.View>
       )}
     </View>
   );
-};
+}
 
-export default VotingStage;
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    padding: 20,
+    backgroundColor: '#f5f5f5',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  header: {
+    marginBottom: 24,
+  },
+  title: {
+    fontSize: 24,
+    marginBottom: 8,
+    color: '#333',
+    fontWeight: 'bold',
+  },
+  songInfo: {
+    fontSize: 16,
+    color: '#666',
+  },
+  playersContainer: {
+    flex: 1,
+    marginBottom: 20,
+  },
+  playerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  selectedPlayer: {
+    backgroundColor: Colors.lightPrimary,
+    borderColor: Colors.primary,
+    borderWidth: 2,
+  },
+  votedPlayer: {
+    opacity: 0.7,
+  },
+  playerAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    marginRight: 16,
+  },
+  playerInfo: {
+    flex: 1,
+  },
+  playerName: {
+    fontSize: 16,
+    color: '#333',
+    fontWeight: '600',
+  },
+  playerPoints: {
+    fontSize: 14,
+    color: '#666',
+  },
+  voteButton: {
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  disabledButton: {
+    backgroundColor: '#ccc',
+    opacity: 0.7,
+  },
+  voteButtonText: {
+    fontSize: 16,
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  resultContainer: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 20,
+    marginTop: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  resultTitle: {
+    fontSize: 20,
+    marginBottom: 16,
+    color: '#333',
+    textAlign: 'center',
+    fontWeight: 'bold',
+  },
+  correctAnswer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  resultAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 12,
+  },
+  resultText: {
+    fontSize: 16,
+    color: '#333',
+  },
+  nextButton: {
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+  },
+  nextButtonText: {
+    fontSize: 16,
+    color: 'white',
+    fontWeight: 'bold',
+  },
+});

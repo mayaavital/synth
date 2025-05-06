@@ -95,7 +95,7 @@ io.on('connection', (socket) => {
 
   // Handle joining a game
   socket.on('join_game', (data) => {
-    const { gameId, username } = data;
+    const { gameId, username, profilePicture, playerTracks } = data;
     
     if (!activeGames[gameId]) {
       socket.emit('error', { message: 'Game not found' });
@@ -118,6 +118,24 @@ io.on('connection', (socket) => {
       
       // Update the player's socket ID
       activeGames[gameId].players[existingPlayerIndex].id = socket.id;
+      activeGames[gameId].players[existingPlayerIndex].profilePicture = profilePicture || null;
+      
+      // Store the player's tracks if provided
+      if (playerTracks && Array.isArray(playerTracks) && playerTracks.length > 0) {
+        // Initialize playerTracks object if it doesn't exist
+        if (!activeGames[gameId].playerTracks) {
+          activeGames[gameId].playerTracks = {};
+        }
+        
+        // Store the player's tracks, limited to 5 tracks
+        activeGames[gameId].playerTracks[socket.id] = playerTracks.slice(0, 5);
+        
+        // Acknowledge tracks were received
+        socket.emit('player_tracks_received', { 
+          status: 'success',
+          message: 'Your songs have been received'
+        });
+      }
       
       // Update the player's score entry
       if (activeGames[gameId].scores[oldSocketId] !== undefined) {
@@ -138,15 +156,37 @@ io.on('connection', (socket) => {
       // Notify everyone in the room about the updated game state
       io.to(gameId).emit('player_joined', {
         game: activeGames[gameId],
-        newPlayer: { id: socket.id, username }
+        newPlayer: { 
+          id: socket.id, 
+          username,
+          profilePicture: profilePicture || null
+        }
       });
     } else {
       // Add new player to game
       activeGames[gameId].players.push({
         id: socket.id,
         username,
+        profilePicture: profilePicture || null,
         ready: false
       });
+      
+      // Store the player's tracks if provided
+      if (playerTracks && Array.isArray(playerTracks) && playerTracks.length > 0) {
+        // Initialize playerTracks object if it doesn't exist
+        if (!activeGames[gameId].playerTracks) {
+          activeGames[gameId].playerTracks = {};
+        }
+        
+        // Store the player's tracks, limited to 5 tracks
+        activeGames[gameId].playerTracks[socket.id] = playerTracks.slice(0, 5);
+        
+        // Acknowledge tracks were received
+        socket.emit('player_tracks_received', { 
+          status: 'success',
+          message: 'Your songs have been received'
+        });
+      }
       
       socket.join(gameId);
       console.log(`Player joined: ${username} to game ${gameId}`);
@@ -157,7 +197,11 @@ io.on('connection', (socket) => {
       // Notify everyone in the room about the new player
       io.to(gameId).emit('player_joined', {
         game: activeGames[gameId],
-        newPlayer: { id: socket.id, username }
+        newPlayer: { 
+          id: socket.id, 
+          username,
+          profilePicture: profilePicture || null
+        }
       });
     }
   });
@@ -199,9 +243,103 @@ io.on('connection', (socket) => {
     activeGames[gameId].status = 'playing';
     activeGames[gameId].currentRound = 1;
     
+    // Prepare the track assignments for the game
+    prepareGameTracks(gameId);
+    
     // Broadcast game start to all players
     io.to(gameId).emit('game_started', { game: activeGames[gameId] });
   });
+
+  // Helper function to prepare tracks for the game
+  function prepareGameTracks(gameId) {
+    const game = activeGames[gameId];
+    
+    if (!game) return;
+    
+    // Create a map to store which tracks belong to which players
+    game.trackAssignments = {};
+    game.roundSongs = {};
+    
+    // Only proceed if we have playerTracks
+    if (!game.playerTracks) {
+      console.error(`Game ${gameId} has no player tracks`);
+      return;
+    }
+    
+    // Get all available tracks from all players
+    let allTracks = [];
+    let trackOwnership = {};
+    
+    Object.keys(game.playerTracks).forEach(playerId => {
+      const playerTracks = game.playerTracks[playerId];
+      
+      if (playerTracks && playerTracks.length > 0) {
+        // Add each track with player ownership information
+        playerTracks.forEach(track => {
+          if (track && track.previewUrl) {
+            const trackWithOwner = {
+              ...track,
+              ownerId: playerId
+            };
+            
+            allTracks.push(trackWithOwner);
+            trackOwnership[track.trackId || track.uri] = playerId;
+          }
+        });
+      }
+    });
+    
+    // Shuffle the tracks
+    shuffleArray(allTracks);
+    
+    // Limit to the number of rounds
+    const maxTracks = Math.min(allTracks.length, game.maxRounds);
+    const selectedTracks = allTracks.slice(0, maxTracks);
+    
+    // Store track assignments and prepare round songs
+    selectedTracks.forEach((track, index) => {
+      const roundNum = index + 1;
+      const playerId = track.ownerId;
+      
+      // Store track assignment (which player owns which track)
+      game.trackAssignments[roundNum] = {
+        trackId: track.trackId || track.uri,
+        playerId: playerId,
+        playerUsername: game.players.find(p => p.id === playerId)?.username || 'Unknown Player'
+      };
+      
+      // Prepare round song data
+      game.roundSongs[roundNum] = {
+        song: {
+          songTitle: track.songTitle,
+          songArtists: track.songArtists,
+          albumName: track.albumName,
+          imageUrl: track.imageUrl,
+          previewUrl: track.previewUrl,
+          uri: track.uri,
+          trackId: track.trackId
+        },
+        assignedPlayer: {
+          id: playerId,
+          username: game.players.find(p => p.id === playerId)?.username || 'Unknown Player'
+        }
+      };
+    });
+    
+    console.log(`Prepared ${selectedTracks.length} tracks for game ${gameId}`);
+    
+    // Log the track assignments for debugging
+    console.log(`Track assignments for game ${gameId}:`, game.trackAssignments);
+  }
+  
+  // Helper function to shuffle an array (Fisher-Yates algorithm)
+  function shuffleArray(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [array[i], array[j]] = [array[j], array[i]];
+    }
+    return array;
+  }
 
   // Handle song selection for a round
   socket.on('select_song', (data) => {
@@ -274,88 +412,170 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Handle player votes
+  // Handle player vote
   socket.on('cast_vote', (data) => {
-    const { gameId, votedForUsername } = data;
+    const { gameId, votedForPlayerId } = data;
     
-    if (!activeGames[gameId]) return;
-    
-    // Record the vote
-    const currentRound = activeGames[gameId].currentRound;
-    if (!activeGames[gameId].votes[currentRound]) {
-      activeGames[gameId].votes[currentRound] = {};
+    if (!activeGames[gameId]) {
+      socket.emit('error', { message: 'Game not found' });
+      return;
     }
     
-    activeGames[gameId].votes[currentRound][socket.id] = votedForUsername;
+    const game = activeGames[gameId];
+    const currentRound = game.currentRound;
     
-    // Check if this is a correct vote
-    const correctPlayer = activeGames[gameId].roundSongs[currentRound]?.assignedToPlayer;
-    const isCorrect = correctPlayer && correctPlayer.username === votedForUsername;
-    
-    // Update score if correct
-    if (isCorrect) {
-      activeGames[gameId].scores[socket.id] = (activeGames[gameId].scores[socket.id] || 0) + 1;
+    // Save this player's vote
+    if (!game.votes) {
+      game.votes = {};
     }
     
-    // Send vote result to the player who voted
-    socket.emit('vote_result', {
-      isCorrect,
-      correctPlayer,
-      votedFor: votedForUsername
+    // Record who this player voted for
+    game.votes[socket.id] = votedForPlayerId;
+    
+    console.log(`Player ${socket.id} voted for ${votedForPlayerId} in round ${currentRound}`);
+    
+    // Get the correct player for this round
+    const roundData = game.roundSongs[currentRound];
+    if (!roundData) {
+      console.error(`No song data for round ${currentRound}`);
+      return;
+    }
+    
+    const correctPlayerId = roundData.assignedPlayer.id;
+    const correctPlayerUsername = roundData.assignedPlayer.username;
+    
+    // Count votes received
+    const totalPlayers = game.players.length;
+    const totalVotes = Object.keys(game.votes).length;
+    
+    // Broadcast vote update (without revealing results)
+    io.to(gameId).emit('player_voted', {
+      gameId,
+      totalVotes,
+      totalPlayers,
+      round: currentRound
     });
     
-    // Check if all players have voted
-    const playerCount = activeGames[gameId].players.length;
-    const voteCount = Object.keys(activeGames[gameId].votes[currentRound] || {}).length;
-    
-    if (voteCount >= playerCount) {
-      // All players have voted - broadcast round results
-      io.to(gameId).emit('round_complete', {
+    // If all votes are in, calculate points and broadcast results
+    if (totalVotes >= totalPlayers) {
+      console.log(`All votes received for round ${currentRound} in game ${gameId}`);
+      
+      // Count votes for each player
+      const voteCounts = {};
+      Object.values(game.votes).forEach(votedId => {
+        voteCounts[votedId] = (voteCounts[votedId] || 0) + 1;
+      });
+      
+      // Award points:
+      // 1. Players who guessed correctly get 1 point
+      // 2. The player who contributed the song gets 1 point for each player they fooled
+      
+      Object.entries(game.votes).forEach(([voterId, votedForId]) => {
+        // Award 1 point for correct guesses
+        if (votedForId === correctPlayerId && voterId !== correctPlayerId) {
+          game.scores[voterId] = (game.scores[voterId] || 0) + 1;
+          console.log(`Player ${voterId} earned 1 point for correct guess`);
+        }
+      });
+      
+      // Award points to track owner for fooling others
+      // (Count all votes except their own that were not for them)
+      const validVotes = Object.entries(game.votes).filter(([voterId, _]) => voterId !== correctPlayerId);
+      const incorrectVotes = validVotes.filter(([_, votedForId]) => votedForId !== correctPlayerId);
+      
+      // Award points for fooling others (getting incorrect votes)
+      if (correctPlayerId) {
+        game.scores[correctPlayerId] = (game.scores[correctPlayerId] || 0) + incorrectVotes.length;
+        console.log(`Player ${correctPlayerId} earned ${incorrectVotes.length} points for fooling others`);
+      }
+      
+      // Broadcast vote results to all players
+      io.to(gameId).emit('vote_result', {
+        gameId,
         round: currentRound,
-        votes: activeGames[gameId].votes[currentRound],
-        scores: activeGames[gameId].scores,
-        correctPlayer: correctPlayer
+        votes: game.votes,
+        correctPlayerId,
+        correctPlayerUsername,
+        scores: game.scores,
+        voteCounts
       });
-    } else {
-      // Just update other players about the vote (not the result)
-      socket.to(gameId).emit('player_voted', {
-        playerId: socket.id,
-        round: currentRound
-      });
+      
+      // Reset votes for next round
+      game.votes = {};
     }
   });
 
-  // Handle advancing to next round
+  // Handle advancing to the next round
   socket.on('next_round', (data) => {
     const { gameId } = data;
     
-    if (!activeGames[gameId] || activeGames[gameId].host !== socket.id) return;
-    
-    const currentRound = activeGames[gameId].currentRound;
-    const maxRounds = activeGames[gameId].maxRounds;
-    
-    if (currentRound < maxRounds) {
-      // Advance to next round
-      activeGames[gameId].currentRound++;
-      
-      // Reset current song
-      activeGames[gameId].currentSong = null;
-      
-      // Broadcast next round
-      io.to(gameId).emit('round_started', {
-        round: activeGames[gameId].currentRound,
-        game: activeGames[gameId]
-      });
-    } else {
-      // Game complete
-      activeGames[gameId].status = 'completed';
-      
-      // Broadcast game completed
-      io.to(gameId).emit('game_completed', {
-        game: activeGames[gameId],
-        finalScores: activeGames[gameId].scores
-      });
+    // Verify the game exists
+    if (!activeGames[gameId]) {
+      socket.emit('error', { message: 'Game not found' });
+      return;
     }
+    
+    // Verify the requesting socket is the host
+    if (activeGames[gameId].host !== socket.id) {
+      socket.emit('error', { message: 'Not authorized to advance rounds' });
+      return;
+    }
+    
+    const game = activeGames[gameId];
+    const currentRound = game.currentRound;
+    const nextRound = currentRound + 1;
+    
+    console.log(`Advancing game ${gameId} from round ${currentRound} to round ${nextRound}`);
+    
+    // Check if we've reached the end of the game
+    if (nextRound > game.maxRounds || !game.roundSongs[nextRound]) {
+      console.log(`Game ${gameId} is complete! Final scores:`, game.scores);
+      
+      // Calculate final results
+      const finalResults = Object.keys(game.scores).map(playerId => {
+        const player = game.players.find(p => p.id === playerId);
+        return {
+          id: playerId,
+          username: player ? player.username : 'Unknown Player',
+          score: game.scores[playerId]
+        };
+      }).sort((a, b) => b.score - a.score);
+      
+      // Send game completed event
+      io.to(gameId).emit('game_completed', {
+        gameId,
+        results: finalResults,
+        trackAssignments: game.trackAssignments
+      });
+      
+      // Mark game as completed
+      game.status = 'completed';
+      return;
+    }
+    
+    // Update game state to next round
+    game.currentRound = nextRound;
+    game.votes = {}; // Reset votes for the new round
+    
+    // Use the pre-assigned song for this round
+    const roundData = game.roundSongs[nextRound];
+    
+    if (!roundData) {
+      console.error(`No song assigned for round ${nextRound} in game ${gameId}`);
+      socket.emit('error', { message: 'No song assigned for this round' });
+      return;
+    }
+    
+    // Send the round start event with the pre-assigned song
+    io.to(gameId).emit('round_started', {
+      gameId,
+      roundNumber: nextRound,
+      totalRounds: game.maxRounds,
+      song: roundData.song,
+      // We don't send the assignedPlayer info so players don't know who the song belongs to
+    });
+    
+    console.log(`Round ${nextRound} started for game ${gameId} with song "${roundData.song.songTitle}"`);
   });
 
   // Handle game restart

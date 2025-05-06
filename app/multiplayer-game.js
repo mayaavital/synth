@@ -38,7 +38,7 @@ export default function MultiplayerGame() {
 
   // Game state
   const [connectionStep, setConnectionStep] = useState('initial'); // initial, connecting, host, join, lobby, game
-  const [serverUrl, setServerUrl] = useState('');
+  const [serverUrl, setServerUrl] = useState('http://10.27.145.110:3000');
   const [username, setUsername] = useState('');
   const [gameName, setGameName] = useState('');
   const [gameId, setGameId] = useState('');
@@ -50,6 +50,7 @@ export default function MultiplayerGame() {
   const [gameState, setGameState] = useState({});
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [playerTracks, setPlayerTracks] = useState([]);
 
   // UI state
   const [showServerInput, setShowServerInput] = useState(false);
@@ -303,7 +304,7 @@ export default function MultiplayerGame() {
   }, [connect, serverUrl]);
 
   // Create a new game
-  const handleCreateGame = useCallback(() => {
+  const handleCreateGame = useCallback(async () => {
     if (!username.trim()) {
       setError('Please enter a username');
       return;
@@ -316,19 +317,32 @@ export default function MultiplayerGame() {
     
     setLoading(true);
     setError(null);
-    setIsHost(true);
     
-    const gameData = {
-      gameName,
-      hostUsername: username,
-      maxRounds: 3,
-    };
-    
-    createGame(gameData);
-  }, [username, gameName, createGame]);
+    try {
+      // Fetch player's recent tracks
+      const playerTracks = await fetchRecentTracks();
+      
+      // Store player tracks for later use
+      setPlayerTracks(playerTracks);
+      
+      setIsHost(true);
+      
+      const gameData = {
+        gameName,
+        hostUsername: username,
+        maxRounds: 3,
+      };
+      
+      createGame(gameData);
+    } catch (err) {
+      console.error('Error creating game:', err);
+      setError(`Failed to create game: ${err.message}`);
+      setLoading(false);
+    }
+  }, [username, gameName, createGame, fetchRecentTracks]);
 
   // Join an existing game
-  const handleJoinGame = useCallback(() => {
+  const handleJoinGame = useCallback(async () => {
     if (!username.trim()) {
       setError('Please enter a username');
       return;
@@ -343,64 +357,76 @@ export default function MultiplayerGame() {
     setError(null);
     setIsHost(false);
     
-    // Check connection status before attempting to join
-    if (!isConnected) {
-      // Not connected, try to connect first
-      Alert.alert(
-        'Connection Issue',
-        'Not connected to the server. Would you like to reconnect?',
-        [
-          {
-            text: 'Cancel',
-            style: 'cancel',
-            onPress: () => setLoading(false)
-          },
-          {
-            text: 'Reconnect',
-            onPress: async () => {
-              try {
-                await connect(serverUrl || undefined);
-                // Wait a moment for the connection to stabilize
-                setTimeout(() => {
-                  // Try joining again
-                  const joinSuccess = joinGame(joinCode, username);
-                  if (joinSuccess) {
-                    setGameId(joinCode);
-                  } else {
-                    setError('Failed to join game. Please try again.');
-                    setLoading(false);
-                  }
-                }, 1500);
-              } catch (err) {
-                setError(`Connection failed: ${err.message}`);
-                setLoading(false);
+    try {
+      // Fetch player's recent tracks
+      const playerTracks = await fetchRecentTracks();
+      
+      // Store player tracks for later use
+      setPlayerTracks(playerTracks);
+      
+      // Check connection status before attempting to join
+      if (!isConnected) {
+        // Not connected, try to connect first
+        Alert.alert(
+          'Connection Issue',
+          'Not connected to the server. Would you like to reconnect?',
+          [
+            {
+              text: 'Cancel',
+              style: 'cancel',
+              onPress: () => setLoading(false)
+            },
+            {
+              text: 'Reconnect',
+              onPress: async () => {
+                try {
+                  await connect(serverUrl || undefined);
+                  // Wait a moment for the connection to stabilize
+                  setTimeout(() => {
+                    // Try joining again with tracks
+                    const joinSuccess = joinGame(joinCode, username, null, playerTracks);
+                    if (joinSuccess) {
+                      setGameId(joinCode);
+                    } else {
+                      setError('Failed to join game. Please try again.');
+                      setLoading(false);
+                    }
+                  }, 1500);
+                } catch (err) {
+                  setError(`Connection failed: ${err.message}`);
+                  setLoading(false);
+                }
               }
             }
-          }
-        ]
-      );
-      return;
-    }
-    
-    // We're connected, try to join
-    console.log(`Attempting to join game ${joinCode} as ${username}...`);
-    const joinSuccess = joinGame(joinCode, username);
-    
-    if (joinSuccess) {
-      setGameId(joinCode);
+          ]
+        );
+        return;
+      }
       
-      // Set a timeout in case we don't receive player_joined event
-      setTimeout(() => {
-        if (connectionStep !== 'lobby' && loading) {
-          setError('Joining timed out. The game may not exist or the server may be unreachable.');
-          setLoading(false);
-        }
-      }, 10000);
-    } else {
-      setError('Failed to join game. Please check your connection and try again.');
+      // We're connected, try to join with tracks
+      console.log(`Attempting to join game ${joinCode} as ${username} with ${playerTracks.length} tracks...`);
+      const joinSuccess = joinGame(joinCode, username, null, playerTracks);
+      
+      if (joinSuccess) {
+        setGameId(joinCode);
+        
+        // Set a timeout in case we don't receive player_joined event
+        setTimeout(() => {
+          if (connectionStep !== 'lobby' && loading) {
+            setError('Joining timed out. The game may not exist or the server may be unreachable.');
+            setLoading(false);
+          }
+        }, 10000);
+      } else {
+        setError('Failed to join game. Please check your connection and try again.');
+        setLoading(false);
+      }
+    } catch (err) {
+      console.error('Error joining game:', err);
+      setError(`Failed to join game: ${err.message}`);
       setLoading(false);
     }
-  }, [username, joinCode, joinGame, isConnected, connect, serverUrl, connectionStep, loading]);
+  }, [username, joinCode, joinGame, isConnected, connect, serverUrl, connectionStep, loading, fetchRecentTracks]);
 
   // Mark player as ready
   const handleReady = useCallback(() => {
@@ -432,6 +458,91 @@ export default function MultiplayerGame() {
       }
     }, 5000);
   }, [isConnected, gameId, username, joinGame]);
+
+  // Fetch player's recent tracks for multiplayer
+  const fetchRecentTracks = useCallback(async () => {
+    try {
+      setLoading(true);
+      console.log('Fetching recent tracks for multiplayer game...');
+      
+      // Example API call to fetch recently played tracks
+      // This would need to be replaced with your actual Spotify API implementation
+      const response = await fetch('https://api.spotify.com/v1/me/player/recently-played?limit=50', {
+        headers: {
+          'Authorization': 'Bearer YOUR_ACCESS_TOKEN' // Replace with actual token retrieval
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch recent tracks: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      // Process tracks to get unique tracks with all required information
+      const processedTracks = [];
+      const trackIds = new Set();
+      
+      if (data.items && data.items.length > 0) {
+        // Process each track, keeping only unique tracks with preview URLs
+        data.items.forEach(item => {
+          const track = item.track;
+          
+          // Only process tracks that have a preview URL and haven't been added yet
+          if (track && 
+              track.preview_url && 
+              !trackIds.has(track.id) && 
+              processedTracks.length < 5) {
+            
+            // Format the track in the expected structure
+            const formattedTrack = {
+              songTitle: track.name,
+              songArtists: track.artists.map(artist => artist.name),
+              albumName: track.album.name,
+              imageUrl: track.album.images[0]?.url,
+              previewUrl: track.preview_url,
+              uri: track.uri,
+              trackId: track.id,
+              externalUrl: track.external_urls.spotify,
+              duration: track.duration_ms
+            };
+            
+            processedTracks.push(formattedTrack);
+            trackIds.add(track.id);
+          }
+        });
+      }
+      
+      console.log(`Found ${processedTracks.length} valid tracks for multiplayer`);
+      
+      // For testing purposes, let's create mock tracks if we couldn't get real ones
+      if (processedTracks.length === 0) {
+        for (let i = 1; i <= 5; i++) {
+          processedTracks.push({
+            songTitle: `Test Song ${i}`,
+            songArtists: ['Test Artist'],
+            albumName: 'Test Album',
+            imageUrl: 'https://via.placeholder.com/300',
+            previewUrl: 'https://p.scdn.co/mp3-preview/your-preview-url',
+            uri: `spotify:track:mock${i}`,
+            trackId: `mock${i}`,
+            duration: 30000
+          });
+        }
+        console.log('Created 5 mock tracks for testing');
+      }
+      
+      return processedTracks;
+    } catch (error) {
+      console.error('Error fetching recent tracks:', error);
+      setError(`Could not fetch your tracks: ${error.message}`);
+      
+      // Return empty array on failure
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   const renderInitialScreen = () => (
     <View style={styles.contentContainer}>
@@ -481,7 +592,7 @@ export default function MultiplayerGame() {
               style={styles.input}
               value={serverUrl}
               onChangeText={setServerUrl}
-              placeholder="http://192.168.1.x:3000"
+              placeholder="http://10.27.145.110:3000"
               placeholderTextColor="#888"
               autoCapitalize="none"
               autoCorrect={false}
@@ -632,7 +743,7 @@ export default function MultiplayerGame() {
 
   const renderLobbyScreen = () => {
     // Generate join info for the QR code - using URL format for better compatibility with QR scanners
-    const joinUrl = `synth://join?gameId=${gameId}&serverUrl=${encodeURIComponent(serverUrl || "http://10.27.148.121:3000")}&gameName=${encodeURIComponent(gameState.name || gameName)}`;
+    const joinUrl = `synth://join?gameId=${gameId}&serverUrl=${encodeURIComponent(serverUrl || "http://10.27.145.110:3000")}&gameName=${encodeURIComponent(gameState.name || gameName)}`;
     
     return (
     <View style={styles.contentContainer}>

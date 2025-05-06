@@ -16,11 +16,20 @@
     "assetBundlePatterns": [
       "**/*"
     ],
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.synth.app",
       "infoPlist": {
-        "LSApplicationQueriesSchemes": ["synth"]
+        "LSApplicationQueriesSchemes": [
+          "synth",
+          "synth"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -37,20 +46,30 @@
               "scheme": "synth"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-router"
     ],
     "extra": {
+      "router": {
+        "origin": false
+      },
       "eas": {
-        "projectId": "your-project-id"
+        "projectId": "46bebf1a-7fc4-46f1-9775-5d8b7920712e"
       }
-    }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/46bebf1a-7fc4-46f1-9775-5d8b7920712e"
+    },
+    "owner": "csprout3"
   }
 }
