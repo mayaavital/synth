@@ -3,6 +3,21 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 
+
+var admin = require("firebase-admin");
+var {GameDataBranches, UserDataBranches, DATABASE_BRANCHES, GAME_TREE} = require('./database-branches');
+
+var serviceAccount = require("./synth-database-firebase-adminsdk-fbsvc-b707949a55.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+  databaseURL: "https://synth-database-default-rtdb.firebaseio.com"
+});
+
+// As an admin, the app has access to read and write all data, regardless of Security Rules
+var db = admin.database();
+var ref = db.ref("restricted_access/secret_document");
+
 // Initialize Express and HTTP server
 const app = express();
 app.use(cors({
@@ -61,19 +76,39 @@ io.on('connection', (socket) => {
 
   // Handle creating a game
   socket.on('create_game', (gameData) => {
+
+    /*
+    Luke: I changed the old "gameID" to "gameInviteCode" because the database might delete an old game's data if theres a duplicate code that
+    is in the database but not in the active game list.
+    */
+
     // Generate a simple game code instead of using timestamp
-    let gameId = generateSimpleGameCode();
+    let gameInviteCode = generateSimpleGameCode();
     
     // Make sure the game code is unique
-    while (activeGames[gameId]) {
-      gameId = generateSimpleGameCode();
+    while (activeGames[gameInviteCode]) {
+      gameInviteCode = generateSimpleGameCode();
     }
-    
+
     const gameName = gameData.gameName || 'Untitled Game';
+
+
+    var gameRef = db.ref(DATABASE_BRANCHES.GAMES).child(GAME_TREE.GAMES);
+
+    var gameId = gameRef.push({
+      [GameDataBranches.METADATA.NAME] : gameName
+    });
+
+    var inviteCodeRef = db.ref(DATABASE_BRANCHES.GAMES).child(GAME_TREE.INVITE_CODE).child(gameInviteCode);
+    inviteCodeRef.set(gameId);
+    
+    
+    //TODO: change the id in this case to be the actual gameID and add a different
+    //  field for the invite code. We can talk more about this when were together.
     
     // Create game room with the simple code (not prefixed with "game-")
     activeGames[gameId] = {
-      id: gameId,
+      id: gameInviteCode,
       name: gameName,
       host: socket.id,
       players: [{ id: socket.id, username: gameData.hostUsername || 'Host', ready: true }],
@@ -94,74 +129,89 @@ io.on('connection', (socket) => {
   });
 
   // Handle joining a game
-  socket.on('join_game', (data) => {
+  socket.on('join_game', async (data) => {
     const { gameId, username } = data;
+
+    //The gameID is the invite code, so we need to translate it to the actual gameID
+    //This will look up the gameID from the invite code branch in firebase and return it
+    var translateRef = db.ref(DATABASE_BRANCHES.GAMES).child(GAME_TREE.INVITE_CODE).child(gameId);
+    const actualGameId = await translateRef.once('value');
+    if (!actualGameId) {
+      socket.emit('error', { message: 'Game not found' });
+      return;
+    }
+
     
-    if (!activeGames[gameId]) {
+    if (!activeGames[actualGameId]) {
       socket.emit('error', { message: 'Game not found' });
       return;
     }
     
     // Check if game is full
-    if (activeGames[gameId].players.length >= 7) {
+    if (activeGames[actualGameId].players.length >= 7) {
       socket.emit('error', { message: 'Game is full' });
       return;
     }
     
     // Check if a player with this username already exists in the game
-    const existingPlayerIndex = activeGames[gameId].players.findIndex(p => p.username === username);
+    const existingPlayerIndex = activeGames[actualGameId].players.findIndex(p => p.username === username);
     
     if (existingPlayerIndex !== -1) {
       // Player with this username already exists
       // Update their socket ID instead of adding a duplicate
-      const oldSocketId = activeGames[gameId].players[existingPlayerIndex].id;
+      const oldSocketId = activeGames[actualGameId].players[existingPlayerIndex].id;
       
       // Update the player's socket ID
-      activeGames[gameId].players[existingPlayerIndex].id = socket.id;
+      activeGames[actualGameId].players[existingPlayerIndex].id = socket.id;
       
       // Update the player's score entry
-      if (activeGames[gameId].scores[oldSocketId] !== undefined) {
-        activeGames[gameId].scores[socket.id] = activeGames[gameId].scores[oldSocketId];
-        delete activeGames[gameId].scores[oldSocketId];
+      if (activeGames[actualGameId].scores[oldSocketId] !== undefined) {
+        activeGames[actualGameId].scores[socket.id] = activeGames[actualGameId].scores[oldSocketId];
+        delete activeGames[actualGameId].scores[oldSocketId];
       } else {
-        activeGames[gameId].scores[socket.id] = 0;
+        activeGames[actualGameId].scores[socket.id] = 0;
       }
       
       // If this player was the host, update the host reference
-      if (activeGames[gameId].host === oldSocketId) {
-        activeGames[gameId].host = socket.id;
+      if (activeGames[actualGameId].host === oldSocketId) {
+        activeGames[actualGameId].host = socket.id;
       }
       
-      socket.join(gameId);
-      console.log(`Player reconnected: ${username} to game ${gameId} (replaced socket ID ${oldSocketId} with ${socket.id})`);
+      socket.join(actualGameId);
+      console.log(`Player reconnected: ${username} to game ${actualGameId} (replaced socket ID ${oldSocketId} with ${socket.id})`);
       
       // Notify everyone in the room about the updated game state
-      io.to(gameId).emit('player_joined', {
-        game: activeGames[gameId],
+      io.to(actualGameId).emit('player_joined', {
+        game: activeGames[actualGameId],
         newPlayer: { id: socket.id, username }
       });
     } else {
       // Add new player to game
-      activeGames[gameId].players.push({
+      activeGames[actualGameId].players.push({
         id: socket.id,
         username,
         ready: false
       });
       
-      socket.join(gameId);
-      console.log(`Player joined: ${username} to game ${gameId}`);
+      socket.join(actualGameId);
+      console.log(`Player joined: ${username} to game ${actualGameId}`);
       
       // Initialize score for new player
-      activeGames[gameId].scores[socket.id] = 0;
+      activeGames[actualGameId].scores[socket.id] = 0;
       
       // Notify everyone in the room about the new player
-      io.to(gameId).emit('player_joined', {
-        game: activeGames[gameId],
+      io.to(actualGameId).emit('player_joined', {
+        game: activeGames[actualGameId],
         newPlayer: { id: socket.id, username }
       });
     }
   });
 
+
+  /*
+  This code should work as implemented, the only thing we need to change is the actual gameID being sent to the
+  websocket instead of the invite code.
+  */
   // Handle player ready status
   socket.on('player_ready', (data) => {
     const { gameId } = data;
@@ -187,6 +237,10 @@ io.on('connection', (socket) => {
     }
   });
 
+  /*
+  This code should work as implemented, the only thing we need to change is the actual gameID being sent to the
+  websocket instead of the invite code.
+  */
   // Handle game start
   socket.on('start_game', (data) => {
     const { gameId } = data;
@@ -274,6 +328,10 @@ io.on('connection', (socket) => {
     }
   });
 
+  /*
+  This code should work as implemented, the only thing we need to change is the actual gameID being sent to the
+  websocket instead of the invite code.
+  */
   // Handle player votes
   socket.on('cast_vote', (data) => {
     const { gameId, votedForUsername } = data;
@@ -325,6 +383,10 @@ io.on('connection', (socket) => {
     }
   });
 
+  /*
+  This code should work as implemented, the only thing we need to change is the actual gameID being sent to the
+  websocket instead of the invite code.
+  */
   // Handle advancing to next round
   socket.on('next_round', (data) => {
     const { gameId } = data;
@@ -349,6 +411,22 @@ io.on('connection', (socket) => {
     } else {
       // Game complete
       activeGames[gameId].status = 'completed';
+
+      /*
+      Send our completed game data to the database
+      */
+      var gameRef = db.ref(DATABASE_BRANCHES.GAMES).child(GAME_TREE.GAMES).child(gameId);
+      var metaRef = gameRef.child(GameDataBranches.GAME_BRANCHES.METADATA);
+      metaRef.update({
+        [GameDataBranches.METADATA.PLAYERS] : [activeGames[gameId].players],
+      });
+
+      var gameDataRef = gameRef.child(GameDataBranches.GAME_BRANCHES.GAME_DATA);
+
+      gameDataRef.update({
+        [GameDataBranches.GAME_DATA.SCORES] : activeGames[gameId].scores,
+        [GameDataBranches.GAME_DATA.GUESS_TRACKS] : activeGames[gameId].roundSongs
+      });
       
       // Broadcast game completed
       io.to(gameId).emit('game_completed', {
