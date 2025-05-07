@@ -12,7 +12,7 @@ import {
   ScrollView,
 } from "react-native";
 import { useNavigation, useRouter, useLocalSearchParams } from "expo-router";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
 import Slider from "@react-native-community/slider";
@@ -28,473 +28,23 @@ import {
   findDeezerTrackFromSpotify,
 } from "../utils/deezerApi";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useWebSocket, EVENTS } from "../utils/useWebSocket";
+import VotingStage from "./VotingStage";
+import ResultsStage from "./ResultsStage";
 
 const ALBUM_ID = "2noRn2Aes5aoNVsU6iWThc";
-const ROUNDS_TOTAL = 3;
+const ROUNDS_TOTAL = 2;
 const MIN_PLAY_DURATION = 15000; // Set to 15 seconds as specified
 
 // Format time helper function
 const formatTime = (milliseconds) => {
   if (!milliseconds) return "0:00";
-  
+
   let totalSeconds = Math.floor(milliseconds / 1000);
   let minutes = Math.floor(totalSeconds / 60);
   let seconds = totalSeconds % 60;
-  
-  return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
-};
 
-// Define styles outside the component
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#1E1E1E",
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-    backgroundColor: "#8E44AD", 
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    height: 100,
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.6,
-    shadowRadius: 7,
-    elevation: 5,
-  },
-  headerTitleContainer: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    alignItems: "center",
-    justifyContent: "center",
-    bottom: 10,
-  },
-  headerTitle: {
-    color: "#FFC857",
-    fontSize: 24,
-    fontWeight: "bold",
-    textAlign: "center",
-  },
-  menuButton: {
-    width: 44,
-    height: 44,
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 1,
-  },
-  placeholder: {
-    width: 44,
-  },
-  connectionStatusContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 10,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    borderRadius: 20,
-    position: "absolute",
-    top: 10,
-    right: 10,
-    zIndex: 10,
-  },
-  connectionIndicator: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: 8,
-  },
-  connectionActive: {
-    backgroundColor: "#4BB543",
-  },
-  connectionInactive: {
-    backgroundColor: "#FF6B6B",
-  },
-  connectionStatusText: {
-    color: "white",
-    fontSize: 14,
-    marginRight: 8,
-  },
-  reconnectButton: {
-    backgroundColor: "#8E44AD",
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 12,
-  },
-  reconnectButtonText: {
-    color: "white",
-    fontSize: 12,
-    fontWeight: "bold",
-  },
-  gameStatusBar: {
-    backgroundColor: "#282828",
-    padding: 12,
-    alignItems: "center",
-  },
-  roundText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  infoText: {
-    color: "white",
-    fontSize: 16,
-    marginTop: 10,
-  },
-  content: {
-    flex: 1,
-  },
-  songPlaybackContainer: {
-    flex: 1,
-    padding: 16,
-    justifyContent: "space-between",
-  },
-  albumArtworkWrapper: {
-    alignItems: "center",
-    marginTop: 20,
-  },
-  albumArtwork: {
-    width: 250,
-    height: 250,
-    borderRadius: 10,
-  },
-  songPlaybackInfo: {
-    alignItems: "center",
-    marginTop: 20,
-  },
-  playbackSongTitle: {
-    color: "white",
-    fontSize: 24,
-    fontWeight: "bold",
-    textAlign: "center",
-  },
-  playbackArtistName: {
-    color: "#CCC",
-    fontSize: 18,
-    marginTop: 8,
-    textAlign: "center",
-  },
-  audioControlsContainer: {
-    marginTop: 20,
-  },
-  progressBarContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    width: "100%",
-    marginBottom: 15,
-  },
-  progressBar: {
-    flex: 1,
-    height: 40,
-  },
-  durationLabels: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    width: "100%",
-  },
-  durationText: {
-    color: "#AAA",
-    fontSize: 12,
-  },
-  playButtonContainer: {
-    alignItems: "center",
-    marginVertical: 15,
-  },
-  playButton: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: "#44C568",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  playButtonDisabled: {
-    opacity: 0.5,
-  },
-  audioErrorText: {
-    color: "#FF6B6B",
-    textAlign: "center",
-    marginTop: 10,
-  },
-  countdownText: {
-    color: "white",
-    textAlign: "center",
-    marginTop: 10,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  loadingText: {
-    color: "white",
-    marginTop: 20,
-    fontSize: 18,
-  },
-  voteButtonContainer: {
-    marginTop: 20,
-    marginBottom: 20,
-    alignItems: "center",
-  },
-  voteButtonWrapper: {
-    width: "100%",
-    alignItems: "center",
-    position: "relative",
-  },
-  voteProgressBackground: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    height: "100%",
-    backgroundColor: "#333",
-    borderRadius: 30,
-    overflow: "hidden",
-    borderWidth: 2,
-    borderColor: "#555",
-  },
-  voteProgressFill: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    height: "100%",
-    backgroundColor: "#5D5D5D", // Darker shade for incomplete
-    transition: "width 0.3s",
-  },
-  voteProgressComplete: {
-    backgroundColor: "#C143FF", // Purple for complete
-  },
-  voteButtonContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 16,
-    paddingHorizontal: 40,
-    width: "80%",
-    borderRadius: 30,
-    zIndex: 1, // Ensure content is above the progress bar
-  },
-  voteButtonDisabled: {
-    backgroundColor: "#7D7575",
-    borderColor: "#555",
-    opacity: 0.8,
-  },
-  voteButtonEnabled: {
-    backgroundColor: "#FFC857",
-    borderColor: "#E6A100",
-    shadowColor: "#FFC857",
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 10,
-    elevation: 5,
-  },
-  voteButtonText: {
-    color: "#000",
-    fontSize: 22,
-    fontWeight: "bold",
-    marginRight: 8,
-  },
-  voteButtonTextDisabled: {
-    color: "#000",
-  },
-  votingContainer: {
-    flex: 1,
-    padding: 20,
-  },
-  votingInstructions: {
-    color: "white",
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 20,
-  },
-  playersGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-  },
-  playerVoteButton: {
-    width: "48%",
-    height: 100,
-    borderRadius: 10,
-    backgroundColor: "#333",
-    margin: "1%",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  correctVoteButton: {
-    backgroundColor: "#4BB543",
-  },
-  incorrectVoteButton: {
-    backgroundColor: "#FF6B6B",
-  },
-  profileImageContainer: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 50,
-    overflow: "hidden",
-  },
-  profileBackground: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  profileImage: {
-    width: "100%",
-    height: "100%",
-  },
-  playerVoteName: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  resultsScrollContent: {
-    flexGrow: 1,
-    padding: 20,
-  },
-  resultsContainer: {
-    flex: 1,
-    justifyContent: "space-between",
-  },
-  resultsTitle: {
-    color: "white",
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 20,
-  },
-  gameStats: {
-    backgroundColor: "#282828",
-    padding: 20,
-    borderRadius: 10,
-    marginBottom: 20,
-  },
-  gameStatsHeader: {
-    color: "white",
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 10,
-  },
-  gameStatLine: {
-    color: "white",
-    fontSize: 16,
-  },
-  scoresContainer: {
-    backgroundColor: "#282828",
-    padding: 20,
-    borderRadius: 10,
-  },
-  scoresTitle: {
-    color: "white",
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 10,
-  },
-  scoresList: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-  },
-  scoreItem: {
-    width: "48%",
-    margin: "1%",
-  },
-  scorePlayerInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  scorePlayerAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 10,
-  },
-  scorePlayerName: {
-    color: "white",
-    fontSize: 16,
-  },
-  scoreValue: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  reviewListContainer: {
-    flex: 1,
-  },
-  reviewListTitle: {
-    color: "white",
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 10,
-  },
-  reviewListItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 10,
-  },
-  reviewSongImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 10,
-    marginRight: 10,
-  },
-  reviewSongInfo: {
-    flex: 1,
-  },
-  reviewSongTitle: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  reviewSongArtist: {
-    color: "white",
-    fontSize: 14,
-  },
-  reviewPlayerInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  reviewPlayerAvatarWrapper: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    overflow: "hidden",
-    marginRight: 10,
-  },
-  reviewPlayerAvatar: {
-    width: "100%",
-    height: "100%",
-  },
-  reviewPlayerName: {
-    color: "white",
-    fontSize: 16,
-  },
-  buttonsContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 20,
-  },
-  returnButton: {
-    backgroundColor: "#8E44AD",
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-  },
-  returnButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  playAgainButton: {
-    backgroundColor: "#4BB543",
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-  },
-  playAgainButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-});
+  return `${minutes}:${seconds < 10 ? "0" : ""}${seconds}`;
+};
 
 export default function GamePlay() {
   const navigation = useNavigation();
@@ -508,28 +58,6 @@ export default function GamePlay() {
     getValidToken,
     isInitialized,
   } = useSpotifyAuth();
-
-  // Replace the existing hook initialization
-  // Add websocket hook at the component level
-  const { 
-    castVote, 
-    nextRound: requestNextRound, 
-    selectSong, 
-    on,
-    isConnected,
-    socket,
-    connect
-  } = useWebSocket();
-
-  // Add a useEffect to ensure proper WebSocket connection
-  useEffect(() => {
-    // Only attempt to connect if this is a multiplayer game and connection isn't already established
-    if (isMultiplayer && !isConnected && !socket) {
-      console.log("Initializing WebSocket connection for multiplayer game...");
-      // Connect immediately without waiting
-      connect();
-    }
-  }, [isMultiplayer, isConnected, socket, connect]);
 
   // Mock song data to fallback on if Spotify API is unavailable
   const mockSongs = [
@@ -604,15 +132,20 @@ export default function GamePlay() {
     "@cole_sprout": 0,
   });
 
+  // const [playerPoints, setPlayerPoints] = useState(
+  //   Object.fromEntries(players.map((p) => [p.username, 0]))
+  // );
+
   // Add a state variable to track the voting progress percentage
   const [voteProgress, setVoteProgress] = useState(0);
 
   // Get game details from params
   const gameName = params.gameName || "Game Name";
   const playerCount = parseInt(params.playerCount) || 4;
-  const gameId = params.gameId || `${Date.now().toString(36).substr(-4).toUpperCase()}`;
-  const isMultiplayer = params.isMultiplayer === "true";
-  const isHost = params.isHost === "true";
+  const gameId = params.gameId || `game-${Date.now()}`;
+  // Set to false since we don't have WebSocket functionality
+  const isMultiplayer = false;
+  const isHost = false;
 
   // Parse player usernames from params if available
   let playerUsernames = [];
@@ -1037,7 +570,10 @@ export default function GamePlay() {
     setIsPlaying(status.isPlaying);
 
     // Calculate vote progress as a percentage (0-100)
-    const progress = Math.min(100, (status.positionMillis / MIN_PLAY_DURATION) * 100);
+    const progress = Math.min(
+      100,
+      (status.positionMillis / MIN_PLAY_DURATION) * 100
+    );
     setVoteProgress(progress);
 
     // Enable voting after at least 15 seconds
@@ -1058,14 +594,14 @@ export default function GamePlay() {
   // Update loadAndPlaySong function to handle Deezer icons
   const loadAndPlaySong = async (song) => {
     console.log("Loading song:", song?.songTitle);
-    console.log("Preview URL:", song?.previewUrl);
-    console.log("Full song object:", JSON.stringify(song, null, 2).substring(0, 300) + "...");
+    console.log(
+      "Assigned to player:",
+      song?.assignedToPlayer?.username || "none"
+    );
 
     // Verify we have a valid song object
     if (!song) {
       console.error("No song provided to loadAndPlaySong");
-      setAudioLoadError("No song data available");
-      setIsLoadingAudio(false);
       return;
     }
 
@@ -1079,17 +615,6 @@ export default function GamePlay() {
     setPlaybackPosition(0);
     setPlaybackDuration(0);
 
-    // Unload any existing sound first to avoid conflicts
-    if (sound) {
-      try {
-        await sound.unloadAsync();
-        console.log("Previous sound unloaded successfully");
-      } catch (error) {
-        console.error("Error unloading previous sound:", error);
-      }
-      setSound(null);
-    }
-
     // Check if we have a valid preview URL
     if (!song.previewUrl) {
       console.log(
@@ -1101,10 +626,9 @@ export default function GamePlay() {
         const deezerTrack = await findDeezerTrackFromSpotify(song);
         if (deezerTrack && deezerTrack.previewUrl) {
           console.log("Found Deezer preview URL for:", song.songTitle);
-          console.log("Deezer preview URL:", deezerTrack.previewUrl);
-          
           // Update the current song with the Deezer preview URL
-          song = {
+          // Preserve the assignedToPlayer property
+          const updatedSong = {
             ...song,
             previewUrl: deezerTrack.previewUrl,
             deezerInfo: {
@@ -1112,7 +636,8 @@ export default function GamePlay() {
               externalUrl: deezerTrack.externalUrl,
             },
           };
-          setCurrentSong(song);
+          setCurrentSong(updatedSong);
+          song = updatedSong;
         } else {
           console.log("No Deezer preview URL found either");
           setAudioLoadError("No preview available for this song");
@@ -1138,6 +663,11 @@ export default function GamePlay() {
     }
 
     try {
+      // Unload any existing sound
+      if (sound) {
+        await sound.unloadAsync();
+      }
+
       // Set timeout to handle case where audio loading takes too long
       if (audioLoadTimeoutRef.current) {
         clearTimeout(audioLoadTimeoutRef.current);
@@ -1149,16 +679,13 @@ export default function GamePlay() {
         setCanVote(true);
       }, 15000);
 
-      console.log("Creating new sound object for:", song.previewUrl);
-      
-      // Create a new sound object - in multiplayer mode, always autoplay
+      // Create a new sound object
       const { sound: newSound } = await Audio.Sound.createAsync(
         { uri: song.previewUrl },
         { shouldPlay: true, progressUpdateIntervalMillis: 100 },
         onPlaybackStatusUpdate
       );
 
-      console.log("Sound created successfully, starting playback");
       setSound(newSound);
       setIsPlaying(true);
       setIsLoadingAudio(false);
@@ -1168,18 +695,8 @@ export default function GamePlay() {
       audioLoadTimeoutRef.current = null;
 
       console.log("Audio loaded and playing successfully");
-      
-      // Make a test play to verify audio works
-      try {
-        await newSound.setPositionAsync(0);
-        await newSound.playAsync();
-        console.log("Audio playback test successful");
-      } catch (playError) {
-        console.error("Error testing audio playback:", playError);
-      }
     } catch (error) {
       console.error("Error loading audio:", error);
-      console.error("Error details:", JSON.stringify(error));
       setIsLoadingAudio(false);
       setAudioLoadError("Error loading audio. You can still vote.");
       setCanVote(true);
@@ -1189,37 +706,11 @@ export default function GamePlay() {
         clearTimeout(audioLoadTimeoutRef.current);
         audioLoadTimeoutRef.current = null;
       }
-      
-      // Try loading the audio again after a short delay (retry once)
-      setTimeout(async () => {
-        console.log("Retrying audio playback...");
-        try {
-          const { sound: retrySound } = await Audio.Sound.createAsync(
-            { uri: song.previewUrl },
-            { shouldPlay: true, progressUpdateIntervalMillis: 100 },
-            onPlaybackStatusUpdate
-          );
-          
-          setSound(retrySound);
-          setIsPlaying(true);
-          setAudioLoadError(null);
-          console.log("Retry successful!");
-        } catch (retryError) {
-          console.error("Retry also failed:", retryError);
-          // Still allow voting even though audio failed
-          setCanVote(true);
-        }
-      }, 2000);
     }
   };
 
-  // Toggle play/pause function - only usable in single player mode
+  // Toggle play/pause function - simplified version
   const togglePlayPause = async () => {
-    // In multiplayer mode, don't allow manual play/pause
-    if (isMultiplayer) {
-      return;
-    }
-    
     if (!sound) return;
 
     try {
@@ -1233,62 +724,66 @@ export default function GamePlay() {
     }
   };
 
-  // Update selectSongForRound function to handle multiplayer correctly
+  // Update selectSongForRound function to properly assign a player to each song
   const selectSongForRound = (round, songs = allSongs) => {
     if (!songs || songs.length === 0) return;
 
     console.log("Selecting song for round", round);
-    
-    // In multiplayer mode, only the host should select songs
-    if (isMultiplayer) {
-      if (isHost) {
-        console.log("Host will select song in multiplayer mode");
-        // Let the multiplayer event handlers handle this
-        // The song selection will happen in the round_started event handler
-      } else {
-        console.log("Client waiting for host to select song");
-      }
-      return;
-    }
-    
-    // Single player mode - continue with existing logic
-    console.log("Already played songs:", playedSongs.map(s => s.songTitle));
-    
-    // Filter out songs that have already been played
-    const availableSongs = songs.filter(song => 
-      !playedSongs.some(played => played.songTitle === song.songTitle)
+    console.log(
+      "Already played songs:",
+      playedSongs.map((s) => s.songTitle)
     );
-    
+
+    // Filter out songs that have already been played
+    const availableSongs = songs.filter(
+      (song) =>
+        !playedSongs.some((played) => played.songTitle === song.songTitle)
+    );
+
     console.log("Available songs:", availableSongs.length);
-    
+
     // If we've played all songs, reset the played songs tracking
     if (availableSongs.length === 0) {
       console.log("All songs have been played, resetting tracking");
       setPlayedSongs([]);
-      loadAndPlaySong(songs[Math.floor(Math.random() * songs.length)]);
+
+      // Assign a random player for fallback case
+      const randomPlayer = players[Math.floor(Math.random() * players.length)];
+      const songWithPlayer = {
+        ...songs[Math.floor(Math.random() * songs.length)],
+        assignedToPlayer: randomPlayer,
+      };
+
+      loadAndPlaySong(songWithPlayer);
       return;
     }
-    
+
     // Select a random song from available songs
     const randomIndex = Math.floor(Math.random() * availableSongs.length);
     const selectedSong = availableSongs[randomIndex];
-    
+
     // Assign the song to a random player
-    const assignedPlayer = players[Math.floor(Math.random() * players.length)];
+    const randomPlayerIndex = Math.floor(Math.random() * players.length);
+    const assignedPlayer = players[randomPlayerIndex];
+
+    console.log(
+      `Assigning song ${selectedSong.songTitle} to player: ${assignedPlayer.username}`
+    );
+
     const songWithAssignment = {
       ...selectedSong,
       assignedToPlayer: assignedPlayer,
     };
-    
+
     // Track this song for the current round
-    setRoundSongs(prev => ({
+    setRoundSongs((prev) => ({
       ...prev,
-      [round]: songWithAssignment
+      [round]: songWithAssignment,
     }));
-    
+
     // Add to played songs list to avoid repeating
-    setPlayedSongs(prev => [...prev, songWithAssignment]);
-    
+    setPlayedSongs((prev) => [...prev, songWithAssignment]);
+
     // Load the selected song
     loadAndPlaySong(songWithAssignment);
   };
@@ -1298,7 +793,18 @@ export default function GamePlay() {
     // Reset voting visual state
     setSelectedPlayer(null);
     setShowVoteResult(false);
-    
+
+    // Log debug info about current round
+    console.log(`Round ${currentRound} completed`);
+    if (currentSong) {
+      console.log(`Song: ${currentSong.songTitle}`);
+      console.log(
+        `Assigned to player: ${
+          currentSong.assignedToPlayer?.username || "none"
+        }`
+      );
+    }
+
     // Stop current playback
     if (sound) {
       try {
@@ -1327,46 +833,33 @@ export default function GamePlay() {
     } else {
       // Game over - would show final results
       setGameStage("results");
-      
+
       // Calculate player scores
       const playerScores = {};
-      
+
       // Count correct votes for each player
       Object.entries(playerSongs).forEach(([playerName, votes]) => {
-        playerScores[playerName] = votes.filter(vote => vote.isCorrect).length;
+        playerScores[playerName] = votes.filter(
+          (vote) => vote.isCorrect
+        ).length;
       });
-      
+
       console.log("Final scores:", playerScores);
     }
   };
 
   const handleReturnToLobby = () => {
-    // For multiplayer games, return to the multiplayer game lobby to maintain connection
-    if (isMultiplayer) {
-      console.log("Returning to multiplayer lobby with gameId:", gameId);
-      // Navigate back to the multiplayer game component with the original game ID
-      router.replace({
-        pathname: "/multiplayer-game",
-        params: {
-          returningFromGame: "true",
-          gameId: gameId,
-          gameName: gameName,
-          playerCount: playerCount
-        }
-      });
-    } else {
-      // For single-player games, use the existing behavior
-      router.replace({
-        pathname: "/game-lobby",
-        params: {
-          gameName,
-          playerCount,
-          players: JSON.stringify(players.map(p => p.username)),
-          returningFromGame: true, // Flag to indicate returning from a game
-          gameId: gameId // Preserve the game ID for continuity
-        }
-      });
-    }
+    // Pass the original game parameters back to the lobby
+    router.replace({
+      pathname: "/game-lobby",
+      params: {
+        gameName,
+        playerCount,
+        players: JSON.stringify(players.map((p) => p.username)),
+        returningFromGame: true, // Flag to indicate returning from a game
+        gameId: gameId, // Preserve the game ID for continuity
+      },
+    });
   };
 
   const handleTokenError = async (error) => {
@@ -1484,17 +977,19 @@ export default function GamePlay() {
     // Load previously played songs from storage when component mounts
     const loadPlayedSongs = async () => {
       try {
-        const storedPlayedSongs = await AsyncStorage.getItem('playedSongs');
+        const storedPlayedSongs = await AsyncStorage.getItem("playedSongs");
         if (storedPlayedSongs) {
           const parsedSongs = JSON.parse(storedPlayedSongs);
-          console.log(`Loaded ${parsedSongs.length} previously played songs from storage`);
+          console.log(
+            `Loaded ${parsedSongs.length} previously played songs from storage`
+          );
           setPlayedSongs(parsedSongs);
         }
       } catch (error) {
-        console.error('Error loading played songs from storage:', error);
+        console.error("Error loading played songs from storage:", error);
       }
     };
-    
+
     loadPlayedSongs();
   }, []);
 
@@ -1503,13 +998,16 @@ export default function GamePlay() {
     if (playedSongs.length > 0) {
       const savePlayedSongs = async () => {
         try {
-          await AsyncStorage.setItem('playedSongs', JSON.stringify(playedSongs));
+          await AsyncStorage.setItem(
+            "playedSongs",
+            JSON.stringify(playedSongs)
+          );
           console.log(`Saved ${playedSongs.length} played songs to storage`);
         } catch (error) {
-          console.error('Error saving played songs to storage:', error);
+          console.error("Error saving played songs to storage:", error);
         }
       };
-      
+
       savePlayedSongs();
     }
   }, [playedSongs]);
@@ -1519,410 +1017,134 @@ export default function GamePlay() {
     // Reset voting visual state
     setSelectedPlayer(null);
     setShowVoteResult(false);
-    
+
     // Reset the game state
     setCurrentRound(1);
     setGameStage("loading");
     setPlayerSongs({});
     setRoundSongs({});
-    
+
     // Stop any playing audio
     if (sound) {
       sound.stopAsync();
       sound.unloadAsync();
       setSound(null);
     }
-    
+
     // Reset audio playback state
     setIsPlaying(false);
     setPlaybackPosition(0);
     setPlaybackDuration(0);
     setCanVote(false);
-    
+
     // Use router.push instead of replace to ensure component fully remounts
     router.push({
       pathname: "/game-play",
       params: {
         gameName,
-        playerCount, 
+        playerCount,
         gameId,
-        players: JSON.stringify(players.map(p => p.username)),
+        players: JSON.stringify(players.map((p) => p.username)),
         timestamp: Date.now(), // Add timestamp to force a refresh
-      }
+      },
     });
   };
 
-  // Replace the socketSelectSong function to improve error handling and debugging
-  const socketSelectSong = useCallback((gameId, round) => {
-    console.log(`Host selecting song for round ${round}`);
-    
-    if (!allSongs || allSongs.length === 0) {
-      console.error("No songs available for selection!");
-      return false;
-    }
-    
-    // Select a random song from available songs
-    let availableSongs = allSongs.filter(song => 
-      song.previewUrl && !playedSongs.some(played => played.songTitle === song.songTitle)
-    );
-    
-    console.log(`Found ${availableSongs.length} available songs with preview URLs`);
-    
-    if (availableSongs.length === 0) {
-      console.log("No available songs with preview URLs, using all songs with preview URLs");
-      availableSongs = allSongs.filter(song => song.previewUrl);
-      
-      if (availableSongs.length === 0) {
-        console.error("No songs with preview URLs available!");
-        Alert.alert(
-          "Error",
-          "No songs available for playback. Please try restarting the game.",
-          [{ text: "OK" }]
-        );
-        return false;
-      }
-    }
-    
-    // Explicitly log random selection details
-    const randomIndex = Math.floor(Math.random() * availableSongs.length);
-    const selectedSong = availableSongs[randomIndex];
-    const randomPlayerIndex = Math.floor(Math.random() * players.length);
-    const assignedPlayer = players[randomPlayerIndex];
-    
-    console.log(`Selected song "${selectedSong.songTitle}" for round ${round}`);
-    console.log(`Preview URL available: ${!!selectedSong.previewUrl}`);
-    console.log(`Assigning song to player: ${assignedPlayer.username}`);
-    
-    // Attempt to select the song with retry logic
-    const attemptSelection = (retryCount = 0) => {
-      console.log(`Selection attempt ${retryCount + 1} for song: ${selectedSong.songTitle}`);
-      
-      const success = selectSong(gameId, selectedSong, assignedPlayer);
-      
-      if (!success && retryCount < 2) {
-        console.log(`Selection failed, retrying in ${(retryCount + 1) * 1000}ms...`);
-        setTimeout(() => attemptSelection(retryCount + 1), (retryCount + 1) * 1000);
-      } else if (!success) {
-        console.error("Failed to select song after multiple attempts");
-        Alert.alert(
-          "Connection Issue",
-          "There was a problem selecting a song. Please check your connection and try again.",
-          [{ text: "OK" }]
-        );
-      }
-    };
-    
-    // Start selection attempt with retry logic
-    attemptSelection();
-    
-    return true;
-  }, [allSongs, players, playedSongs, selectSong]);
-
-  // Add this useEffect to handle song selection when a round is started
-  useEffect(() => {
-    if (!isMultiplayer || !isHost || !gameId) return;
-    
-    console.log(`Host effect - round: ${currentRound}, stage: ${gameStage}, connected: ${isConnected}`);
-    
-    // If we're the host in a multiplayer game and in playing stage but no song is loaded yet
-    if (gameStage === "playing" && currentRound > 0 && !currentSong && isConnected) {
-      // Add a small delay to ensure all clients are ready
-      const timer = setTimeout(() => {
-        console.log("Host selecting song for current round (delayed trigger)");
-        socketSelectSong(gameId, currentRound);
-      }, 2000);
-      
-      return () => clearTimeout(timer);
-    }
-  }, [isMultiplayer, isHost, gameId, gameStage, currentRound, currentSong, isConnected, socketSelectSong]);
-
-  // Add debug logging for state changes
-  useEffect(() => {
-    console.log(`GameStage changed: ${gameStage}, Round: ${currentRound}, Connected: ${isConnected}`);
-    
-    // Debug UI rendering conditions
-    if (gameStage === "playing") {
-      console.log(`Playing UI should show. currentSong: ${currentSong ? 'available' : 'missing'}`);
-    }
-  }, [gameStage, currentRound, isConnected, currentSong]);
-
-  // Add socket event handlers for multiplayer synchronization
-  useEffect(() => {
-    if (!isMultiplayer) return;
-    
-    console.log("Setting up multiplayer event handlers");
-    
-    // Song selected event handler - When server broadcasts a song selection
-    const songSelectedCleanup = on(EVENTS.SONG_SELECTED, (data) => {
-      console.log("Received song_selected event:", data);
-      
-      // Verify the data has the necessary fields
-      if (!data?.song) {
-        console.error("Received incomplete song_selected data:", data);
-        return;
-      }
-      
-      console.log(`Song received: ${data.song.songTitle}, Preview URL available: ${!!data.song.previewUrl}`);
-      console.log(`Song assigned to: ${JSON.stringify(data.assignedPlayer)}`);
-      
-      // Use the song sent by the server instead of selecting our own
-      const songWithAssignment = {
-        ...data.song,
-        assignedToPlayer: data.assignedPlayer
-      };
-      
-      // Track this song for the current round
-      setRoundSongs(prev => ({
-        ...prev,
-        [data.round]: songWithAssignment
-      }));
-      
-      // Add to played songs list to avoid repeating
-      setPlayedSongs(prev => {
-        // Avoid duplicates by checking if this song is already in the list
-        if (!prev.some(s => s.songTitle === songWithAssignment.songTitle)) {
-          return [...prev, songWithAssignment];
-        }
-        return prev;
-      });
-      
-      // Load the song (with safe stopping of previous audio)
-      const safelyLoadSong = async () => {
-        try {
-          // Stop any currently playing audio
-          if (sound) {
-            try {
-              await sound.stopAsync();
-              console.log("Stopped previous sound before loading new song");
-            } catch (err) {
-              console.error("Error stopping previous sound:", err);
-            }
-          }
-          
-          // Now load the new song
-          loadAndPlaySong(songWithAssignment);
-        } catch (error) {
-          console.error("Error during song loading sequence:", error);
-          // Still try to load the song as a fallback
-          loadAndPlaySong(songWithAssignment);
-        }
-      };
-      
-      // Execute the loading sequence
-      safelyLoadSong();
-    });
-    
-    // Player voted event - Another player has cast their vote
-    const playerVotedCleanup = on(EVENTS.PLAYER_VOTED, (data) => {
-      console.log("Player voted:", data);
-      // Could add some visual feedback showing which players have voted
-    });
-    
-    // Vote result event - Result of your own vote
-    const voteResultCleanup = on(EVENTS.VOTE_RESULT, (data) => {
-      console.log("Vote result:", data);
-      // This event is sent only to the player who voted
-    });
-    
-    // Round complete event - All players have voted
-    const roundCompleteCleanup = on(EVENTS.ROUND_COMPLETE, (data) => {
-      console.log("Round complete:", data);
-      
-      // Show the round results to all players
-      Alert.alert(
-        "Round Complete",
-        `Everyone has voted! ${data.correctPlayer ? `${data.correctPlayer.username} listened to this song.` : ""}`,
-        [
-          {
-            text: "Next Round",
-            onPress: () => {
-              if (currentRound < ROUNDS_TOTAL) {
-                // In multiplayer, only the host can advance to the next round
-                if (isHost) {
-                  console.log("Host requesting next round");
-                  requestNextRound(gameId);
-                } else {
-                  console.log("Waiting for host to start next round");
-                }
-              } else {
-                setGameStage("results");
-              }
-            },
-          },
-        ]
-      );
-    });
-    
-    // Round started event - Server has started a new round
-    const roundStartedCleanup = on(EVENTS.ROUND_STARTED, (data) => {
-      console.log("Round started:", data);
-      
-      // Update client with new round information
-      setCurrentRound(data.round);
-      setGameStage("playing");
-      setSelectedPlayer(null);
-      setShowVoteResult(false);
-      setCanVote(false);
-      
-      // Stop any currently playing audio
-      if (sound) {
-        try {
-          sound.stopAsync().catch(err => console.error("Error stopping sound:", err));
-        } catch (error) {
-          console.error("Error stopping sound:", error);
-        }
-      }
-    });
-    
-    // Clean up event listeners
-    return () => {
-      console.log("Cleaning up multiplayer event handlers");
-      songSelectedCleanup && songSelectedCleanup();
-      playerVotedCleanup && playerVotedCleanup();
-      voteResultCleanup && voteResultCleanup();
-      roundCompleteCleanup && roundCompleteCleanup();
-      roundStartedCleanup && roundStartedCleanup();
-    };
-  }, [isMultiplayer, sound, on, isHost, currentRound, gameId, requestNextRound, loadAndPlaySong]);
-  
-  // Add WebSocket connection monitoring and auto-reconnect system
-  useEffect(() => {
-    if (!isMultiplayer) return;
-    
-    // Log connection status for debugging
-    console.log(`[GamePlay] WebSocket connection status: ${isConnected ? 'Connected' : 'Disconnected'}`);
-    
-    // If we're disconnected but in a multiplayer game, try to reconnect
-    if (!isConnected && gameId) {
-      // Set a timeout to prevent too frequent reconnection attempts
-      const reconnectTimeout = setTimeout(() => {
-        console.log('[GamePlay] Attempting to reconnect to the multiplayer game...');
-        
-        // Directly try to reconnect via the connect method
-        connect();
-        
-        // If that fails, navigate back to multiplayer screen as a backup approach
-        if (!isConnected) {
-          router.replace({
-            pathname: "/multiplayer-game",
-            params: {
-              returningFromGame: "true",
-              gameId: gameId,
-              gameName: gameName,
-              playerCount: playerCount
-            }
-          });
-        }
-      }, 5000); // Wait 5 seconds before attempting reconnection
-      
-      // Clear the timeout if component unmounts or connection is restored
-      return () => clearTimeout(reconnectTimeout);
-    }
-  }, [isConnected, isMultiplayer, gameId, gameName, playerCount, router, connect]);
-  
-  // Modify the connection status indicator to show reconnecting state
-  const renderConnectionStatus = () => {
-    if (!isMultiplayer) return null;
-    
+  if (isLoading) {
     return (
-      <View style={styles.connectionStatusContainer}>
-        <View style={[
-          styles.connectionIndicator, 
-          isConnected ? styles.connectionActive : styles.connectionInactive
-        ]} />
-        <Text style={styles.connectionStatusText}>
-          {isConnected ? 'Connected' : 'Disconnected'}
-        </Text>
-        {!isConnected && (
-          <TouchableOpacity 
-            style={styles.reconnectButton}
-            onPress={() => {
-              // Try direct reconnection first
-              connect();
-              
-              // If that doesn't work, use the router approach
-              if (!isConnected) {
-                router.replace({
-                  pathname: "/multiplayer-game",
-                  params: {
-                    returningFromGame: "true",
-                    gameId: gameId,
-                    gameName: gameName,
-                    playerCount: playerCount
-                  }
-                });
-              }
-            }}
-          >
-            <Text style={styles.reconnectButtonText}>Reconnect</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#C143FF" />
+          <Text style={styles.loadingText}>Loading songs...</Text>
+        </View>
+      </SafeAreaView>
     );
-  };
+  }
 
-  // Modify the return statement to add debugging info
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle" size={64} color="#FF6B6B" />
+          <Text style={styles.errorText}>{error}</Text>
+
+          <View style={styles.buttonsContainer}>
+            <Pressable
+              style={styles.returnButton}
+              onPress={handleReturnToLobby}
+            >
+              <Text style={styles.returnButtonText}>Back to Lobby</Text>
+            </Pressable>
+            <Pressable style={styles.playAgainButton} onPress={handlePlayAgain}>
+              <Text style={styles.playAgainButtonText}>Try Again</Text>
+            </Pressable>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
-      {/* Debugging overlay to show component state */}
-      {__DEV__ && (
-        <View style={{ 
-          position: 'absolute', 
-          top: 40, 
-          right: 10, 
-          backgroundColor: 'rgba(0,0,0,0.7)', 
-          padding: 5, 
-          zIndex: 9999 
-        }}>
-          <Text style={{ color: 'white', fontSize: 10 }}>
-            Stage: {gameStage}, Round: {currentRound}{'\n'}
-            Connected: {isConnected ? 'Yes' : 'No'}{'\n'}
-            Song: {currentSong?.songTitle?.substring(0, 15) || 'None'}{'\n'}
-            Can Vote: {canVote ? 'Yes' : 'No'}
-          </Text>
-        </View>
-      )}
-      
-      {renderConnectionStatus()}
-      
       <View style={styles.gameStatusBar}>
         <Text style={styles.roundText}>
           Round {currentRound} of {ROUNDS_TOTAL}
         </Text>
       </View>
 
-      {/* Song Playback UI */}
-      {gameStage === "playing" && (
-        <View style={styles.content}>
-          {/* Include a fallback message when currentSong is missing */}
-          {!currentSong ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#8E44AD" />
-              <Text style={styles.loadingText}>Waiting for song...</Text>
+      {currentSong && gameStage === "playing" && (
+        <View style={styles.songPlaybackContainer}>
+          <View style={styles.albumArtworkWrapper}>
+            <View style={styles.albumArtworkBackground}>
+              <Image
+                source={{ uri: currentSong.imageUrl }}
+                style={styles.albumCover}
+                resizeMode="cover"
+              />
             </View>
-          ) : (
-            <View style={styles.songPlaybackContainer}>
-              <View style={styles.albumArtworkWrapper}>
-                <Image
-                  source={{ uri: currentSong.imageUrl }}
-                  style={styles.albumArtwork}
-                />
-              </View>
+          </View>
 
-              {/* Song info section */}
-              <View style={styles.songPlaybackInfo}>
-                <Text style={styles.playbackSongTitle}>
-                  {currentSong.songTitle}
-                </Text>
-                <Text style={styles.playbackArtistName}>
-                  {currentSong.songArtists.join(", ")}
-                </Text>
-              </View>
+          <View style={styles.songPlaybackInfo}>
+            <Text style={styles.playbackSongTitle}>
+              {currentSong.songTitle}
+            </Text>
+            <Text style={styles.playbackArtistName}>
+              {currentSong.songArtists.join(", ")}
+            </Text>
+          </View>
 
-              {/* Audio controls */}
-              <View style={styles.audioControlsContainer}>
-                {/* Audio progress bar */}
-                <View style={styles.progressBarContainer}>
+          <View style={styles.playbackControlsContainer}>
+            {isLoadingAudio ? (
+              <View style={styles.loadingAudioContainer}>
+                <ActivityIndicator size="small" color="#C143FF" />
+                <Text style={styles.loadingAudioText}>Loading audio...</Text>
+              </View>
+            ) : audioLoadError ? (
+              <View style={styles.audioErrorContainer}>
+                <Ionicons name="alert-circle" size={64} color="#FF6B6B" />
+                <Text style={styles.errorText}>{audioLoadError}</Text>
+
+                <View style={styles.buttonsContainer}>
+                  <Pressable
+                    style={styles.returnButton}
+                    onPress={handleReturnToLobby}
+                  >
+                    <Text style={styles.returnButtonText}>Back to Lobby</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.playAgainButton}
+                    onPress={handlePlayAgain}
+                  >
+                    <Text style={styles.playAgainButtonText}>Try Again</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : (
+              <>
+                <View style={styles.progressContainer}>
+                  <Text style={styles.timeText}>
+                    {formatTime(playbackPosition)}
+                  </Text>
                   <Slider
                     style={styles.progressBar}
                     minimumValue={0}
@@ -1931,306 +1153,786 @@ export default function GamePlay() {
                     }
                     value={playbackPosition}
                     minimumTrackTintColor="#C143FF"
-                    maximumTrackTintColor="#333"
+                    maximumTrackTintColor="#444"
                     thumbTintColor="#FFC857"
                     disabled={true}
                   />
-                  <View style={styles.durationLabels}>
-                    <Text style={styles.durationText}>
-                      {formatTime(playbackPosition)}
-                    </Text>
-                    <Text style={styles.durationText}>
-                      {formatTime(Math.min(playbackDuration, 30000))}
-                    </Text>
-                  </View>
+                  <Text style={styles.timeText}>
+                    {formatTime(playbackDuration)}
+                  </Text>
                 </View>
 
-                {/* Audio load error message */}
-                {audioLoadError && (
-                  <Text style={styles.audioErrorText}>
-                    Error loading audio. {audioLoadError}
-                  </Text>
+                <View style={styles.controlButtonsContainer}>
+                  <TouchableOpacity
+                    style={styles.playPauseButton}
+                    onPress={togglePlayPause}
+                  >
+                    <Ionicons
+                      name={isPlaying ? "pause" : "play"}
+                      size={32}
+                      color="white"
+                    />
+                  </TouchableOpacity>
+                </View>
+
+                {currentSong?.externalUrl && (
+                  <TouchableOpacity
+                    style={[
+                      styles.externalLinkButton,
+                      styles.spotifyLinkButton,
+                    ]}
+                    onPress={() => Linking.openURL(currentSong.externalUrl)}
+                  >
+                    <Image
+                      source={require("../assets/white-spotify-logo.png")}
+                      style={{ width: 20, height: 20, marginRight: 5 }}
+                    />
+                    <Text style={styles.externalLinkText}>Open in Spotify</Text>
+                  </TouchableOpacity>
                 )}
+              </>
+            )}
+          </View>
 
-                {/* Countdown to voting */}
-                {!canVote && !audioLoadError && (
-                  <Text style={styles.countdownText}>
-                    {`Listen now! Voting enabled after ${Math.ceil(
-                      (MIN_PLAY_DURATION - playbackPosition) / 1000
-                    )} seconds...`}
-                  </Text>
-                )}
-              </View>
-
-              {/* Vote button section */}
-              <View style={styles.voteButtonContainer}>
-                <TouchableOpacity
-                  activeOpacity={canVote ? 0.7 : 1}
-                  onPress={() => {
-                    if (canVote) {
-                      setGameStage("voting");
-                    } else {
-                      Alert.alert(
-                        "Not Ready Yet",
-                        `Please listen to at least ${
-                          MIN_PLAY_DURATION / 1000
-                        } seconds of the song before voting.`,
-                        [{ text: "OK" }]
-                      );
-                    }
-                  }}
-                >
-                  <View style={styles.voteButtonWrapper}>
-                    {/* Progress bar background */}
-                    <View style={styles.voteProgressBackground}>
-                      {/* Progress bar fill that grows based on playback position */}
-                      <View 
-                        style={[
-                          styles.voteProgressFill, 
-                          { width: `${voteProgress}%` },
-                          canVote ? styles.voteProgressComplete : {}
-                        ]} 
-                      />
-                    </View>
-                    
-                    {/* Button content */}
-                    <View style={[
-                      styles.voteButtonContent,
-                      !canVote ? styles.voteButtonDisabled : styles.voteButtonEnabled,
-                    ]}>
-                      <Text
-                        style={[
-                          styles.voteButtonText,
-                          !canVote ? styles.voteButtonTextDisabled : {},
-                        ]}
-                      >
-                        VOTE NOW
-                      </Text>
-                      <Ionicons
-                        name="arrow-forward"
-                        size={24}
-                        color={canVote ? "black" : "#777"}
-                      />
-                    </View>
-                  </View>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-        </View>
-      )}
-      
-      {/* Rest of the UI remains the same */}
-      {gameStage === "voting" && (
-        <View style={styles.votingContainer}>
-          <Text style={styles.votingInstructions}>
-            Who do you think listened to this song?
-          </Text>
-
-          <View style={styles.playersGrid}>
-            {players.map((player) => {
-              // Determine style based on selection and result
-              const isSelected = selectedPlayer === player.username;
-              const isCorrect = currentSong?.assignedToPlayer?.username === player.username;
-              const wasVoted = isSelected && showVoteResult;
-              
-              // Determine the button style for dynamic feedback
-              let buttonStyle = styles.playerVoteButton;
-              if (wasVoted) {
-                if (isCorrect) {
-                  buttonStyle = [styles.playerVoteButton, styles.correctVoteButton];
-                } else {
-                  buttonStyle = [styles.playerVoteButton, styles.incorrectVoteButton];
-                }
-              } else if (showVoteResult && isCorrect) {
-                // Show correct answer even if not selected
-                buttonStyle = [styles.playerVoteButton, styles.correctVoteButton];
-              }
-              
-              return (
-                <Pressable
-                  key={player.id}
-                  style={buttonStyle}
-                  onPress={() => {
-                    // Only allow selection if no result is shown yet
-                    if (showVoteResult) return;
-                    
-                    // Set the selected player
-                    setSelectedPlayer(player.username);
-                    setShowVoteResult(true);
-                    
-                    // Create the vote record
-                    const isCorrectGuess = player.username === currentSong?.assignedToPlayer?.username;
-                    const newVote = {
-                      round: currentRound,
-                      songId: currentSong?.songTitle,
-                      votedFor: player.username,
-                      correctPlayer: currentSong?.assignedToPlayer?.username,
-                      isCorrect: isCorrectGuess
-                    };
-
-                    // Update player scores tracking
-                    setPlayerSongs(prev => ({
+          <View style={styles.voteButtonContainer}>
+            <TouchableOpacity
+              activeOpacity={canVote ? 0.7 : 1}
+              onPress={() => {
+                if (canVote) {
+                  // Make sure we have an assigned player before going to voting stage
+                  if (!currentSong?.assignedToPlayer) {
+                    // Just in case it wasn't assigned, pick a random player now
+                    const randomPlayer =
+                      players[Math.floor(Math.random() * players.length)];
+                    console.log(
+                      `Assigning song ${currentSong.songTitle} to player ${randomPlayer.username} during vote`
+                    );
+                    setCurrentSong({
+                      ...currentSong,
+                      assignedToPlayer: randomPlayer,
+                    });
+                    // Update in roundSongs state too
+                    setRoundSongs((prev) => ({
                       ...prev,
-                      [player.username]: [...(prev[player.username] || []), newVote]
+                      [currentRound]: {
+                        ...prev[currentRound],
+                        assignedToPlayer: randomPlayer,
+                      },
                     }));
-
-                    // Update points for @cole_sprout if the current user makes a correct guess
-                    if (isCorrectGuess) {
-                      setPlayerPoints(prev => ({
-                        ...prev,
-                        "@cole_sprout": (prev["@cole_sprout"] || 0) + 1
-                      }));
-                      console.log("Point awarded to @cole_sprout! New score:", playerPoints["@cole_sprout"] + 1);
-                    }
-
-                    console.log("Vote cast:", newVote);
-                    
-                    // In multiplayer mode, send the vote to the server
-                    if (isMultiplayer) {
-                      castVote(gameId, player.username);
-                      
-                      // In multiplayer, wait for the server's round_complete event
-                      // Do not show the result alert or advance to next round immediately
-                      Alert.alert(
-                        isCorrectGuess ? "Vote Submitted" : "Vote Submitted",
-                        "Waiting for other players to vote...",
-                        [{ text: "OK" }]
-                      );
-                    } else {
-                      // In single player mode, show result and allow advancing to next round immediately
-                      setTimeout(() => {
-                        Alert.alert(
-                          isCorrectGuess ? "Correct!" : "Incorrect!",
-                          isCorrectGuess
-                            ? `Yes, ${player.username} listened to this song!`
-                            : `Actually, ${currentSong?.assignedToPlayer?.username} listened to this song.`,
-                          [
-                            {
-                              text: "Next Round",
-                              onPress: () => {
-                                // Reset voting states before moving to next round
-                                nextRound(); // Call local nextRound function
-                              },
-                            },
-                          ]
-                        );
-                      }, 800);
-                    }
-                  }}
-                >
-                  <View style={styles.profileImageContainer}>
-                    <View style={styles.profileBackground}>
-                      <Image
-                        source={getProfilePhotoForUser(player.username)}
-                        style={styles.profileImage}
-                      />
-                    </View>
-                  </View>
-                  <Text style={styles.playerVoteName}>{player.username}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-      )}
-      
-      {gameStage === "results" && (
-        <ScrollView contentContainerStyle={styles.resultsScrollContent}>
-          <View style={styles.resultsContainer}>
-            <Text style={styles.resultsTitle}>Game Complete!</Text>
-
-            <View style={styles.gameStats}>
-              <Text style={styles.gameStatsHeader}>
-              </Text>
-
-              <Text style={styles.gameStatLine}>
-                Players: {players.map((p) => p.username).join(", ")}
-              </Text>
-
-              <Text style={styles.gameStatLine}>
-                Songs played: {currentRound}
-              </Text>
-
-              <Text style={styles.gameStatLine}>
-                Game type: Guess The Listener
-              </Text>
-            </View>
-            
-            {/* Player scores section */}
-            <View style={styles.scoresContainer}>
-              <Text style={styles.scoresTitle}>Player Scores</Text>
-              <View style={styles.scoresList}>
-                {players.map(player => (
-                  <View key={player.id} style={styles.scoreItem}>
-                    <View style={styles.scorePlayerInfo}>
-                      <Image 
-                        source={getProfilePhotoForUser(player.username)}
-                        style={styles.scorePlayerAvatar}
-                      />
-                      <Text style={styles.scorePlayerName}>{player.username}</Text>
-                    </View>
-                    <Text style={styles.scoreValue}>
-                      {player.username === "@cole_sprout" 
-                        ? playerPoints["@cole_sprout"] || 0 
-                        : 0} 
-                      points
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-
-            <View style={styles.reviewListContainer}>
-              <Text style={styles.reviewListTitle}>Who listened to what?</Text>
-              {Object.keys(roundSongs).map((round) => (
-                <View key={round} style={styles.reviewListItem}>
-                  <Image
-                    source={{ uri: roundSongs[round].imageUrl }}
-                    style={styles.reviewSongImage}
+                  }
+                  setGameStage("voting");
+                } else {
+                  Alert.alert(
+                    "Not Ready Yet",
+                    `Please listen to at least ${
+                      MIN_PLAY_DURATION / 1000
+                    } seconds of the song before voting.`,
+                    [{ text: "OK" }]
+                  );
+                }
+              }}
+            >
+              <View style={styles.voteButtonWrapper}>
+                {/* Progress bar background */}
+                <View style={styles.voteProgressBackground}>
+                  {/* Progress bar fill that grows based on playback position */}
+                  <View
+                    style={[
+                      styles.voteProgressFill,
+                      { width: `${voteProgress}%` },
+                      canVote ? styles.voteProgressComplete : {},
+                    ]}
                   />
-                  <View style={styles.reviewSongInfo}>
-                    <Text style={styles.reviewSongTitle}>{roundSongs[round].songTitle}</Text>
-                    <Text style={styles.reviewSongArtist}>
-                      {roundSongs[round].songArtists.join(", ")}
-                    </Text>
-                  </View>
-                  <View style={styles.reviewPlayerInfo}>
-                    <View style={styles.reviewPlayerAvatarWrapper}>
-                      <Image
-                        source={getProfilePhotoForUser(
-                          roundSongs[round].assignedToPlayer?.username || ""
-                        )}
-                        style={styles.reviewPlayerAvatar}
-                      />
-                    </View>
-                    <Text style={styles.reviewPlayerName}>
-                      {roundSongs[round].assignedToPlayer?.username}
-                    </Text>
-                  </View>
                 </View>
-              ))}
-            </View>
 
-            <View style={styles.buttonsContainer}>
-              <Pressable style={styles.returnButton} onPress={handleReturnToLobby}>
-                <Text style={styles.returnButtonText}>Return to Lobby</Text>
-              </Pressable>
-              <Pressable style={styles.playAgainButton} onPress={handlePlayAgain}>
-                <Text style={styles.playAgainButtonText}>Play Again</Text>
-              </Pressable>
-            </View>
+                {/* Button content */}
+                <View
+                  style={[
+                    styles.voteButtonContent,
+                    !canVote
+                      ? styles.voteButtonDisabled
+                      : styles.voteButtonEnabled,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.voteButtonText,
+                      !canVote ? styles.voteButtonTextDisabled : {},
+                    ]}
+                  >
+                    VOTE NOW
+                  </Text>
+                  <Ionicons
+                    name="arrow-forward"
+                    size={24}
+                    color={canVote ? "black" : "#777"}
+                  />
+                </View>
+              </View>
+            </TouchableOpacity>
+
+            {/* <Text style={styles.voteHintText}>
+              {canVote
+                ? "Make your guess about who listened to this song"
+                : `Listen for ${
+                    MIN_PLAY_DURATION / 1000
+                  } seconds before voting...`}
+            </Text> */}
           </View>
-        </ScrollView>
-      )}
-      
-      {/* Add a fallback loading state to make sure we render something */}
-      {gameStage === "loading" && (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#8E44AD" />
-          <Text style={styles.loadingText}>Loading game...</Text>
         </View>
+      )}
+
+      {gameStage === "voting" && (
+        <VotingStage
+          players={players}
+          currentSong={currentSong}
+          currentRound={currentRound}
+          selectedPlayer={selectedPlayer}
+          showVoteResult={showVoteResult}
+          setSelectedPlayer={setSelectedPlayer}
+          setShowVoteResult={setShowVoteResult}
+          setPlayerSongs={setPlayerSongs}
+          setPlayerPoints={setPlayerPoints}
+          nextRound={nextRound}
+          getProfilePhotoForUser={getProfilePhotoForUser}
+          isMultiplayer={isMultiplayer}
+          gameId={gameId}
+          playerPoints={playerPoints}
+          //castVote={castVote}
+        />
+      )}
+
+      {gameStage === "results" && (
+        <ResultsStage
+          players={players}
+          playerPoints={playerPoints}
+          roundSongs={roundSongs}
+          getProfilePhotoForUser={getProfilePhotoForUser}
+          handleReturnToLobby={handleReturnToLobby}
+          handlePlayAgain={handlePlayAgain}
+          currentRound={currentRound}
+          styles={styles}
+        />
       )}
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#1E1E1E",
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    backgroundColor: "#8E44AD",
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    height: 100,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.6,
+    shadowRadius: 7,
+    elevation: 5,
+  },
+  menuButton: {
+    width: 44,
+    height: 44,
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 1,
+  },
+  headerTitleContainer: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerTitle: {
+    color: "#FFC857",
+    fontSize: 24,
+    fontWeight: "bold",
+    textAlign: "center",
+    bottom: 10,
+  },
+  placeholder: {
+    width: 44,
+  },
+  gameStatusBar: {
+    backgroundColor: "#282828",
+    padding: 12,
+    alignItems: "center",
+  },
+  roundText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    color: "white",
+    marginTop: 20,
+    fontSize: 18,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  errorText: {
+    color: "white",
+    textAlign: "center",
+    marginTop: 16,
+    marginBottom: 30,
+    fontSize: 16,
+  },
+  retryButton: {
+    backgroundColor: "#C143FF",
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 20,
+  },
+  retryButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  songPlaybackContainer: {
+    flex: 1,
+    padding: 16,
+    justifyContent: "space-between",
+  },
+  albumArtworkWrapper: {
+    alignItems: "center",
+    marginTop: 20,
+  },
+  albumArtworkBackground: {
+    width: 300,
+    height: 300,
+    borderRadius: 20,
+    padding: 6,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "transparent",
+    shadowColor: "#8E44AD",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 15,
+    elevation: 10,
+  },
+  albumCover: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 15,
+  },
+  songPlaybackInfo: {
+    alignItems: "center",
+    marginTop: 20,
+  },
+  playbackSongTitle: {
+    color: "white",
+    fontSize: 24,
+    fontWeight: "bold",
+    textAlign: "center",
+  },
+  playbackArtistName: {
+    color: "#CCC",
+    fontSize: 18,
+    marginTop: 8,
+    textAlign: "center",
+  },
+  waveformContainer: {
+    height: 80,
+    marginTop: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  waveformBars: {
+    width: "100%",
+    height: 60,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  waveformBar: {
+    width: 8,
+    backgroundColor: "#8E44AD",
+    borderRadius: 4,
+  },
+  playbackControlsContainer: {
+    marginTop: 20,
+  },
+  spotifyPromptContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    marginVertical: 20,
+  },
+  spotifyPromptText: {
+    color: "white",
+    fontSize: 16,
+    marginBottom: 15,
+    textAlign: "center",
+  },
+  spotifyButton: {
+    backgroundColor: "#1DB954",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 25,
+    marginVertical: 10,
+  },
+  spotifyButtonText: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "bold",
+    marginLeft: 8,
+  },
+  noLinkText: {
+    color: "#999",
+    fontSize: 14,
+    fontStyle: "italic",
+  },
+  voteButtonContainer: {
+    marginTop: 20,
+    marginBottom: 20,
+    alignItems: "center",
+  },
+  voteButtonWrapper: {
+    width: "100%",
+    alignItems: "center",
+    position: "relative",
+  },
+  voteProgressBackground: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: "100%",
+    backgroundColor: "#333",
+    borderRadius: 30,
+    overflow: "hidden",
+    borderWidth: 2,
+    borderColor: "#555",
+  },
+  voteProgressFill: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    height: "100%",
+    backgroundColor: "#5D5D5D", // Darker shade for incomplete
+    transition: "width 0.3s",
+  },
+  voteProgressComplete: {
+    backgroundColor: "#C143FF", // Purple for complete
+  },
+  voteButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 16,
+    paddingHorizontal: 40,
+    width: "80%",
+    borderRadius: 30,
+    zIndex: 1, // Ensure content is above the progress bar
+  },
+  voteButtonDisabled: {
+    backgroundColor: "#7D7575",
+    borderColor: "#555",
+    opacity: 0.8,
+  },
+  voteButtonEnabled: {
+    backgroundColor: "#FFC857",
+    borderColor: "#E6A100",
+    shadowColor: "#FFC857",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  voteButtonText: {
+    color: "#000",
+    fontSize: 22,
+    fontWeight: "bold",
+    marginRight: 8,
+  },
+  voteButtonTextDisabled: {
+    color: "#000",
+  },
+  voteHintText: {
+    color: "#AAA",
+    fontSize: 14,
+    marginTop: 10,
+    textAlign: "center",
+  },
+  votingContainer: {
+    flex: 1,
+    padding: 20,
+  },
+  votingInstructions: {
+    color: "white",
+    fontSize: 20,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginVertical: 20,
+  },
+  playersGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    marginTop: 20,
+  },
+  playerVoteButton: {
+    backgroundColor: "#282828",
+    borderRadius: 16,
+    padding: 16,
+    alignItems: "center",
+    width: "48%",
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: "#444",
+  },
+  correctVoteButton: {
+    backgroundColor: "rgba(75, 181, 67, 0.2)",
+    borderColor: "#4BB543",
+    shadowColor: "#4BB543",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  incorrectVoteButton: {
+    backgroundColor: "rgba(255, 107, 107, 0.2)",
+    borderColor: "#FF6B6B",
+    shadowColor: "#FF6B6B",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  profileImageContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  profileBackground: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: "white",
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden",
+  },
+  profileImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+  },
+  playerVoteName: {
+    color: "white",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  resultsContainer: {
+    padding: 20,
+    alignItems: "center",
+    width: "100%",
+  },
+  resultsTitle: {
+    color: "white",
+    fontSize: 24,
+    fontWeight: "bold",
+    marginBottom: 30,
+  },
+  gameStats: {
+    marginBottom: 30,
+  },
+  gameStatsHeader: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 10,
+  },
+  gameStatLine: {
+    color: "white",
+    fontSize: 16,
+  },
+  returnButton: {
+    backgroundColor: "#333",
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 20,
+  },
+  returnButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  externalLinkButton: {
+    padding: 10,
+    borderRadius: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 10,
+    alignSelf: "center",
+    backgroundColor: "#1DB954",
+  },
+  spotifyLinkButton: {
+    backgroundColor: "#1DB954",
+  },
+  externalLinkText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
+    marginLeft: 5,
+  },
+  spotifyEmbedContainer: {
+    width: "100%",
+    height: 80,
+    marginBottom: 10,
+    borderRadius: 10,
+    overflow: "hidden",
+  },
+  playerToggleContainer: {
+    alignItems: "center",
+    marginVertical: 10,
+  },
+  playerToggleButton: {
+    backgroundColor: "rgba(0, 0, 0, 0.3)",
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  playerToggleText: {
+    color: "white",
+    fontSize: 12,
+  },
+  progressContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    width: "100%",
+    paddingHorizontal: 10,
+  },
+  progressBar: {
+    flex: 1,
+    height: 40,
+    marginHorizontal: 10,
+  },
+  timeText: {
+    color: "#AAA",
+    fontSize: 12,
+  },
+  controlButtonsContainer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    marginVertical: 10,
+  },
+  playPauseButton: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "#C143FF",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 0,
+    shadowColor: "#C143FF",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
+    elevation: 10,
+    // borderColor: "#FFC857",
+  },
+  loadingAudioContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+  },
+  loadingAudioText: {
+    color: "white",
+    marginTop: 10,
+    fontSize: 14,
+  },
+  audioErrorContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+  },
+  audioErrorText: {
+    color: "#FF6B6B",
+    marginBottom: 15,
+    fontSize: 14,
+    textAlign: "center",
+  },
+  countdownContainer: {
+    width: "80%",
+    marginTop: 10,
+    marginBottom: 5,
+  },
+  countdownTrack: {
+    height: 4,
+    backgroundColor: "#444",
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  countdownProgress: {
+    height: "100%",
+    backgroundColor: "#C143FF",
+  },
+  reviewListContainer: {
+    width: "100%",
+    backgroundColor: "#232323",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 30,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+  },
+  reviewListTitle: {
+    color: "#FFC857",
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  reviewListItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#282828",
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 10,
+  },
+  reviewSongImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    marginRight: 12,
+    backgroundColor: "#444",
+  },
+  reviewSongInfo: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  reviewSongTitle: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  reviewSongArtist: {
+    color: "#AAA",
+    fontSize: 14,
+  },
+  reviewPlayerInfo: {
+    alignItems: "center",
+    marginLeft: 10,
+  },
+  reviewPlayerAvatarWrapper: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "white",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 2,
+    overflow: "hidden",
+  },
+  reviewPlayerAvatar: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+  },
+  reviewPlayerName: {
+    color: "#FFC857",
+    fontSize: 12,
+    fontWeight: "bold",
+    textAlign: "center",
+  },
+  buttonsContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    width: "100%",
+    marginTop: 20,
+  },
+  playAgainButton: {
+    backgroundColor: "#8E44AD",
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 20,
+  },
+  playAgainButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  scoresContainer: {
+    width: "100%",
+    backgroundColor: "#232323",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+  },
+  scoresTitle: {
+    color: "#FFC857",
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  scoresList: {
+    width: "100%",
+  },
+  scoreItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#282828",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#444",
+  },
+  scorePlayerInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  scorePlayerAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 10,
+  },
+  scorePlayerName: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  scoreValue: {
+    color: "#FFC857",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  resultsScrollContent: {
+    flexGrow: 1,
+    paddingBottom: 30,
+  },
+});
