@@ -38,7 +38,7 @@ export default function MultiplayerGame() {
 
   // Game state
   const [connectionStep, setConnectionStep] = useState('initial'); // initial, connecting, host, join, lobby, game
-  const [serverUrl, setServerUrl] = useState('');
+  const [serverUrl, setServerUrl] = useState("http://10.35.8.122:3000");
   const [username, setUsername] = useState('');
   const [gameName, setGameName] = useState('');
   const [gameId, setGameId] = useState('');

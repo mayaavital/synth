@@ -11,12 +11,11 @@ var serviceAccount = require("./synth-database-firebase-adminsdk-fbsvc-b707949a5
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
-  databaseURL: "https://synth-database-default-rtdb.firebaseio.com"
+  databaseURL: "https://synth-database-default-rtdb.firebaseio.com/"
 });
 
 // As an admin, the app has access to read and write all data, regardless of Security Rules
 var db = admin.database();
-var ref = db.ref("restricted_access/secret_document");
 
 // Initialize Express and HTTP server
 const app = express();
@@ -95,9 +94,15 @@ io.on('connection', (socket) => {
 
     var gameRef = db.ref(DATABASE_BRANCHES.GAMES).child(GAME_TREE.GAMES);
 
-    var gameId = gameRef.push({
+    console.log("Game Name: " + gameName);
+
+    var gamePush = gameRef.push({
       [GameDataBranches.METADATA.NAME] : gameName
     });
+
+    var gameId = gamePush.key;
+
+    console.log("Game ID: " + gameId);
 
     var inviteCodeRef = db.ref(DATABASE_BRANCHES.GAMES).child(GAME_TREE.INVITE_CODE).child(gameInviteCode);
     inviteCodeRef.set(gameId);
