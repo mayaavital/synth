@@ -18,6 +18,10 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useWebSocket, EVENTS } from "../utils/useWebSocket";
 import QRCode from 'react-native-qrcode-svg';
+// Import Spotify utilities
+import getEnv from "../utils/env";
+import { getMyRecentlyPlayedTracks } from "../utils/apiOptions";
+import useSpotifyAuth from "../utils/useSpotifyAuth";
 
 export default function MultiplayerGame() {
   const navigation = useNavigation();
@@ -35,6 +39,13 @@ export default function MultiplayerGame() {
     on,
     disconnect
   } = useWebSocket();
+  
+  // Spotify auth hook for getting tokens
+  const { 
+    token: spotifyToken,
+    getValidToken: getSpotifyToken,
+    isTokenValid: isSpotifyTokenValid,
+  } = useSpotifyAuth();
 
   // Game state
   const [connectionStep, setConnectionStep] = useState('initial'); // initial, connecting, host, join, lobby, game
@@ -465,84 +476,88 @@ export default function MultiplayerGame() {
       setLoading(true);
       console.log('Fetching recent tracks for multiplayer game...');
       
-      // Example API call to fetch recently played tracks
-      // This would need to be replaced with your actual Spotify API implementation
-      const response = await fetch('https://api.spotify.com/v1/me/player/recently-played?limit=50', {
-        headers: {
-          'Authorization': 'Bearer YOUR_ACCESS_TOKEN' // Replace with actual token retrieval
+      // Get valid token using our hook
+      let token = null;
+      try {
+        // First try to use the token from our hook
+        if (isSpotifyTokenValid()) {
+          token = spotifyToken;
+          console.log('Using token from Spotify hook');
+        } else {
+          // Try to get a fresh token
+          token = await getSpotifyToken();
+          console.log('Got fresh token from Spotify hook');
         }
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch recent tracks: ${response.status}`);
+      } catch (tokenError) {
+        console.error('Error getting Spotify token:', tokenError);
       }
       
-      const data = await response.json();
-      
-      // Process tracks to get unique tracks with all required information
-      const processedTracks = [];
-      const trackIds = new Set();
-      
-      if (data.items && data.items.length > 0) {
-        // Process each track, keeping only unique tracks with preview URLs
-        data.items.forEach(item => {
-          const track = item.track;
+      // If we have a token, use it
+      if (token) {
+        try {
+          console.log('Using token to fetch recently played tracks');
+          const tracks = await getMyRecentlyPlayedTracks(token);
           
-          // Only process tracks that have a preview URL and haven't been added yet
-          if (track && 
-              track.preview_url && 
-              !trackIds.has(track.id) && 
-              processedTracks.length < 5) {
-            
-            // Format the track in the expected structure
-            const formattedTrack = {
-              songTitle: track.name,
-              songArtists: track.artists.map(artist => artist.name),
-              albumName: track.album.name,
-              imageUrl: track.album.images[0]?.url,
-              previewUrl: track.preview_url,
+          if (tracks && tracks.length > 0) {
+            // Convert to the format expected by the multiplayer game
+            const processedTracks = tracks.slice(0, 5).map(track => ({
+              songTitle: track.songTitle,
+              songArtists: track.songArtists.map(artist => artist.name || artist),
+              albumName: track.albumName,
+              imageUrl: track.imageUrl,
+              previewUrl: track.previewUrl,
               uri: track.uri,
               trackId: track.id,
-              externalUrl: track.external_urls.spotify,
-              duration: track.duration_ms
-            };
+              externalUrl: track.externalUrl,
+              duration: track.duration
+            }));
             
-            processedTracks.push(formattedTrack);
-            trackIds.add(track.id);
+            console.log(`Found ${processedTracks.length} valid tracks for multiplayer`);
+            return processedTracks;
           }
+        } catch (apiError) {
+          console.error('Error calling Spotify API:', apiError);
+        }
+      } else {
+        console.log('No valid Spotify token available');
+      }
+      
+      // Fallback to mock data if API call fails or returns no tracks
+      console.log('Using mock tracks for multiplayer');
+      const mockTracks = [];
+      for (let i = 1; i <= 5; i++) {
+        mockTracks.push({
+          songTitle: `Test Song ${i}`,
+          songArtists: ['Test Artist'],
+          albumName: 'Test Album',
+          imageUrl: 'https://via.placeholder.com/300',
+          previewUrl: 'https://p.scdn.co/mp3-preview/your-preview-url',
+          uri: `spotify:track:mock${i}`,
+          trackId: `mock${i}`,
+          duration: 30000
         });
       }
       
-      console.log(`Found ${processedTracks.length} valid tracks for multiplayer`);
-      
-      // For testing purposes, let's create mock tracks if we couldn't get real ones
-      if (processedTracks.length === 0) {
-        for (let i = 1; i <= 5; i++) {
-          processedTracks.push({
-            songTitle: `Test Song ${i}`,
-            songArtists: ['Test Artist'],
-            albumName: 'Test Album',
-            imageUrl: 'https://via.placeholder.com/300',
-            previewUrl: 'https://p.scdn.co/mp3-preview/your-preview-url',
-            uri: `spotify:track:mock${i}`,
-            trackId: `mock${i}`,
-            duration: 30000
-          });
-        }
-        console.log('Created 5 mock tracks for testing');
-      }
-      
-      return processedTracks;
+      return mockTracks;
     } catch (error) {
       console.error('Error fetching recent tracks:', error);
       setError(`Could not fetch your tracks: ${error.message}`);
       
-      // Return empty array on failure
-      return [];
+      // Return mock tracks on failure
+      return Array(5).fill().map((_, i) => ({
+        songTitle: `Backup Song ${i+1}`,
+        songArtists: ['Backup Artist'],
+        albumName: 'Backup Album',
+        imageUrl: 'https://via.placeholder.com/300',
+        previewUrl: 'https://p.scdn.co/mp3-preview/your-preview-url',
+        uri: `spotify:track:backup${i}`,
+        trackId: `backup${i}`,
+        duration: 30000
+      }));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isSpotifyTokenValid, spotifyToken, getSpotifyToken]);
 
   const renderInitialScreen = () => (
     <View style={styles.contentContainer}>

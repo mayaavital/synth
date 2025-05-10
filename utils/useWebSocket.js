@@ -40,7 +40,7 @@ export const EVENTS = {
 // For production, you'll need to use the actual server IP
 // Use your specific IP address when you want to test with multiple devices
 const DEFAULT_SERVER_URL = 'http://10.27.145.110:3000'; 
-const CONNECTION_TIMEOUT = 10000; // 10 seconds
+const CONNECTION_TIMEOUT = 20000; // 10 seconds
 
 // Create a singleton socket instance that persists across component mounts
 let globalSocket = null;
@@ -398,7 +398,7 @@ export const useWebSocket = () => {
   }, [emit]);
   
   // Join a game
-  const joinGame = useCallback((gameId, username) => {
+  const joinGame = useCallback((gameId, username, profilePicture = null, playerTracks = null) => {
     // Extra validation and improved error handling
     if (!gameId || !username) {
       console.warn('Invalid gameId or username for join_game');
@@ -418,7 +418,7 @@ export const useWebSocket = () => {
         setTimeout(() => {
           if (socket.connected) {
             console.log('Reconnected, now joining game...');
-            socket.emit(EVENTS.JOIN_GAME, { gameId, username });
+            socket.emit(EVENTS.JOIN_GAME, { gameId, username, profilePicture, playerTracks });
           } else {
             console.warn('Reconnection failed, still unable to join game');
           }
@@ -428,8 +428,20 @@ export const useWebSocket = () => {
       return false;
     }
     
+    // Log tracks being sent for debugging
+    if (playerTracks && playerTracks.length > 0) {
+      console.log(`Sending ${playerTracks.length} tracks when joining game ${gameId}`);
+      // Log sample track info
+      console.log('Sample track info:', {
+        title: playerTracks[0].songTitle,
+        hasPreviewUrl: !!playerTracks[0].previewUrl
+      });
+    } else {
+      console.warn('No tracks available when joining game');
+    }
+    
     // If we're already connected, proceed normally
-    return emit(EVENTS.JOIN_GAME, { gameId, username });
+    return emit(EVENTS.JOIN_GAME, { gameId, username, profilePicture, playerTracks });
   }, [socket, isConnected, emit]);
   
   // Mark player as ready
@@ -464,7 +476,7 @@ export const useWebSocket = () => {
       albumName: song.albumName || '',
       imageUrl: song.imageUrl || '',
       duration: song.duration || 0,
-      previewUrl: song.previewUrl || '',
+      previewUrl: song.previewUrl || '',  // Always include previewUrl for all players
       uri: song.uri || null,
       externalUrl: song.externalUrl || null,
       trackId: song.trackId || song.id || null
@@ -503,7 +515,7 @@ export const useWebSocket = () => {
           gameId,
           song: {
             songTitle: song.songTitle || 'Unknown Song',
-            previewUrl: song.previewUrl || '',
+            previewUrl: song.previewUrl || '',  // Make sure this is included in fallback
             imageUrl: song.imageUrl || ''
           },
           assignedPlayer: {

@@ -8,6 +8,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as WebBrowser from "expo-web-browser";
 import { ResponseError } from "expo-auth-session/build/Errors";
+import * as Linking from 'expo-linking';
 
 const {
   REDIRECT_URI,
@@ -277,11 +278,74 @@ const useSpotifyAuth = () => {
     console.log("Logged out and token data cleared");
   };
 
+  // Add a direct alternative method for iOS development builds
+  const getSpotifyAuthDirectIOS = async () => {
+    try {
+      // Create a direct link to Spotify that will open in Safari
+      const spotifyAuthUrl = `https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(SCOPES.join(' '))}`;
+      
+      console.log("Opening Spotify auth directly in Safari:", spotifyAuthUrl);
+      
+      // Set up listener for redirect URL
+      const urlListener = Linking.addEventListener('url', handleSpotifyRedirect);
+      
+      // Open Safari with auth URL
+      await Linking.openURL(spotifyAuthUrl);
+      
+      return { type: 'direct-ios-auth-started' };
+    } catch (error) {
+      console.error("Error starting direct iOS auth:", error);
+      setAuthError("Failed to open Spotify login");
+      throw error;
+    }
+  };
+
+  // Handle Spotify redirect when app is opened via URL scheme
+  const handleSpotifyRedirect = async (event) => {
+    try {
+      console.log("App opened via URL:", event.url);
+      
+      // Parse the URL to extract authorization code
+      const url = new URL(event.url);
+      const code = url.searchParams.get('code');
+      
+      if (code) {
+        console.log("Received authorization code from Spotify redirect");
+        
+        // Exchange code for tokens
+        const tokenData = await exchangeCodeForToken(code);
+        
+        if (tokenData && tokenData.access_token) {
+          const newToken = tokenData.access_token;
+          const newRefreshToken = tokenData.refresh_token;
+          const expiresIn = parseInt(tokenData.expires_in) || 3600;
+          const expirationTime = Date.now() + expiresIn * 1000;
+          
+          // Save token data
+          setToken(newToken);
+          setTokenExpiration(expirationTime);
+          setRefreshToken(newRefreshToken);
+          await saveTokenData(newToken, expirationTime, newRefreshToken);
+          
+          console.log("Successfully authenticated with Spotify");
+          setAuthError(null);
+        }
+      } else {
+        console.error("No code found in redirect URL");
+        setAuthError("Authentication failed - no code returned");
+      }
+    } catch (error) {
+      console.error("Error handling Spotify redirect:", error);
+      setAuthError(error.message || "Authentication failed");
+    }
+  };
+
   return {
     token,
     isTokenValid,
     getValidToken,
     getSpotifyAuth: promptAsync,
+    getSpotifyAuthDirect: getSpotifyAuthDirectIOS,
     logout,
     isInitialized,
     authError,

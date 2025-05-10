@@ -603,13 +603,14 @@ export default function GamePlay() {
     }
   };
 
-  // Update loadAndPlaySong function to handle Deezer icons
+  // Update loadAndPlaySong function to handle loading issues
   const loadAndPlaySong = async (song) => {
     console.log("Loading song:", song?.songTitle);
     console.log(
       "Assigned to player:",
       song?.assignedToPlayer?.username || "none"
     );
+    console.log("Preview URL:", song?.previewUrl ? song.previewUrl.substring(0, 30) + '...' : 'NONE');
 
     // Verify we have a valid song object
     if (!song) {
@@ -675,6 +676,13 @@ export default function GamePlay() {
     }
 
     try {
+      // Verify the preview URL again after potential updates
+      if (!song.previewUrl) {
+        throw new Error("Still no valid preview URL available");
+      }
+      
+      console.log(`Attempting to load audio from: ${song.previewUrl.substring(0, 30)}...`);
+
       // Unload any existing sound
       if (sound) {
         await sound.unloadAsync();
@@ -707,11 +715,23 @@ export default function GamePlay() {
       audioLoadTimeoutRef.current = null;
 
       console.log("Audio loaded and playing successfully");
+      
+      // Force enable voting after a minimum time even if audio is playing correctly
+      setTimeout(() => {
+        if (!canVote) {
+          console.log("Enabling voting after minimum listen time");
+          setCanVote(true);
+        }
+      }, MIN_PLAY_DURATION);
     } catch (error) {
       console.error("Error loading audio:", error);
       setIsLoadingAudio(false);
-      setAudioLoadError("Error loading audio. You can still vote.");
-      setCanVote(true);
+      setAudioLoadError(`Error loading audio: ${error.message}. You can still vote.`);
+
+      // Enable voting even with error
+      setTimeout(() => {
+        setCanVote(true);
+      }, 5000);
 
       // Clear the timeout if we've already handled the error
       if (audioLoadTimeoutRef.current) {
@@ -816,11 +836,30 @@ export default function GamePlay() {
       
       // Set up the song for this round
       if (data.song) {
+        console.log('Song data received from server:', {
+          title: data.song.songTitle,
+          hasPreviewUrl: !!data.song.previewUrl,
+          previewUrl: data.song.previewUrl ? data.song.previewUrl.substring(0, 30) + '...' : 'NONE',
+        });
+        
+        // Make sure we have all the required data
         const songData = {
           ...data.song,
-          // Assign the song to the player that owns it (not included in event to avoid revealing)
-          assignedToPlayer: null // This will be revealed during voting results
+          // These fields should be sent from the server, but add fallbacks just in case
+          songTitle: data.song.songTitle || 'Unknown Song',
+          songArtists: data.song.songArtists || ['Unknown Artist'],
+          albumName: data.song.albumName || 'Unknown Album',
+          imageUrl: data.song.imageUrl || 'https://via.placeholder.com/300',
+          // Always use the previewUrl from the server - this is critical for song synchronization
+          previewUrl: data.song.previewUrl,
+          // Assign the song to the player that owns it (will be revealed during voting results)
+          assignedToPlayer: null
         };
+        
+        // Debug logs to verify the song data
+        console.log(`Loading song for round ${data.roundNumber}: "${songData.songTitle}"`);
+        console.log(`Preview URL available: ${!!songData.previewUrl}`);
+        console.log(`Preview URL: ${songData.previewUrl ? songData.previewUrl.substring(0, 30) + '...' : 'NONE'}`);
         
         setCurrentSong(songData);
         setRoundSongs(prev => ({
@@ -828,12 +867,31 @@ export default function GamePlay() {
           [data.roundNumber]: songData
         }));
         
-        // Load and play the song
-        loadAndPlaySong(songData);
+        // Load and play the song - add retry logic if there's an issue
+        const loadWithRetry = async () => {
+          try {
+            await loadAndPlaySong(songData);
+          } catch (error) {
+            console.error('Error loading song, retrying once:', error);
+            // Wait a moment and try again
+            setTimeout(async () => {
+              try {
+                await loadAndPlaySong(songData);
+              } catch (retryError) {
+                console.error('Error on retry:', retryError);
+                setAudioLoadError('Failed to load audio. Please try again.');
+              }
+            }, 2000);
+          }
+        };
+        
+        loadWithRetry();
         
         // Update game stage
         setGameStage("playing");
         setCanVote(false);
+      } else {
+        console.error('No song data received for round start!');
       }
     });
     

@@ -2,6 +2,7 @@ import { encode as btoa } from "base-64";
 import * as Application from "expo-application";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
+import * as Linking from "expo-linking";
 
 // Utility function to create a code challenge for PKCE
 // This is a standalone utility to be used if needed
@@ -48,34 +49,28 @@ console.log(
 // For local development, it's okay to hardcode them here, but never commit secrets
 const CLIENT_ID = "44bc87fe29004136b77183319f56338e";
 
+// Get the app's URL prefix for the current environment
+const getAppUrlPrefix = () => {
+  // This gets the URL scheme/protocol based on our configuration
+  return Linking.createURL("/");
+};
+
 // Determine the redirect URI based on platform and environment
 const getRedirectUri = () => {
-  // When running in a managed Expo environment
+  // For Expo Go, use expo-specific format with the correct IP and port
   if (Constants.appOwnership === "expo") {
-    return `https://auth.expo.io/@${
-      Constants.expoConfig?.owner || "unknown"
-    }/synth`;
+    // Use the current IP and port that's displayed in the terminal
+    // This needs to match what's in your Spotify Developer Dashboard
+    return "exp://10.32.120.199:8083/--/callback";
   }
-
-  // For development on iOS Simulator or Android Emulator
-  if (__DEV__) {
-    if (Platform.OS === "ios") {
-      return "synth://callback";
-    }
-    return "synth://spotify-auth-callback";
-  }
-
-  // For production builds
-  if (Platform.OS === "ios") {
-    return `synth://spotify-auth-callback`;
-  }
-
-  // Android production build
-  return `synth://spotify-auth-callback`;
+  
+  // For all other cases (development build or standalone app)
+  return "synth://callback";
 };
 
 // For Spotify, this is critical to get right
-const REDIRECT_URI = "synth://callback";
+// We're using the function to determine the best redirect URI for current environment
+const REDIRECT_URI = getRedirectUri();
 
 // Print configuration for debugging
 console.log("CLIENT_ID:", CLIENT_ID);
@@ -99,6 +94,13 @@ const SPOTIFY_API = {
   // Add endpoint for individual track details
   TRACK_API_GETTER: (trackId) => `https://api.spotify.com/v1/tracks/${trackId}`,
 };
+
+// Add API configuration check logs
+console.log("API Configuration check:", {
+  hasAlbumTrackAPI: !!SPOTIFY_API?.ALBUM_TRACK_API_GETTER,
+  hasTopTracksAPI: !!SPOTIFY_API?.TOP_TRACKS_API,
+  hasTrackAPI: !!SPOTIFY_API?.TRACK_API_GETTER,
+});
 
 // Permission scopes requested from Spotify
 // Add or remove scopes based on what your app needs
