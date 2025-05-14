@@ -22,6 +22,8 @@ export const EVENTS = {
   HOST_CHANGED: 'host_changed',
   PLAYER_LEFT: 'player_left',
   PLAYER_TRACKS_RECEIVED: 'player_tracks_received',
+  PLAYLIST_SHARED: 'playlist_shared',
+  FORCE_SONG_SYNC: 'force_song_sync',
   ERROR: 'error',
   
   // Client events
@@ -33,13 +35,19 @@ export const EVENTS = {
   CAST_VOTE: 'cast_vote',
   NEXT_ROUND: 'next_round',
   RESTART_GAME: 'restart_game',
+  SONG_PLAYING: 'song_playing',
+  
+  // New sync events
+  SONG_RECEIVED: 'song_received',
+  HOST_PLAYBACK_STATUS: 'host_playback_status',
+  SYNC_STATUS: 'sync_status',
 };
 
 // Constants
 // For development, you can use 'http://localhost:3000'
 // For production, you'll need to use the actual server IP
 // Use your specific IP address when you want to test with multiple devices
-const DEFAULT_SERVER_URL = 'http://10.27.145.110:3000'; 
+const DEFAULT_SERVER_URL = 'http://172.20.10.10:3000'; 
 const CONNECTION_TIMEOUT = 20000; // 10 seconds
 
 // Create a singleton socket instance that persists across component mounts
@@ -147,8 +155,8 @@ export const useWebSocket = () => {
         reconnectionDelayMax: 5000,
         randomizationFactor: 0.5,
         timeout: CONNECTION_TIMEOUT,
-        transports: ['websocket'],
-        upgrade: false,
+        transports: ['websocket', 'polling'],  // Allow both WebSocket and polling
+        upgrade: true,  // Allow transport upgrade
         forceNew: true,
         autoConnect: true,
         pingTimeout: 8000,
@@ -315,19 +323,33 @@ export const useWebSocket = () => {
     }
   }, [socket]);
   
-  // Listen for events
+  // Listen for events with improved reliability
   const on = useCallback((event, callback) => {
-    if (!socket) return () => {};
+    if (!socket) {
+      console.warn(`Cannot register event ${event}: socket is null`);
+      return () => {};
+    }
     
-    console.log(`Adding listener for ${event}`);
-    socket.on(event, callback);
-    
-    // Return cleanup function
-    return () => {
-      console.log(`Removing listener for ${event}`);
-      if (socket) { // Add null check
-        socket.off(event, callback);
+    // Add debug logging for specific events
+    const wrappedCallback = (...args) => {
+      // Log special sync-related events
+      if ([EVENTS.SONG_RECEIVED, EVENTS.HOST_PLAYBACK_STATUS, EVENTS.SYNC_STATUS].includes(event)) {
+        console.log(`[SYNC] Received ${event} event:`, 
+          args[0]?.gameId || 'unknown game',
+          args[0]?.roundNumber || 'unknown round',
+          args[0]?.songTitle ? `song: ${args[0].songTitle}` : ''
+        );
       }
+      
+      // For all events, execute the callback
+      return callback(...args);
+    };
+    
+    socket.on(event, wrappedCallback);
+    
+    // Return a cleanup function
+    return () => {
+      socket.off(event, wrappedCallback);
     };
   }, [socket]);
   
@@ -531,9 +553,17 @@ export const useWebSocket = () => {
     }
   }, [emit]);
   
-  // Cast a vote
-  const castVote = useCallback((gameId, votedForUsername) => {
-    return emit(EVENTS.CAST_VOTE, { gameId, votedForUsername });
+  // Cast a vote for a player
+  const castVote = useCallback((gameId, votedForUsername, options = {}) => {
+    const payload = { 
+      gameId, 
+      votedForUsername,
+      // Include additional options if provided (like player ID)
+      ...options
+    };
+    
+    console.log(`Emitting ${EVENTS.CAST_VOTE} for game ${gameId}`);
+    return emit(EVENTS.CAST_VOTE, payload);
   }, [emit]);
   
   // Advance to the next round
