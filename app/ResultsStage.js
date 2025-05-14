@@ -16,6 +16,8 @@ const ResultsStage = ({
   handleReturnToLobby,
   handlePlayAgain,
   currentRound,
+  trackAssignments,
+  isMultiplayer,
 }) => {
   // Sort players by points (descending)
   const sortedPlayers = [...players].sort((a, b) => {
@@ -37,7 +39,7 @@ const ResultsStage = ({
             Songs played: {currentRound}
           </Text>
           <Text style={resultsStyles.gameStatLine}>
-            Game type: Guess The Listener
+            Game type: {isMultiplayer ? "Multiplayer" : "Single Player"}
           </Text>
         </View>
         {/* Player scores section */}
@@ -98,10 +100,28 @@ const ResultsStage = ({
                 <Text style={resultsStyles.reviewPlayerName}>
                   {roundSongs[round].assignedToPlayer?.username}
                 </Text>
+                {isMultiplayer && (
+                  <View style={resultsStyles.ownershipBadge}>
+                    <Text style={resultsStyles.ownershipBadgeText}>Owner</Text>
+                  </View>
+                )}
               </View>
             </View>
           ))}
         </View>
+        {isMultiplayer && (
+          <View style={resultsStyles.pointsExplanationContainer}>
+            <Text style={resultsStyles.pointsExplanationTitle}>
+              How Points Were Earned
+            </Text>
+            <Text style={resultsStyles.pointsExplanationText}>
+              • 1 point for correctly guessing song owners
+            </Text>
+            <Text style={resultsStyles.pointsExplanationText}>
+              • 1 point for each player fooled by your song
+            </Text>
+          </View>
+        )}
         <View style={resultsStyles.buttonsContainer}>
           <Pressable
             style={resultsStyles.returnButton}
@@ -252,8 +272,11 @@ const resultsStyles = StyleSheet.create({
     fontSize: 14,
   },
   reviewPlayerInfo: {
+    flexDirection: "row",
     alignItems: "center",
-    marginLeft: 10,
+    minWidth: 100,
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
   },
   reviewPlayerAvatarWrapper: {
     width: 36,
@@ -308,5 +331,35 @@ const resultsStyles = StyleSheet.create({
   resultsScrollContent: {
     flexGrow: 1,
     paddingBottom: 30,
+  },
+  pointsExplanationContainer: {
+    width: "100%",
+    backgroundColor: "#232323",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+  },
+  pointsExplanationTitle: {
+    color: "#FFC857",
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  pointsExplanationText: {
+    color: "white",
+    fontSize: 16,
+  },
+  ownershipBadge: {
+    backgroundColor: "#8E44AD",
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    marginLeft: 10,
+  },
+  ownershipBadgeText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "bold",
   },
 });

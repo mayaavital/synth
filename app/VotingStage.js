@@ -19,6 +19,7 @@ const VotingStage = ({
   gameId,
   castVote,
   playerPoints,
+  allVotesCast
 }) => {
   const [voteLocked, setVoteLocked] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
@@ -33,10 +34,37 @@ const VotingStage = ({
     }
   }, [showVoteResult, showLeaderboard]);
 
+  // Add effect to automatically show result when all votes are cast
+  useEffect(() => {
+    if (isMultiplayer && allVotesCast && voteLocked && !showVoteResult) {
+      console.log("All votes cast, showing results!");
+      
+      // Small delay before showing results to ensure smooth transition
+      setTimeout(() => {
+        setShowVoteResult(true);
+      }, 500);
+    }
+  }, [allVotesCast, voteLocked, showVoteResult, isMultiplayer]);
+
+  // Add effect to update UI immediately when allVotesCast changes
+  useEffect(() => {
+    if (isMultiplayer && allVotesCast && voteLocked) {
+      console.log("All votes received, updating UI...");
+      // Force re-render to show "Results coming..." instead of "Waiting for all votes..."
+    }
+  }, [allVotesCast, voteLocked, isMultiplayer]);
+
   // Handle vote submission
   const handleSubmitVote = () => {
     if (!selectedPlayer) return;
     setVoteLocked(true);
+
+    // Find the player object from the username
+    const selectedPlayerObj = players.find(p => p.username === selectedPlayer);
+    
+    if (!selectedPlayerObj) {
+      console.error(`Could not find player object for username: ${selectedPlayer}`);
+    }
 
     // Create the vote record
     const isCorrectGuess =
@@ -63,17 +91,26 @@ const VotingStage = ({
       }));
     }
 
-    //     // Instead of only updating @cole_sprout:
-    // if (isCorrectGuess) {
-    //     setPlayerPoints((prev) => ({
-    //       ...prev,
-    //       [selectedPlayer]: (prev[selectedPlayer] || 0) + 1,
-    //     }));
-    //   }
-
     // In multiplayer mode, send the vote to the server
     if (isMultiplayer) {
-      castVote(gameId, selectedPlayer);
+      console.log(`Casting vote for ${selectedPlayer} in game ${gameId}`);
+      try {
+        // Send both player ID and username to ensure server can process vote
+        // This adds resilience if one format fails
+        if (typeof castVote === 'function') {
+          castVote(gameId, selectedPlayer, {
+            votedForPlayerId: selectedPlayerObj?.id,
+            votedForUsername: selectedPlayer
+          });
+        } else {
+          console.error('castVote is not a function', typeof castVote);
+          Alert.alert('Error', 'Vote submission function is not available.');
+        }
+      } catch (error) {
+        console.error('Error casting vote:', error);
+        Alert.alert('Error', 'Failed to submit your vote. Please try again.');
+        setVoteLocked(false);
+      }
     } else {
       // In single player mode, reveal result immediately
       setShowVoteResult(true);
@@ -90,6 +127,7 @@ const VotingStage = ({
   };
 
   if (showLeaderboard && showVoteResult) {
+    console.log("playerPoints", playerPoints);
     return (
       <LeaderboardScreen
         currentSong={currentSong}
@@ -189,7 +227,7 @@ const VotingStage = ({
       {voteLocked && !showVoteResult && (
         <View style={votingStyles.waitingBanner}>
           <Text style={votingStyles.waitingBannerText}>
-            Waiting for all votes…
+            {allVotesCast ? "Results coming..." : "Waiting for all votes…"}
           </Text>
         </View>
       )}

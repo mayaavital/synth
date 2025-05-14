@@ -28,6 +28,8 @@ export default function App() {
 
   // Handle deep links
   useEffect(() => {
+    console.log('Setting up deep link handling');
+    
     // Handler for when the app is opened from a deep link
     const handleDeepLink = (event) => {
       let url = event.url;
@@ -59,6 +61,29 @@ export default function App() {
         } catch (error) {
           console.error('Error processing deep link:', error);
         }
+      }
+      // Handle Spotify authentication callback
+      else if (url.startsWith('synth://callback') || url.includes('/--/callback')) {
+        try {
+          console.log('Spotify auth callback detected:', url);
+          // The URL should contain a code parameter that we need to handle
+          const urlObj = new URL(url);
+          const code = urlObj.searchParams.get('code');
+          const error = urlObj.searchParams.get('error');
+          
+          if (code) {
+            console.log('Spotify auth code received:', code);
+            // We'll let the event listener in useSpotifyAuth.js handle this
+            // No navigation needed here as the auth is handled by the hook
+          } else if (error) {
+            console.error('Spotify auth error:', error);
+            // Optionally navigate to an error screen
+          }
+        } catch (error) {
+          console.error('Error processing Spotify callback:', error);
+        }
+      } else {
+        console.log('Unhandled deep link format:', url);
       }
     };
 

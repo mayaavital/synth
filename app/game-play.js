@@ -30,10 +30,13 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import VotingStage from "./VotingStage";
 import ResultsStage from "./ResultsStage";
+// Import useWebSocket for multiplayer functionality
+import { useWebSocket, EVENTS } from "../utils/useWebSocket";
+import LeaderboardScreen from './LeaderboardScreen';
 
 const ALBUM_ID = "2noRn2Aes5aoNVsU6iWThc";
 const ROUNDS_TOTAL = 2;
-const MIN_PLAY_DURATION = 15000; // Set to 15 seconds as specified
+const MIN_PLAY_DURATION = 0; // Was 15000, now allow voting immediately
 
 // Format time helper function
 const formatTime = (milliseconds) => {
@@ -58,6 +61,23 @@ export default function GamePlay() {
     getValidToken,
     isInitialized,
   } = useSpotifyAuth();
+
+  // Initialize the WebSocket hook for multiplayer
+  const { 
+    on, 
+    emit, 
+    nextRound: sendNextRound, 
+    castVote,
+    isConnected 
+  } = useWebSocket();
+
+  // Track the last few trace IDs we've received to avoid infinite sync loops
+  const lastSyncTraceIds = useRef([]);
+  const MAX_SYNC_HISTORY = 5;
+  
+  // Also track when we processed each sync to add time-based throttling
+  const lastSyncTimestamp = useRef(0);
+  const SYNC_THROTTLE_MS = 3000; // Only process force_sync events at most every 3 seconds
 
   // Mock song data to fallback on if Spotify API is unavailable
   const mockSongs = [
@@ -104,10 +124,12 @@ export default function GamePlay() {
   const [allSongs, setAllSongs] = useState([]);
   const [currentRound, setCurrentRound] = useState(1);
   const [currentSong, setCurrentSong] = useState(null);
-  const [gameStage, setGameStage] = useState("loading"); // loading, playing, voting, results
+  const [gameStage, setGameStage] = useState("loading"); // loading, playing, voting, leaderboard, results
   const [error, setError] = useState(null);
   const [playerSongs, setPlayerSongs] = useState({});
   const [hasFetchedSongs, setHasFetchedSongs] = useState(false);
+  // NEW: Add state for the consolidated playlist
+  const [consolidatedPlaylist, setConsolidatedPlaylist] = useState([]);
 
   // Audio playback state variables
   const [sound, setSound] = useState(null);
@@ -126,26 +148,28 @@ export default function GamePlay() {
   // Add state variables for tracking voting selection and results
   const [selectedPlayer, setSelectedPlayer] = useState(null);
   const [showVoteResult, setShowVoteResult] = useState(false);
+  const [trackAssignments, setTrackAssignments] = useState({});
 
   // Track points awarded for @cole_sprout (and add state for tracking this)
   const [playerPoints, setPlayerPoints] = useState({
     "@cole_sprout": 0,
   });
 
-  // const [playerPoints, setPlayerPoints] = useState(
-  //   Object.fromEntries(players.map((p) => [p.username, 0]))
-  // );
-
   // Add a state variable to track the voting progress percentage
   const [voteProgress, setVoteProgress] = useState(0);
+  const playerRef = useRef(null);
+
+  // Add state for tracking votes
+  const [pendingVotes, setPendingVotes] = useState({});
+  const [allVotesCast, setAllVotesCast] = useState(false);
 
   // Get game details from params
   const gameName = params.gameName || "Game Name";
   const playerCount = parseInt(params.playerCount) || 4;
   const gameId = params.gameId || `game-${Date.now()}`;
-  // Set to false since we don't have WebSocket functionality
-  const isMultiplayer = false;
-  const isHost = false;
+  // Update to read the multiplayer flag from params
+  const isMultiplayer = params.isMultiplayer === "true";
+  const isHost = params.isHost === "true";
 
   // Parse player usernames from params if available
   let playerUsernames = [];
@@ -327,129 +351,58 @@ export default function GamePlay() {
               );
             });
 
-            // Filter out tracks without valid preview URLs
-            const validTracks = tracks.filter((track) => {
-              const hasValidPreview =
-                track.previewUrl && track.previewUrl.trim() !== "";
-              if (!hasValidPreview) {
-                console.log(
-                  `Track filtered out (no preview URL): ${track.songTitle}`
-                );
-              }
-              return hasValidPreview;
-            });
-            console.log(
-              `Found ${validTracks.length}/${tracks.length} tracks with preview URLs`
-            );
-
-            if (validTracks.length < 3) {
-              console.log(
-                "Not enough tracks with preview URLs, trying individual track API..."
-              );
-
-              // Try fetching individual tracks to see if we can get preview URLs
-              const individualTracks = [];
-              const trackPromises = [];
-
-              // Try to get more tracks than we need in case some fail
-              const maxTracksToTry = 10;
-              const tracksToTry = tracks.slice(0, maxTracksToTry);
-
-              // Use Promise.all with a timeout to avoid waiting too long
-              const fetchWithTimeout = async (trackId) => {
-                try {
-                  return await Promise.race([
-                    getTrackDetails(trackId, currentToken),
-                    new Promise((_, reject) =>
-                      setTimeout(() => reject(new Error("Timeout")), 5000)
-                    ),
-                  ]);
-                } catch (e) {
-                  console.log(`Fetch timed out or failed for track ${trackId}`);
-                  return null;
-                }
-              };
-
-              for (const track of tracksToTry) {
-                if (track.trackId) {
-                  trackPromises.push(fetchWithTimeout(track.trackId));
-                }
-              }
-
+            // NOTE: Spotify preview URLs are now deprecated
+            console.log("Spotify preview URLs are deprecated - we will rely on Deezer for audio playback");
+            
+            // Try to enrich all tracks with Deezer immediately rather than filtering first
+            console.log("Enriching all tracks with Deezer preview URLs");
+            
+            // Use Promise.all with a timeout to avoid waiting too long
+            const fetchWithTimeout = async (trackId) => {
               try {
-                const results = await Promise.all(trackPromises);
-                for (const trackDetails of results) {
-                  if (trackDetails && trackDetails.previewUrl) {
-                    console.log(
-                      `Found preview URL for track ${trackDetails.songTitle}`
-                    );
-                    individualTracks.push(trackDetails);
-                  }
-                }
-              } catch (batchError) {
-                console.error("Error in batch track fetching:", batchError);
+                return await Promise.race([
+                  getTrackDetails(trackId, currentToken),
+                  new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error("Timeout")), 5000)
+                  ),
+                ]);
+              } catch (e) {
+                console.log(`Fetch timed out or failed for track ${trackId}`);
+                return null;
               }
-
-              // If we still don't have at least 3 valid tracks with preview URLs, try Deezer
-              const combinedTracks = [...validTracks, ...individualTracks];
-              if (combinedTracks.length < 3) {
-                console.log(
-                  "Not enough preview URLs from Spotify, trying Deezer API"
-                );
-
-                try {
-                  // Try to enrich tracks with Deezer preview URLs
-                  const deezerEnrichedTracks =
-                    await enrichTracksWithDeezerPreviews(tracksToTry);
-
-                  // Filter tracks that now have preview URLs
-                  const validDeezerTracks = deezerEnrichedTracks.filter(
-                    (track) => track.previewUrl
-                  );
-                  console.log(
-                    `Found ${validDeezerTracks.length} tracks with Deezer preview URLs`
-                  );
-
-                  if (validDeezerTracks.length >= 3) {
-                    console.log("Using Deezer preview URLs");
-                    tracks = validDeezerTracks;
-                  } else {
-                    // Combine all tracks with valid preview URLs
-                    const allValidTracks = [
-                      ...combinedTracks,
-                      ...validDeezerTracks,
-                    ];
-                    if (allValidTracks.length >= 3) {
-                      console.log(
-                        `Using combined ${allValidTracks.length} tracks with preview URLs from Spotify and Deezer`
-                      );
-                      tracks = allValidTracks;
-                    } else {
-                      console.log(
-                        "Still not enough preview URLs, falling back to mock data"
-                      );
-                      tracks = mockSongs;
-                    }
-                  }
-                } catch (deezerError) {
-                  console.error(
-                    "Error enriching tracks with Deezer:",
-                    deezerError
-                  );
-
-                  if (combinedTracks.length >= 3) {
-                    tracks = combinedTracks;
-                  } else {
-                    console.log("Using mock songs after Deezer error");
-                    tracks = mockSongs;
-                  }
-                }
+            };
+            
+            try {
+              // Try to enrich all tracks with Deezer preview URLs
+              const tracksToTry = tracks.slice(0, 15); // Limit to 15 tracks to process
+              const deezerEnrichedTracks = await enrichTracksWithDeezerPreviews(tracksToTry);
+              
+              // Filter tracks that now have preview URLs
+              const validDeezerTracks = deezerEnrichedTracks.filter(
+                (track) => track.previewUrl
+              );
+              console.log(
+                `Found ${validDeezerTracks.length} tracks with Deezer preview URLs`
+              );
+              
+              if (validDeezerTracks.length >= 3) {
+                console.log("Using tracks with Deezer preview URLs");
+                tracks = validDeezerTracks;
               } else {
-                // Use the combined tracks if we have enough
-                tracks = combinedTracks;
+                console.log("Not enough tracks with Deezer preview URLs, using available songs anyway");
+                // Use whatever tracks we have, even without preview URLs
+                // The host-only playback model will handle this
+                tracks = tracks.slice(0, 15);
               }
-            } else {
-              tracks = validTracks;
+            } catch (deezerError) {
+              console.error(
+                "Error enriching tracks with Deezer:",
+                deezerError
+              );
+              
+              // Still use the tracks we have
+              console.log("Using available tracks despite Deezer error");
+              tracks = tracks.slice(0, 15);
             }
 
             // Add additional data fields as needed
@@ -463,6 +416,7 @@ export default function GamePlay() {
                 duration: track.duration,
                 albumArt: track.imageUrl ? "Available" : "Unavailable",
                 previewUrl: track.previewUrl ? "Available" : "Unavailable",
+                source: track.previewUrl ? "Deezer" : "Spotify"
               },
             }));
 
@@ -544,44 +498,48 @@ export default function GamePlay() {
     fetchSongs();
   }, [token, players, hasFetchedSongs, isInitialized]);
 
-  // Cleanup audio resources when unmounting
+  // Improve Audio resource management
+  // Unload audio resources properly when unmounting
   useEffect(() => {
     return () => {
       if (sound) {
-        sound
-          .unloadAsync()
-          .catch((e) => console.log("Error unloading sound", e));
+        console.log("Cleaning up audio resources");
+        try {
+          sound.unloadAsync()
+            .catch((e) => console.log("Error unloading sound", e));
+        } catch (err) {
+          console.error("Error in audio cleanup:", err);
+        }
       }
 
+      // Clear any timeouts
       if (audioLoadTimeoutRef.current) {
         clearTimeout(audioLoadTimeoutRef.current);
       }
     };
   }, [sound]);
 
-  // Audio status update handler
+  // Simplify the audio status update handler to reduce overhead
   const onPlaybackStatusUpdate = (status) => {
     if (!status.isLoaded) return;
 
-    setPlaybackPosition(status.positionMillis);
-    setPlaybackDuration(status.durationMillis);
+    // Only update UI if values are actually changing
+    if (playbackPosition !== status.positionMillis) {
+      setPlaybackPosition(status.positionMillis);
+    }
+    
+    if (playbackDuration !== status.durationMillis && status.durationMillis > 0) {
+      setPlaybackDuration(status.durationMillis);
+    }
 
-    // Set play/pause state based on audio status
-    setIsPlaying(status.isPlaying);
+    // Only update isPlaying if it changed
+    if (isPlaying !== status.isPlaying) {
+      setIsPlaying(status.isPlaying);
+    }
 
-    // Calculate vote progress as a percentage (0-100)
-    const progress = Math.min(
-      100,
-      (status.positionMillis / MIN_PLAY_DURATION) * 100
-    );
-    setVoteProgress(progress);
-
-    // Enable voting after at least 15 seconds
-    console.log(
-      `Playback position: ${status.positionMillis}, MIN_PLAY_DURATION: ${MIN_PLAY_DURATION}, canVote: ${canVote}`
-    );
-    if (status.positionMillis >= MIN_PLAY_DURATION && !canVote) {
-      console.log("Enabling vote button");
+    // Always allow voting
+    setVoteProgress(100);
+    if (!canVote) {
       setCanVote(true);
     }
 
@@ -591,126 +549,175 @@ export default function GamePlay() {
     }
   };
 
-  // Update loadAndPlaySong function to handle Deezer icons
+  // Simplified function for loading and playing audio
   const loadAndPlaySong = async (song) => {
-    console.log("Loading song:", song?.songTitle);
-    console.log(
-      "Assigned to player:",
-      song?.assignedToPlayer?.username || "none"
-    );
-
-    // Verify we have a valid song object
+    console.log('[TRACK_SYNC] loadAndPlaySong called for:', song?.songTitle || 'Unknown');
+    
     if (!song) {
-      console.error("No song provided to loadAndPlaySong");
+      console.error('[TRACK_SYNC] Attempted to load null or undefined song');
       return;
     }
-
-    // Set current song for display regardless of audio playback success
-    setCurrentSong(song);
+    
+    // Prevent update loops by checking if we're already playing this exact song with same ID
+    if (currentSong && 
+        currentSong.songTitle === song.songTitle && 
+        currentSong.roundTraceId === song.roundTraceId) {
+      console.log('[TRACK_SYNC] Already playing this exact song, skipping redundant update');
+      return;
+    }
+    
+    // Ensure we have complete song data
+    const enhancedSong = {
+      ...song,
+      songTitle: song?.songTitle || 'Unknown Song',
+      songArtists: song?.songArtists || ['Unknown Artist'],
+      albumName: song?.albumName || 'Unknown Album',
+      imageUrl: song?.imageUrl || 'https://via.placeholder.com/300',
+      duration: song?.duration || 30000,
+    };
+    
+    // If no assignedToPlayer but we're in a round, try to assign a player
+    if (!enhancedSong.assignedToPlayer && currentRound > 0) {
+      // Try to find a player assignment
+      const roundIndex = (currentRound - 1) % players.length;
+      const assignedPlayer = players[roundIndex];
+      console.log(`[TRACK_SYNC] Auto-assigning song to player ${assignedPlayer.username} based on round`);
+      enhancedSong.assignedToPlayer = assignedPlayer;
+    }
+    
+    // Track if we need to notify server to avoid duplicate notifications
+    const shouldNotifyServer = 
+      isMultiplayer && 
+      emit && 
+      (!currentSong || 
+       currentSong.songTitle !== enhancedSong.songTitle || 
+       currentSong.roundTraceId !== enhancedSong.roundTraceId);
+    
+    // Update current song data in state (do this only once per unique song)
+    setCurrentSong(enhancedSong);
     setIsLoadingAudio(true);
-    setAudioLoadError(null);
-
-    // Explicitly reset voting state for the new song
-    setCanVote(false);
-    setPlaybackPosition(0);
-    setPlaybackDuration(0);
-
-    // Check if we have a valid preview URL
-    if (!song.previewUrl) {
-      console.log(
-        "No preview URL available for this song, trying Deezer as last resort"
-      );
-
+    
+    // Notify server about song status for ALL clients (both host and non-host)
+    // Only if this is a new/different song
+    if (shouldNotifyServer) {
       try {
-        // Try to find this track on Deezer as a last attempt
-        const deezerTrack = await findDeezerTrackFromSpotify(song);
-        if (deezerTrack && deezerTrack.previewUrl) {
-          console.log("Found Deezer preview URL for:", song.songTitle);
-          // Update the current song with the Deezer preview URL
-          // Preserve the assignedToPlayer property
-          const updatedSong = {
-            ...song,
-            previewUrl: deezerTrack.previewUrl,
-            deezerInfo: {
-              trackId: deezerTrack.trackId,
-              externalUrl: deezerTrack.externalUrl,
-            },
-          };
-          setCurrentSong(updatedSong);
-          song = updatedSong;
-        } else {
-          console.log("No Deezer preview URL found either");
-          setAudioLoadError("No preview available for this song");
-          setIsLoadingAudio(false);
-
-          // Enable voting even without audio
-          setTimeout(() => {
-            setCanVote(true);
-          }, 5000);
-          return;
-        }
-      } catch (deezerError) {
-        console.error("Error finding Deezer preview:", deezerError);
-        setAudioLoadError("No preview available for this song");
-        setIsLoadingAudio(false);
-
-        // Enable voting even without audio
-        setTimeout(() => {
-          setCanVote(true);
-        }, 5000);
-        return;
+        emit('song_playing', {
+          gameId,
+          roundNumber: currentRound,
+          songTitle: enhancedSong.songTitle,
+          songArtists: enhancedSong.songArtists,
+          albumName: enhancedSong.albumName,
+          imageUrl: enhancedSong.imageUrl,
+          roundTraceId: enhancedSong.roundTraceId || `${gameId}-${currentRound}-${Date.now()}`,
+          previewUrl: enhancedSong.previewUrl,
+          assignedToPlayer: enhancedSong.assignedToPlayer
+        });
+      } catch (err) {
+        console.error('[TRACK_SYNC] Error notifying server:', err);
       }
     }
-
-    try {
-      // Unload any existing sound
-      if (sound) {
-        await sound.unloadAsync();
-      }
-
-      // Set timeout to handle case where audio loading takes too long
-      if (audioLoadTimeoutRef.current) {
-        clearTimeout(audioLoadTimeoutRef.current);
-      }
-
-      audioLoadTimeoutRef.current = setTimeout(() => {
-        setIsLoadingAudio(false);
-        setAudioLoadError("Audio loading timed out. You can still vote.");
-        setCanVote(true);
-      }, 15000);
-
-      // Create a new sound object
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: song.previewUrl },
-        { shouldPlay: true, progressUpdateIntervalMillis: 100 },
-        onPlaybackStatusUpdate
-      );
-
-      setSound(newSound);
-      setIsPlaying(true);
+    
+    // Non-hosts only need UI updates, not audio
+    if (!isHost) {
+      console.log('[TRACK_SYNC] Non-host device: updating UI only');
+      setIsPlaying(false);
+      setPlaybackPosition(0);
+      setPlaybackDuration(enhancedSong.duration || 30000);
       setIsLoadingAudio(false);
-
-      // Clear the timeout if audio loaded successfully
-      clearTimeout(audioLoadTimeoutRef.current);
-      audioLoadTimeoutRef.current = null;
-
-      console.log("Audio loaded and playing successfully");
-    } catch (error) {
-      console.error("Error loading audio:", error);
-      setIsLoadingAudio(false);
-      setAudioLoadError("Error loading audio. You can still vote.");
+      setAudioLoadError(null);
       setCanVote(true);
-
-      // Clear the timeout if we've already handled the error
-      if (audioLoadTimeoutRef.current) {
-        clearTimeout(audioLoadTimeoutRef.current);
-        audioLoadTimeoutRef.current = null;
+      return;
+    }
+    
+    // Host device: handle audio playback
+    try {
+      // Check if song has a preview URL
+      if (!enhancedSong.previewUrl) {
+        console.log('[TRACK_SYNC] Song has no preview URL, skipping audio');
+        setIsLoadingAudio(false);
+        setIsPlaying(false);
+        setCanVote(true);
+        return;
       }
+      
+      // Clean up existing sound
+      if (sound) {
+        try {
+          await sound.stopAsync();
+          await sound.unloadAsync();
+        } catch (error) {
+          console.error("[TRACK_SYNC] Error cleaning up previous sound:", error);
+        }
+      }
+      
+      // Simple audio load with maximum timeout
+      try {
+        // Clear any existing timeout
+        if (audioLoadTimeoutRef.current) {
+          clearTimeout(audioLoadTimeoutRef.current);
+        }
+        
+        // Set a 20-second timeout for loading
+        const timeoutPromise = new Promise((_, reject) => {
+          audioLoadTimeoutRef.current = setTimeout(() => {
+            reject(new Error("Audio load timed out after 20 seconds"));
+          }, 20000);
+        });
+        
+        // Load and play the audio
+        const { sound: newSound } = await Promise.race([
+          Audio.Sound.createAsync(
+            { uri: enhancedSong.previewUrl },
+            { shouldPlay: true },
+            onPlaybackStatusUpdate
+          ),
+          timeoutPromise
+        ]);
+        
+        // Clear timeout on success
+        clearTimeout(audioLoadTimeoutRef.current);
+        
+        // Update state
+        setSound(newSound);
+        setIsPlaying(true);
+        setIsLoadingAudio(false);
+        setCanVote(true);
+        console.log('[TRACK_SYNC] Successfully loaded audio');
+      } catch (error) {
+        console.error('[TRACK_SYNC] Error loading audio:', error.message);
+        clearTimeout(audioLoadTimeoutRef.current);
+        setIsLoadingAudio(false);
+        setCanVote(true);
+      }
+    } catch (error) {
+      console.error('[TRACK_SYNC] Unexpected error:', error);
+      setIsLoadingAudio(false);
+      setCanVote(true);
     }
   };
 
-  // Toggle play/pause function - simplified version
+  // Make voting more reliable by ensuring it's always enabled
+  // Add this additional effect to ensure voting is enabled
+  useEffect(() => {
+    if (gameStage === "playing" && !canVote) {
+      console.log("Force enabling vote button");
+      setCanVote(true);
+      setVoteProgress(100);
+    }
+  }, [gameStage, currentSong]);
+
+  // Toggle play/pause function with simplified error handling
   const togglePlayPause = async () => {
+    if (!isHost) {
+      console.log('[TRACK_SYNC] Non-host device cannot control playback');
+      Alert.alert(
+        "Host Playback Only",
+        "Audio playback is controlled by the host device.",
+        [{ text: "OK" }]
+      );
+      return;
+    }
+    
     if (!sound) return;
 
     try {
@@ -721,132 +728,543 @@ export default function GamePlay() {
       }
     } catch (error) {
       console.error("Error toggling playback:", error);
+      // Try to recover from error
+      if (sound) {
+        try {
+          // Attempt to reset the sound
+          await sound.stopAsync();
+          setTimeout(() => {
+            sound.playAsync().catch(e => console.error("Recovery failed:", e));
+          }, 500);
+        } catch (e) {
+          console.error("Error in recovery attempt:", e);
+        }
+      }
     }
   };
 
-  // Update selectSongForRound function to properly assign a player to each song
-  const selectSongForRound = (round, songs = allSongs) => {
-    if (!songs || songs.length === 0) return;
-
-    console.log("Selecting song for round", round);
-    console.log(
-      "Already played songs:",
-      playedSongs.map((s) => s.songTitle)
-    );
-
-    // Filter out songs that have already been played
-    const availableSongs = songs.filter(
-      (song) =>
-        !playedSongs.some((played) => played.songTitle === song.songTitle)
-    );
-
-    console.log("Available songs:", availableSongs.length);
-
-    // If we've played all songs, reset the played songs tracking
-    if (availableSongs.length === 0) {
-      console.log("All songs have been played, resetting tracking");
-      setPlayedSongs([]);
-
-      // Assign a random player for fallback case
-      const randomPlayer = players[Math.floor(Math.random() * players.length)];
-      const songWithPlayer = {
-        ...songs[Math.floor(Math.random() * songs.length)],
-        assignedToPlayer: randomPlayer,
-      };
-
-      loadAndPlaySong(songWithPlayer);
-      return;
-    }
-
-    // Select a random song from available songs
-    const randomIndex = Math.floor(Math.random() * availableSongs.length);
-    const selectedSong = availableSongs[randomIndex];
-
-    // Assign the song to a random player
-    const randomPlayerIndex = Math.floor(Math.random() * players.length);
-    const assignedPlayer = players[randomPlayerIndex];
-
-    console.log(
-      `Assigning song ${selectedSong.songTitle} to player: ${assignedPlayer.username}`
-    );
-
-    const songWithAssignment = {
-      ...selectedSong,
-      assignedToPlayer: assignedPlayer,
-    };
-
-    // Track this song for the current round
-    setRoundSongs((prev) => ({
-      ...prev,
-      [round]: songWithAssignment,
-    }));
-
-    // Add to played songs list to avoid repeating
-    setPlayedSongs((prev) => [...prev, songWithAssignment]);
-
-    // Load the selected song
-    loadAndPlaySong(songWithAssignment);
-  };
-
-  // Update nextRound function to reset vote selection state
-  const nextRound = async () => {
+  // Simplify the next round function to reduce network load
+  const handleNextRound = async () => {
     // Reset voting visual state
     setSelectedPlayer(null);
     setShowVoteResult(false);
-
-    // Log debug info about current round
-    console.log(`Round ${currentRound} completed`);
-    if (currentSong) {
-      console.log(`Song: ${currentSong.songTitle}`);
-      console.log(
-        `Assigned to player: ${
-          currentSong.assignedToPlayer?.username || "none"
-        }`
-      );
-    }
+    setCanVote(false);
 
     // Stop current playback
     if (sound) {
       try {
+        console.log("Stopping current sound playback");
         await sound.stopAsync();
       } catch (error) {
         console.error("Error stopping sound:", error);
       }
     }
 
-    // Reset playback-related states
-    setPlaybackPosition(0);
-    setPlaybackDuration(0);
-    setCanVote(false); // Make sure voting is disabled for the new round
-    setIsPlaying(false);
+    // Clear audio error state
     setAudioLoadError(null);
 
-    if (currentRound < ROUNDS_TOTAL) {
-      const nextRoundNum = currentRound + 1;
-      setCurrentRound(nextRoundNum);
-      setGameStage("playing");
-
-      // Add a small delay to make sure UI updates before loading the next song
-      setTimeout(() => {
-        selectSongForRound(nextRoundNum);
-      }, 100);
-    } else {
-      // Game over - would show final results
-      setGameStage("results");
-
-      // Calculate player scores
-      const playerScores = {};
-
-      // Count correct votes for each player
-      Object.entries(playerSongs).forEach(([playerName, votes]) => {
-        playerScores[playerName] = votes.filter(
-          (vote) => vote.isCorrect
-        ).length;
-      });
-
-      console.log("Final scores:", playerScores);
+    // For multiplayer games, request next round from server (host only)
+    if (isMultiplayer) {
+      if (isHost) {
+        console.log(`Requesting next round for game ${gameId}`);
+        
+        // Request server to advance to next round with minimal data
+        sendNextRound(gameId);
+      } else {
+        console.log("Waiting for host to advance to next round");
+      }
+      return;
     }
+
+    // Single player mode handling
+    const nextRound = currentRound + 1;
+    setCurrentRound(nextRound);
+
+    if (nextRound > ROUNDS_TOTAL) {
+      console.log("Game completed, showing results");
+      setGameStage("results");
+      return;
+    }
+
+    // Select a song for this round
+    selectSongForRound(nextRound);
   };
+
+  // Simplified selectSongForRound function (restored but optimized)
+  const selectSongForRound = (round, songs = allSongs) => {
+    if (!songs || songs.length === 0) return;
+
+    console.log("Selecting song for round", round);
+    
+    // Filter out songs that have already been played
+    const availableSongs = songs.filter(
+      (song) => !playedSongs.some((played) => played.songTitle === song.songTitle)
+    );
+
+    // If we've played all songs, reset tracking
+    if (availableSongs.length === 0) {
+      console.log("All songs have been played, resetting tracking");
+      setPlayedSongs([]);
+      
+      // Use a random song as fallback
+      const randomSong = songs[Math.floor(Math.random() * songs.length)];
+      const randomPlayer = players[Math.floor(Math.random() * players.length)];
+      
+      const songWithPlayer = {
+        ...randomSong,
+        assignedToPlayer: randomPlayer,
+      };
+      
+      setRoundSongs(prev => ({
+        ...prev,
+        [round]: songWithPlayer
+      }));
+      
+      loadAndPlaySong(songWithPlayer);
+      return;
+    }
+
+    // Select a random song and player
+    const randomIndex = Math.floor(Math.random() * availableSongs.length);
+    const selectedSong = availableSongs[randomIndex];
+    const randomPlayerIndex = Math.floor(Math.random() * players.length);
+    const assignedPlayer = players[randomPlayerIndex];
+
+    const songWithAssignment = {
+      ...selectedSong,
+      assignedToPlayer: assignedPlayer,
+    };
+
+    // Update state
+    setRoundSongs(prev => ({
+      ...prev,
+      [round]: songWithAssignment,
+    }));
+    
+    setPlayedSongs(prev => [...prev, songWithAssignment]);
+    loadAndPlaySong(songWithAssignment);
+  };
+
+  // Set up WebSocket event listeners for multiplayer
+  useEffect(() => {
+    if (!isMultiplayer || !isConnected) return;
+
+    console.log("[TRACK_SYNC] Setting up WebSocket event listeners for multiplayer game");
+    
+    // Handle playlist shared event
+    const playlistSharedCleanup = on(EVENTS.PLAYLIST_SHARED, (data) => {
+      if (data.gameId !== gameId) return;
+      
+      console.log(`[TRACK_SYNC] Received consolidated playlist with ${data.playlist.length} tracks`);
+      
+      // Store the consolidated playlist
+      setConsolidatedPlaylist(data.playlist);
+      
+      // Update allSongs with just the track data
+      const extractedSongs = data.playlist.map(item => ({
+        ...item.track,
+        assignedToPlayer: {
+          username: item.owner.username,
+          id: item.owner.id
+        }
+      }));
+      
+      setAllSongs(extractedSongs);
+      
+      // Force loading to complete if needed
+      if (isLoading) {
+        setIsLoading(false);
+        setGameStage("playing");
+      }
+    });
+    
+    // Handle round started event (server sends song to play)
+    const roundStartedCleanup = on(EVENTS.ROUND_STARTED, (data) => {
+      console.log('[TRACK_SYNC] Round started event received', data.roundNumber);
+      
+      if (data.gameId !== gameId) {
+        return;
+      }
+      
+      // Force loading to complete
+      if (isLoading) {
+        setIsLoading(false);
+      }
+      
+      setCurrentRound(data.roundNumber);
+      setGameStage("playing");
+      
+      // Set up the song for this round
+      if (data.song) {
+        // Make sure we have all the required data with fallbacks
+        const songData = {
+          ...data.song,
+          songTitle: data.song.songTitle || 'Unknown Song',
+          songArtists: Array.isArray(data.song.songArtists) ? 
+            data.song.songArtists : 
+            (data.song.songArtists ? [data.song.songArtists] : ['Unknown Artist']),
+          albumName: data.song.albumName || 'Unknown Album',
+          imageUrl: data.song.imageUrl || 'https://via.placeholder.com/300',
+          previewUrl: data.song.previewUrl,
+          roundTraceId: data.roundTraceId || data.song.roundTraceId || `game-${gameId}-round-${data.roundNumber}`,
+          assignedToPlayer: data.song.assignedToPlayer || data.assignedToPlayer || data.assignedPlayer
+        };
+        
+        // Log the song data we're using
+        console.log('[TRACK_SYNC] Round started with song:', JSON.stringify({
+          title: songData.songTitle,
+          artists: Array.isArray(songData.songArtists) ? 
+            songData.songArtists.join(', ') : songData.songArtists,
+          albumName: songData.albumName,
+          hasPreviewUrl: !!songData.previewUrl,
+          hasImage: !!songData.imageUrl,
+          assignedPlayer: songData.assignedToPlayer?.username || 'unknown'
+        }));
+        
+        // Update state and load song (which will respect the host-only settings)
+        setCurrentSong(songData);
+        setRoundSongs(prev => ({
+          ...prev,
+          [data.roundNumber]: songData
+        }));
+        
+        // Force can vote to be true
+        setCanVote(true);
+        setVoteProgress(100);
+        
+        loadAndPlaySong(songData);
+      } else {
+        console.error('[TRACK_SYNC] Round started without song data');
+      }
+    });
+
+    // Update the vote result and player voted handlers
+
+    // Improve the player voted handler to better handle player IDs
+    const playerVotedCleanup = on(EVENTS.PLAYER_VOTED, (data) => {
+      if (data.gameId !== gameId) return;
+      
+      console.log(`[TRACK_SYNC] Player voted event:`, JSON.stringify(data));
+      
+      // Extract the player ID, ensuring it's a string for consistent comparison
+      const votedPlayerId = String(data.player?.id || data.playerId || '');
+      const votedPlayerName = data.player?.username || 'unknown';
+      
+      console.log(`[TRACK_SYNC] Player ${votedPlayerName} (ID: ${votedPlayerId}) voted`);
+      
+      if (!votedPlayerId) {
+        console.warn('[TRACK_SYNC] Missing player ID in vote data');
+        return;
+      }
+      
+      // Track who has voted
+      setPendingVotes(prev => {
+        const newPendingVotes = {
+          ...prev,
+          [votedPlayerId]: true
+        };
+        
+        // Check if this completes all votes
+        const votedCount = Object.keys(newPendingVotes).length;
+        const totalPlayers = players.length;
+        
+        console.log(`[TRACK_SYNC] Vote progress: ${votedCount}/${totalPlayers} players have voted`);
+        
+        // If all players have voted or the server indicates voting is complete
+        if (data.allVotesSubmitted || votedCount >= totalPlayers) {
+          console.log('[TRACK_SYNC] All votes submitted, ready for results');
+          // Set allVotesCast after a short delay to ensure we're in the correct component state
+          setTimeout(() => {
+            setAllVotesCast(true);
+          }, 100);
+        }
+        
+        return newPendingVotes;
+      });
+    });
+
+    // Handle vote results - critical for round progression
+    const voteResultCleanup = on(EVENTS.VOTE_RESULT, (data) => {
+      if (data.gameId !== gameId) return;
+      
+      console.log('[TRACK_SYNC] Vote result received:', data);
+      
+      // Reset voting tracking state for the next round
+      setPendingVotes({});
+      setAllVotesCast(false);
+      
+      // Update scores and assignments with better handling
+      if (data.scores) {
+        // Create a mapping of player IDs to usernames for more reliable score tracking
+        const playerIdToUsername = {};
+        players.forEach(player => {
+          playerIdToUsername[player.id] = player.username;
+        });
+        
+        // Initialize new scores object using usernames as keys
+        const updatedPoints = {};
+        
+        // Process the scores object from the server
+        Object.entries(data.scores).forEach(([playerId, score]) => {
+          // Try to find the player in several ways
+          let playerUsername = playerIdToUsername[playerId]; // Direct ID match
+          
+          if (!playerUsername) {
+            // Try to find the player by ID in players array
+            const player = players.find(p => 
+              String(p.id) === String(playerId) || // Try string comparison
+              p.id === Number(playerId) || // Try number conversion
+              p.username === playerId // Username might be in ID field
+            );
+            
+            if (player) {
+              playerUsername = player.username;
+            } else {
+              console.warn(`[TRACK_SYNC] Could not find player for ID: ${playerId}`);
+              playerUsername = playerId; // Use ID as fallback
+            }
+          }
+          
+          // Update the score using username as key
+          updatedPoints[playerUsername] = score;
+        });
+        
+        console.log('[TRACK_SYNC] Updated player points:', updatedPoints);
+        setPlayerPoints(updatedPoints);
+      }
+      
+      // Update track assignments
+      if (data.votes) {
+        setTrackAssignments(data.votes);
+      }
+      
+      // Now show the vote result
+      setShowVoteResult(true);
+      
+      // Check if this is the last round
+      const isLastRound = data.isLastRound || (currentRound >= ROUNDS_TOTAL);
+      
+      // After a delay, transition to the leaderboard stage
+      setTimeout(() => {
+        console.log('[TRACK_SYNC] Transitioning to leaderboard after vote results');
+        setGameStage("leaderboard");
+        
+        // If this is the last round, transition to results after leaderboard
+        if (isLastRound) {
+          console.log('[TRACK_SYNC] This was the final round, preparing for game end');
+        }
+      }, 2500);
+    });
+    
+    // Handle force song sync event (emergency sync)
+    const forceSyncCleanup = on(EVENTS.FORCE_SONG_SYNC, (data) => {
+      if (data.gameId !== gameId) return;
+      
+      const traceId = data.roundTraceId || data.song?.roundTraceId;
+      const now = Date.now();
+      
+      // Add moderate throttling - reduce from 3 seconds to 1 second
+      // This allows faster synchronization while still avoiding spam
+      const SYNC_THROTTLE_MS = 1000; // Reduced from 3000ms to 1000ms
+      
+      if (now - lastSyncTimestamp.current < SYNC_THROTTLE_MS) {
+        console.log('[TRACK_SYNC] Ignoring force sync due to throttling - too soon since last sync');
+        return;
+      }
+      
+      // If we already processed this exact trace ID recently, ignore it
+      if (lastSyncTraceIds.current.includes(traceId)) {
+        console.log(`[TRACK_SYNC] Already processed sync with trace ID ${traceId}, ignoring duplicate`);
+        return;
+      }
+      
+      // Skip if we're already playing this exact song title and it has the same trace ID
+      if (currentSong && 
+          data.song && 
+          currentSong.songTitle === data.song.songTitle &&
+          currentSong.roundTraceId === traceId) {
+        console.log('[TRACK_SYNC] Already playing this song with matching trace ID, ignoring force sync');
+        return;
+      }
+      
+      console.log('[TRACK_SYNC] Force sync received for round', data.roundNumber, 'song:', data.song?.songTitle);
+      
+      // Update the timestamp of our last processed sync
+      lastSyncTimestamp.current = now;
+      
+      // Track this trace ID to avoid processing duplicates
+      lastSyncTraceIds.current.push(traceId);
+      // Keep only the most recent trace IDs 
+      if (lastSyncTraceIds.current.length > MAX_SYNC_HISTORY) {
+        lastSyncTraceIds.current.shift();
+      }
+      
+      // First, validate that we have song data
+      if (!data.song) {
+        console.error('[TRACK_SYNC] Received force sync without song data');
+        return;
+      }
+      
+      // Update the current round
+      setCurrentRound(data.roundNumber);
+      
+      // Normalize song data with complete fields
+      const syncSong = {
+        ...data.song,
+        songTitle: data.song.songTitle || 'Unknown Song',
+        songArtists: data.song.songArtists || ['Unknown Artist'],
+        albumName: data.song.albumName || 'Unknown Album',
+        imageUrl: data.song.imageUrl || 'https://via.placeholder.com/300',
+        roundTraceId: traceId,
+        assignedToPlayer: data.song.assignedToPlayer || data.assignedPlayer
+      };
+      
+      // Update all relevant state AT ONCE to avoid cascading updates
+      // This helps prevent the maximum update depth exceeded error
+      console.log(`[TRACK_SYNC] Applying force sync for "${syncSong.songTitle}"`);
+      
+      // Update state directly rather than calling loadAndPlaySong to avoid loops
+      setCurrentSong(syncSong);
+      setRoundSongs(prev => ({
+        ...prev,
+        [data.roundNumber]: syncSong
+      }));
+      
+      // Make sure we can vote
+      setVoteProgress(100);
+      setCanVote(true);
+      
+      // Now load and play the audio for the sync song
+      if (isHost) {
+        if (!syncSong.previewUrl) {
+          console.log('[TRACK_SYNC] Force sync song has no preview URL, skipping audio');
+          setIsLoadingAudio(false);
+          setIsPlaying(false);
+        } else {
+          // Load audio separately rather than triggering another full loadAndPlaySong
+          console.log('[TRACK_SYNC] Loading audio for force synced song');
+          setIsLoadingAudio(true);
+          
+          // Clean up existing sound
+          if (sound) {
+            sound.stopAsync().catch(e => console.error("Error stopping sound:", e));
+            sound.unloadAsync().catch(e => console.error("Error unloading sound:", e));
+          }
+          
+          // Load the audio directly
+          Audio.Sound.createAsync(
+            { uri: syncSong.previewUrl },
+            { shouldPlay: true },
+            onPlaybackStatusUpdate
+          ).then(({ sound: newSound }) => {
+            setSound(newSound);
+            setIsPlaying(true);
+            setIsLoadingAudio(false);
+          }).catch(error => {
+            console.error('[TRACK_SYNC] Error loading audio for synced song:', error);
+            setIsLoadingAudio(false);
+          });
+        }
+      } else {
+        // Non-host only needs UI updates
+        setIsPlaying(false);
+        setPlaybackPosition(0);
+        setPlaybackDuration(syncSong.duration || 30000);
+        setIsLoadingAudio(false);
+      }
+      
+      // After applying sync, notify server that we're now playing this song
+      // This helps the server confirm that sync was successful
+      if (emit) {
+        setTimeout(() => {
+          try {
+            emit('song_playing', {
+              gameId,
+              roundNumber: data.roundNumber,
+              songTitle: syncSong.songTitle,
+              songArtists: syncSong.songArtists,
+              albumName: syncSong.albumName,
+              imageUrl: syncSong.imageUrl,
+              roundTraceId: traceId,
+              previewUrl: syncSong.previewUrl,
+              assignedToPlayer: syncSong.assignedToPlayer
+            });
+            console.log('[TRACK_SYNC] Confirmed synchronized song to server');
+          } catch (err) {
+            console.error('[TRACK_SYNC] Error confirming sync to server:', err);
+          }
+        }, 500); // Small delay to avoid immediate re-sync
+      }
+    });
+    
+    // Add new handlers for the improved sync events
+    
+    // Handle song receipts from clients
+    const songReceivedCleanup = on(EVENTS.SONG_RECEIVED, (data) => {
+      if (data.gameId !== gameId) return;
+      
+      console.log(`[TRACK_SYNC] Client ${data.deviceRole} received song for round ${data.roundNumber}`);
+    });
+    
+    // Handle host playback status updates
+    const hostPlaybackCleanup = on(EVENTS.HOST_PLAYBACK_STATUS, (data) => {
+      if (data.gameId !== gameId || isHost) return; // Only non-host devices listen to this
+      
+      if (!data.canPlayAudio) {
+        console.log(`[TRACK_SYNC] Host cannot play audio for song: ${data.songTitle}`);
+      }
+    });
+    
+    // Handle sync status update from server
+    const syncStatusCleanup = on(EVENTS.SYNC_STATUS, (data) => {
+      if (data.gameId !== gameId) return;
+      
+      console.log(`[TRACK_SYNC] Game sync status: ${data.status}, round ${data.roundNumber}`);
+      
+      // If server reports any sync issues, update UI
+      if (data.status === 'out_of_sync') {
+        console.log(`[TRACK_SYNC] Game is out of sync! ${data.syncedClients}/${data.totalClients} clients in sync`);
+      }
+    });
+    
+    // Legacy event handler - some servers might still use this
+    const songPlayingCleanup = on(EVENTS.SONG_PLAYING, (data) => {
+      if (data.gameId !== gameId) return;
+      
+      console.log(`[TRACK_SYNC] Client is playing song: ${data.songTitle}`);
+      
+      // Add more detailed debug logging for song data synchronization
+      console.log(`[TRACK_SYNC] Song data received from other client:`, {
+        title: data.songTitle || 'Unknown',
+        artists: data.songArtists || 'Unknown',
+        album: data.albumName || 'Unknown',
+        hasImage: !!data.imageUrl,
+        imageUrl: data.imageUrl ? data.imageUrl.substring(0, 30) + '...' : 'None',
+        roundTraceId: data.roundTraceId || 'None'
+      });
+      
+      // If this is another client's data, check if our song data matches
+      if (currentSong && data.songTitle !== currentSong.songTitle) {
+        console.log(`[TRACK_SYNC] Song mismatch detected!`);
+        console.log(`[TRACK_SYNC] Our song: "${currentSong.songTitle}", Their song: "${data.songTitle}"`);
+      } else if (currentSong) {
+        console.log(`[TRACK_SYNC] Songs are synchronized between clients`);
+      }
+    });
+    
+    // Cleanup all event listeners on unmount
+    return () => {
+      playlistSharedCleanup();
+      roundStartedCleanup();
+      voteResultCleanup();
+      playerVotedCleanup();
+      forceSyncCleanup();
+      songReceivedCleanup();
+      hostPlaybackCleanup();
+      syncStatusCleanup();
+      songPlayingCleanup();
+    };
+  }, [isMultiplayer, isConnected, gameId, isHost]);
 
   const handleReturnToLobby = () => {
     // Pass the original game parameters back to the lobby
@@ -1049,6 +1467,141 @@ export default function GamePlay() {
       },
     });
   };
+
+  // Add state for round history tracking
+  const [roundHistory, setRoundHistory] = useState([]);
+
+  // Add a loading timeout to prevent getting stuck on loading screen
+  useEffect(() => {
+    if (isLoading) {
+      console.log("Loading timeout started - will auto-advance in 5 seconds if still loading");
+      const loadingTimeout = setTimeout(() => {
+        if (isLoading) {
+          console.log("Loading timeout triggered - auto-advancing past loading screen");
+          setIsLoading(false);
+          setGameStage("playing");
+          
+          // Check if we already have received songs from the server
+          if (allSongs.length === 0 && consolidatedPlaylist.length > 0) {
+            // Extract songs from the consolidated playlist
+            const extractedSongs = consolidatedPlaylist.map(item => ({
+              ...item.track,
+              assignedToPlayer: {
+                username: item.owner.username,
+                id: item.owner.id
+              }
+            }));
+            setAllSongs(extractedSongs);
+          }
+          
+          // If we still have no songs, use mock songs
+          if (allSongs.length === 0) {
+            console.log("No songs loaded, using mock songs");
+            setAllSongs(mockSongs);
+          }
+          
+          // Check if we already have a current song
+          if (!currentSong && allSongs.length > 0) {
+            console.log("Setting a current song since none is loaded");
+            setCurrentSong(allSongs[0]);
+          }
+        }
+      }, 5000); // Reduced from 10000 to 5000 (5 seconds)
+      
+      return () => clearTimeout(loadingTimeout);
+    }
+  }, [isLoading, allSongs, consolidatedPlaylist, mockSongs]);
+
+  // Add an additional timeout for the host specifically
+  useEffect(() => {
+    if (isHost && isLoading) {
+      console.log("[HOST] Special host loading check - will verify in 3 seconds");
+      const hostLoadingTimeout = setTimeout(() => {
+        console.log("[HOST] Checking if host is still loading...");
+        if (isLoading) {
+          console.log("[HOST] Host device still loading - attempting to force progress");
+          
+          // Force loading to complete
+          setIsLoading(false);
+          setGameStage("playing");
+          
+          // If we have no allSongs but have consolidatedPlaylist, use it
+          if (allSongs.length === 0 && consolidatedPlaylist.length > 0) {
+            console.log("[HOST] Using consolidated playlist for songs");
+            const extractedSongs = consolidatedPlaylist.map(item => ({
+              ...item.track,
+              assignedToPlayer: {
+                username: item.owner.username,
+                id: item.owner.id
+              }
+            }));
+            setAllSongs(extractedSongs);
+          } else if (allSongs.length === 0) {
+            console.log("[HOST] No songs found, using mock songs for host");
+            setAllSongs(mockSongs);
+          }
+          
+          // Make sure we have a current song
+          if (!currentSong && allSongs.length > 0) {
+            const firstSong = allSongs[0];
+            console.log(`[HOST] Setting first song: ${firstSong.songTitle}`);
+            setCurrentSong(firstSong);
+            loadAndPlaySong(firstSong);
+          }
+        }
+      }, 3000); // Check after 3 seconds
+      
+      return () => clearTimeout(hostLoadingTimeout);
+    }
+  }, [isHost, isLoading, allSongs, consolidatedPlaylist, mockSongs, currentSong]);
+
+  // At the top of the component where other refs are defined, add:
+  const loadedSongRef = useRef(null);
+
+  // Auto-play song when game becomes active and we have a current song
+  useEffect(() => {
+    if (gameStage === "playing" && currentSong && !isPlaying && !isLoadingAudio) {
+      // Track if we've already tried to load this exact song to prevent loops
+      const songKey = `${currentSong.songTitle}-${currentSong.roundTraceId || ''}`;
+      if (loadedSongRef.current === songKey) {
+        console.log("[TRACK_SYNC] Already attempted to load this song, preventing loop");
+        return;
+      }
+      
+      console.log("[TRACK_SYNC] Auto-playing current song:", currentSong.songTitle);
+      loadedSongRef.current = songKey;
+      loadAndPlaySong(currentSong);
+    }
+  }, [gameStage, currentSong, isPlaying, isLoadingAudio]);
+
+  // Add a new handler for timeout from leaderboard
+  const handleLeaderboardTimeout = () => {
+    console.log("Leaderboard timeout, advancing to next round or results");
+    // This should work similar to handleNextRound but always progress to the next song
+    setGameStage("playing");
+    
+    if (currentRound >= ROUNDS_TOTAL) {
+      setGameStage("results");
+      return;
+    }
+    
+    if (isMultiplayer && isHost) {
+      sendNextRound(gameId);
+    } else if (!isMultiplayer) {
+      // For single player, just select the next song
+      selectSongForRound(currentRound + 1);
+    }
+  };
+
+  // Add debugging for player data structure
+  useEffect(() => {
+    if (isMultiplayer && players.length > 0) {
+      console.log('[TRACK_SYNC] Player structure debug:');
+      console.log('First player object:', JSON.stringify(players[0]));
+      console.log('Player IDs:', players.map(p => `${p.id} (${typeof p.id})`).join(', '));
+      console.log('Player usernames:', players.map(p => p.username).join(', '));
+    }
+  }, [isMultiplayer, players]);
 
   if (isLoading) {
     return (
@@ -1293,12 +1846,25 @@ export default function GamePlay() {
           setShowVoteResult={setShowVoteResult}
           setPlayerSongs={setPlayerSongs}
           setPlayerPoints={setPlayerPoints}
-          nextRound={nextRound}
+          nextRound={handleNextRound}
           getProfilePhotoForUser={getProfilePhotoForUser}
           isMultiplayer={isMultiplayer}
           gameId={gameId}
           playerPoints={playerPoints}
-          //castVote={castVote}
+          castVote={castVote}
+          allVotesCast={allVotesCast}
+        />
+      )}
+      
+      {gameStage === "leaderboard" && (
+        <LeaderboardScreen
+          currentSong={currentSong}
+          assignedUser={currentSong?.assignedToPlayer}
+          currentRound={currentRound}
+          players={players}
+          playerPoints={playerPoints}
+          getProfilePhotoForUser={getProfilePhotoForUser}
+          onTimeout={handleLeaderboardTimeout}
         />
       )}
 
@@ -1311,6 +1877,8 @@ export default function GamePlay() {
           handleReturnToLobby={handleReturnToLobby}
           handlePlayAgain={handlePlayAgain}
           currentRound={currentRound}
+          isMultiplayer={isMultiplayer}
+          trackAssignments={trackAssignments}
           styles={styles}
         />
       )}
@@ -1934,5 +2502,35 @@ const styles = StyleSheet.create({
   resultsScrollContent: {
     flexGrow: 1,
     paddingBottom: 30,
+  },
+  debugPanelContainer: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "#232323",
+    padding: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#444",
+  },
+  debugPanelHeader: {
+    backgroundColor: "#333",
+    padding: 10,
+    borderRadius: 5,
+    marginBottom: 10,
+  },
+  debugPanelTitle: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "bold",
+    textAlign: "center",
+  },
+  debugPanelContent: {
+    padding: 10,
+  },
+  debugText: {
+    color: "white",
+    fontSize: 16,
+    marginBottom: 10,
   },
 });
