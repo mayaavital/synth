@@ -88,30 +88,96 @@ export const findDeezerTrackFromSpotify = async (spotifyTrack) => {
     return null;
   }
   
-  // Create a search query using song title and first artist
+  // Extract artist name from track
   const artistName = spotifyTrack.songArtists && spotifyTrack.songArtists.length > 0 
     ? spotifyTrack.songArtists[0] 
     : '';
   
-  const query = `${spotifyTrack.songTitle} ${artistName}`.trim();
-  console.log(`Searching Deezer for Spotify track: "${query}"`);
+  // Try multiple search strategies to maximize chances of finding a match
+  const searchStrategies = [
+    // Strategy 1: Song title + artist (standard)
+    `${spotifyTrack.songTitle} ${artistName}`,
+    
+    // Strategy 2: Song title only (for when artist names might differ)
+    `${spotifyTrack.songTitle}`,
+    
+    // Strategy 3: Use album name if available (helpful for compilations)
+    ...(spotifyTrack.albumName ? [`${spotifyTrack.songTitle} ${spotifyTrack.albumName}`] : []),
+    
+    // Strategy 4: Song title in quotes (exact match)
+    `"${spotifyTrack.songTitle}"`,
+    
+    // Strategy 5: Artist only (as last resort, might find other tracks by same artist)
+    ...(artistName ? [`artist:"${artistName}"`] : [])
+  ];
   
-  try {
-    const searchResults = await searchDeezerTracks(query, 5);
-    
-    if (searchResults && searchResults.length > 0) {
-      // First match is usually most relevant with Deezer search
-      const bestMatch = searchResults[0];
-      console.log(`Found matching Deezer track: "${bestMatch.title}" by ${bestMatch.artist.name}`);
-      return formatDeezerTrack(bestMatch);
+  // Try each search strategy in sequence until we find a match
+  for (const query of searchStrategies) {
+    try {
+      console.log(`Searching Deezer with strategy: "${query}"`);
+      const searchResults = await searchDeezerTracks(query, 5);
+      
+      if (searchResults && searchResults.length > 0) {
+        // Find the best match by comparing title similarity
+        const bestMatch = findBestMatch(searchResults, spotifyTrack.songTitle);
+        
+        if (bestMatch) {
+          console.log(`Found matching Deezer track: "${bestMatch.title}" by ${bestMatch.artist.name}`);
+          console.log(`Preview URL available: ${bestMatch.preview ? 'YES' : 'NO'}`);
+          return formatDeezerTrack(bestMatch);
+        }
+      }
+    } catch (error) {
+      console.error(`Error with search strategy "${query}":`, error);
+      // Continue to next strategy
     }
-    
-    return null;
-  } catch (error) {
-    console.error('Error finding Deezer track from Spotify:', error);
-    return null;
   }
+  
+  console.log(`No Deezer match found for track: "${spotifyTrack.songTitle}"`);
+  return null;
 };
+
+/**
+ * Find the best matching track from search results based on title similarity
+ * @param {Array} searchResults - Search results from Deezer
+ * @param {string} targetTitle - The title to match against
+ * @returns {Object|null} - Best matching track or null
+ */
+function findBestMatch(searchResults, targetTitle) {
+  if (!searchResults || searchResults.length === 0) return null;
+  
+  // If only one result, use it
+  if (searchResults.length === 1) return searchResults[0];
+  
+  // First, search for exact title match (case insensitive)
+  const exactMatch = searchResults.find(
+    track => track.title.toLowerCase() === targetTitle.toLowerCase()
+  );
+  
+  if (exactMatch) return exactMatch;
+  
+  // Next, find tracks that include the target title
+  const partialMatches = searchResults.filter(
+    track => track.title.toLowerCase().includes(targetTitle.toLowerCase()) ||
+             targetTitle.toLowerCase().includes(track.title.toLowerCase())
+  );
+  
+  if (partialMatches.length > 0) {
+    // If we have partial matches, use the first one with a preview URL
+    const matchWithPreview = partialMatches.find(track => !!track.preview);
+    if (matchWithPreview) return matchWithPreview;
+    
+    // Otherwise use the first partial match
+    return partialMatches[0];
+  }
+  
+  // If no good matches, check if any result has a preview URL
+  const anyWithPreview = searchResults.find(track => !!track.preview);
+  if (anyWithPreview) return anyWithPreview;
+  
+  // Fall back to first result
+  return searchResults[0];
+}
 
 /**
  * Update Spotify track data with Deezer preview URL
@@ -124,19 +190,19 @@ export const enrichTracksWithDeezerPreviews = async (spotifyTracks) => {
   }
   
   console.log(`Enriching ${spotifyTracks.length} Spotify tracks with Deezer preview URLs`);
-  const enrichedTracks = [];
   
   // Process tracks in parallel with Promise.all
-  const enrichPromises = spotifyTracks.map(async (track) => {
-    // If track already has a valid preview URL, keep it as is
-    if (track.previewUrl) {
-      return track;
-    }
+  const enrichPromises = spotifyTracks.map(async (track, index) => {
+    // Always attempt to find a Deezer preview URL, even if one already exists
+    // This ensures we have the best possible preview URLs
+    console.log(`Enriching track ${index + 1}/${spotifyTracks.length}: "${track.songTitle}"`);
     
     try {
       const deezerTrack = await findDeezerTrackFromSpotify(track);
       
       if (deezerTrack && deezerTrack.previewUrl) {
+        console.log(`Found Deezer preview URL for "${track.songTitle}"`);
+        
         // Return a new object with all Spotify metadata but Deezer's preview URL
         return {
           ...track,
@@ -147,6 +213,8 @@ export const enrichTracksWithDeezerPreviews = async (spotifyTracks) => {
             externalUrl: deezerTrack.externalUrl
           }
         };
+      } else {
+        console.log(`No Deezer preview URL found for "${track.songTitle}", keeping original`);
       }
       
       return track; // Return original track if no Deezer match

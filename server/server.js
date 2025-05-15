@@ -396,7 +396,77 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Helper function to prepare tracks for the game
+  // Handle client sharing tracks
+  socket.on('share_tracks', (data) => {
+    const { gameId, tracks } = data;
+    const game = activeGames[gameId];
+
+    if (!game) {
+      console.error(`[TRACK_SYNC] Game ${gameId} not found for share_tracks request`);
+      socket.emit('error', { message: 'Game not found' });
+      return;
+    }
+
+    if (!game.playerTracks) {
+      game.playerTracks = {};
+    }
+
+    // Validate and normalize tracks
+    const validTracks = Array.isArray(tracks) ? tracks.filter(track => 
+      track && 
+      track.songTitle && 
+      (track.songArtists || track.artists) // Accept either format for backward compatibility
+    ) : [];
+
+    // Find the player in the game
+    const player = game.players.find(p => p.socketId === socket.id);
+    if (!player) {
+      console.error(`[TRACK_SYNC] Player with socket ${socket.id} not found in game ${gameId}`);
+      socket.emit('error', { message: 'Player not found in game' });
+      return;
+    }
+
+    console.log(`[TRACK_SYNC] Player ${player.username} (${socket.id}) sharing ${validTracks.length} tracks for game ${gameId}`);
+
+    if (validTracks.length > 0) {
+      // Create a sample track for logging
+      const sampleTrack = validTracks[0];
+      console.log(`[TRACK_SYNC] Sample track from ${player.username}: "${sampleTrack.songTitle}" by ${Array.isArray(sampleTrack.songArtists) ? sampleTrack.songArtists.join(', ') : (sampleTrack.artists || 'Unknown')}`);
+      
+      // Check if preview URLs are available for logging purposes
+      const hasPreviewUrl = sampleTrack.previewUrl && typeof sampleTrack.previewUrl === 'string';
+      console.log(`[TRACK_SYNC] Preview URL available: ${hasPreviewUrl ? 'YES' : 'NO'}`);
+      if (hasPreviewUrl) {
+        console.log(`[TRACK_SYNC] Preview URL source: ${sampleTrack.previewUrl.includes('deezer') ? 'Deezer' : 'Spotify'}`);
+      }
+      
+      // Count tracks with preview URLs
+      const tracksWithPreviewUrls = validTracks.filter(track => track.previewUrl && typeof track.previewUrl === 'string');
+      console.log(`[TRACK_SYNC] ${player.username} provided ${tracksWithPreviewUrls.length}/${validTracks.length} tracks with preview URLs`);
+      
+      if (tracksWithPreviewUrls.length === 0) {
+        console.log(`[TRACK_SYNC] WARNING: ${player.username} provided NO tracks with previewUrls!`);
+      }
+      
+      // Store tracks with the player ID
+      game.playerTracks[player.id] = validTracks;
+      
+      // Check if all players have shared tracks
+      const playersWithTracks = Object.keys(game.playerTracks).length;
+      const totalPlayers = game.players.length;
+      
+      console.log(`[TRACK_SYNC] ${playersWithTracks}/${totalPlayers} players have shared tracks`);
+      
+      // If all players have shared tracks, we can prepare the game
+      if (playersWithTracks === totalPlayers) {
+        prepareGameTracks(gameId);
+      }
+    } else {
+      console.log(`[TRACK_SYNC] WARNING: Player ${player.username} shared no valid tracks`);
+      socket.emit('error', { message: 'No valid tracks provided' });
+    }
+  });
+
   function prepareGameTracks(gameId) {
     const game = activeGames[gameId];
     
@@ -416,165 +486,126 @@ io.on('connection', (socket) => {
     
     // Check if we have player tracks
     if (!game.playerTracks || Object.keys(game.playerTracks).length === 0) {
-      console.warn(`[TRACK_SYNC] WARNING: Game ${gameId} has no player tracks, using fallback tracks`);
+      console.warn(`[TRACK_SYNC] WARNING: Game ${gameId} has no player tracks, using fallback tracks only`);
       addMockTracksToGame(game);
-      return game.consolidatedPlaylist;
+      sharePlaylistWithClients(gameId);
+      return;
     }
     
     console.log(`[TRACK_SYNC] Processing tracks from ${Object.keys(game.playerTracks).length} players`);
     
-    // Get all available tracks with consistent processing
-    let allTracks = [];
-    let trackOwnership = {};
-    let tracksWithPreviewURLs = [];
-    let hostTracks = [];  // Tracks from the host player
+    // Process each player's tracks 
+    let validTracksCount = 0;
+    let tracksWithPreviewUrls = 0;
+    let tracksFromHostPlayer = 0;
     
-    // First pass - validate and collect tracks from all players
-    Object.keys(game.playerTracks).forEach(playerId => {
-      const playerTracks = game.playerTracks[playerId];
-      const playerInfo = game.players.find(p => p.id === playerId);
-      const isHostPlayer = playerId === game.host;
-      
-      if (!playerTracks || !Array.isArray(playerTracks) || playerTracks.length === 0) {
-        console.warn(`[TRACK_SYNC] Player ${playerInfo?.username || playerId} has no valid tracks`);
+    Object.entries(game.playerTracks).forEach(([playerId, playerTracks]) => {
+      // Find the player object
+      const player = game.players.find(p => p.id == playerId);
+      if (!player) {
+        console.warn(`[TRACK_SYNC] WARNING: Player ID ${playerId} not found in game players`);
         return;
       }
       
-      // Process both tracks with and without preview URLs
-      console.log(`[TRACK_SYNC] Processing ${playerTracks.length} tracks from ${playerInfo?.username || playerId}`);
+      console.log(`[TRACK_SYNC] Processing ${playerTracks.length} tracks from ${player.username}`);
       
-      // First collect all tracks regardless of preview URL
-      let playerValidTracks = [];
-      let playerTracksWithPreview = [];
-      
-      playerTracks.forEach((track, index) => {
-        // Skip invalid tracks
-        if (!track) {
-          console.log(`[TRACK_SYNC] Skipping invalid track #${index + 1} from ${playerInfo?.username || playerId}`);
+      // Process each track
+      playerTracks.forEach(track => {
+        // Check for required fields and preview URL
+        if (!track.songTitle) {
+          console.log(`[TRACK_SYNC] Track missing title, skipping`);
           return;
         }
-
-        // Generate a unique track ID if not provided
-        const trackId = track.trackId || track.uri || `track_${playerId}_${index}`;
         
-        // Create a standardized track object
-        const standardizedTrack = {
-          songTitle: track.songTitle?.trim() || 'Unknown Song',
-          songArtists: Array.isArray(track.songArtists) ? 
-            track.songArtists.map(a => a?.name || a).filter(Boolean) : 
-            [track.songArtists?.toString() || 'Unknown Artist'],
-          albumName: track.albumName?.trim() || 'Unknown Album',
-          imageUrl: track.imageUrl || 'https://via.placeholder.com/300',
-          previewUrl: track.previewUrl, // Keep this null/undefined if not available
+        // Check for preview URL
+        const hasPreviewUrl = track.previewUrl && typeof track.previewUrl === 'string';
+        console.log(`[TRACK_SYNC] Track "${track.songTitle}" has ${hasPreviewUrl ? 'VALID' : 'NO'} preview URL, but keeping it anyway`);
+        
+        // Normalize track format
+        const normalizedTrack = {
+          songTitle: track.songTitle,
+          songArtists: track.songArtists || (Array.isArray(track.artists) ? track.artists : [track.artists || 'Unknown']),
+          albumName: track.albumName || track.album || 'Unknown Album',
+          imageUrl: track.imageUrl || track.image || null,
+          previewUrl: track.previewUrl || null,
+          duration: track.duration || 30000,
+          externalUrl: track.externalUrl || null,
           uri: track.uri || null,
-          trackId: trackId,
-          duration: track.duration || 0,
-          ownerId: playerId,
-          owner: {
-            id: playerId,
-            username: playerInfo?.username || 'Unknown Player'
-          }
+          isRealTrack: true  // Flag to distinguish from mock tracks
         };
         
-        playerValidTracks.push(standardizedTrack);
+        // Add to consolidated playlist with player info
+        game.consolidatedPlaylist.push({
+          track: normalizedTrack,
+          owner: {
+            id: player.id,
+            username: player.username
+          }
+        });
         
-        // Also track tracks with preview URLs separately
-        if (track.previewUrl) {
-          playerTracksWithPreview.push(standardizedTrack);
-          console.log(`[TRACK_SYNC] Track "${standardizedTrack.songTitle}" has valid preview URL`);
-        } else {
-          console.log(`[TRACK_SYNC] Track "${standardizedTrack.songTitle}" has NO preview URL`);
+        validTracksCount++;
+        
+        if (hasPreviewUrl) {
+          tracksWithPreviewUrls++;
+        }
+        
+        if (player.id === game.host) {
+          tracksFromHostPlayer++;
         }
       });
-      
-      // Store all valid tracks regardless of preview URL
-      allTracks.push(...playerValidTracks);
-      
-      // Track ownership for all tracks
-      playerValidTracks.forEach(track => {
-        trackOwnership[track.trackId] = {
-          id: playerId,
-          username: playerInfo?.username || 'Unknown Player'
-        };
-      });
-      
-      // Track tracks with preview URLs separately
-      tracksWithPreviewURLs.push(...playerTracksWithPreview);
-      
-      // Keep host tracks separate to prioritize them
-      if (isHostPlayer) {
-        hostTracks.push(...playerValidTracks);
-        console.log(`[TRACK_SYNC] Collected ${playerValidTracks.length} tracks from host, ${playerTracksWithPreview.length} with preview URLs`);
-      }
     });
     
-    console.log(`[TRACK_SYNC] Collected ${allTracks.length} valid tracks total`);
-    console.log(`[TRACK_SYNC] ${tracksWithPreviewURLs.length} tracks have preview URLs`);
-    console.log(`[TRACK_SYNC] ${hostTracks.length} tracks from host player`);
+    console.log(`[TRACK_SYNC] Collected ${validTracksCount} valid tracks total`);
+    console.log(`[TRACK_SYNC] ${tracksWithPreviewUrls} tracks have preview URLs`);
+    console.log(`[TRACK_SYNC] ${tracksFromHostPlayer} tracks from host player`);
+
+    // Shuffle the tracks to ensure variety between rounds
+    game.consolidatedPlaylist = shuffleArray([...game.consolidatedPlaylist]);
+    console.log(`[TRACK_SYNC] Shuffling ${game.consolidatedPlaylist.length} tracks for rounds`);
     
-    // Track selection logic:
-    // 1. Prefer tracks with preview URLs if available
-    // 2. If host has tracks, prioritize those
-    let selectedTracks = [];
-    
-    if (tracksWithPreviewURLs.length > 0) {
-      // Prioritize host tracks with preview URLs
-      const hostTracksWithPreview = hostTracks.filter(track => track.previewUrl);
-      
-      if (hostTracksWithPreview.length > 0) {
-        console.log(`[TRACK_SYNC] Using ${hostTracksWithPreview.length} host tracks with preview URLs`);
-        selectedTracks = [...hostTracksWithPreview];
-      } else {
-        console.log(`[TRACK_SYNC] Using ${tracksWithPreviewURLs.length} tracks with preview URLs from all players`);
-        selectedTracks = [...tracksWithPreviewURLs];
-      }
-    } else {
-      // If no tracks have preview URLs, use mock tracks
-      console.error(`[TRACK_SYNC] No tracks have preview URLs, using fallback tracks`);
+    // Check if we need to add mock tracks
+    if (tracksWithPreviewUrls === 0) {
+      console.log(`[TRACK_SYNC] No tracks have preview URLs, using fallback tracks`);
       addMockTracksToGame(game);
-      return game.consolidatedPlaylist;
+    } else if (game.consolidatedPlaylist.length < game.players.length * 2) {
+      // If we don't have enough tracks for each player to have at least 2
+      console.log(`[TRACK_SYNC] Not enough tracks (${game.consolidatedPlaylist.length}) for ${game.players.length} players, adding some mock tracks`);
+      
+      // Add just enough mock tracks to supplement
+      const tracksToAdd = (game.players.length * 2) - game.consolidatedPlaylist.length;
+      addMockTracksToGame(game, tracksToAdd);
     }
     
-    // Shuffle the tracks for round assignments
-    console.log(`[TRACK_SYNC] Shuffling ${selectedTracks.length} tracks for rounds`);
-    shuffleArray(selectedTracks);
+    // Finalize the number of rounds based on available tracks
+    const availableTracks = game.consolidatedPlaylist.length;
+    const recommendedRounds = Math.min(availableTracks, 10); // Cap at 10 rounds
     
-    // If we have fewer tracks than maxRounds, adjust maxRounds
-    if (selectedTracks.length < game.maxRounds) {
-      console.warn(`[TRACK_SYNC] Not enough tracks (${selectedTracks.length}) for requested rounds (${game.maxRounds}). Adjusting max rounds.`);
-      game.maxRounds = Math.max(selectedTracks.length, 1);
+    // Ensure at least 3 rounds if possible
+    if (availableTracks >= 3) {
+      game.maxRounds = recommendedRounds;
+    } else {
+      game.maxRounds = availableTracks;
     }
     
-    // Create the consolidated playlist
-    game.consolidatedPlaylist = selectedTracks.map(track => ({
-      track: {
-        songTitle: track.songTitle,
-        songArtists: Array.isArray(track.songArtists) ? [...track.songArtists] : [track.songArtists],
-        albumName: track.albumName,
-        imageUrl: track.imageUrl,
-        previewUrl: track.previewUrl,
-        uri: track.uri,
-        trackId: track.trackId,
-        duration: track.duration || 30000
-      },
-      owner: trackOwnership[track.trackId] || {
-        id: track.ownerId,
-        username: track.owner?.username || 'Unknown Player'
-      }
-    }));
+    console.log(`[TRACK_SYNC] Set max rounds to ${game.maxRounds} based on available tracks`);
     
-    // Log the finalized playlist for debugging
+    // Log the final playlist for debugging
     console.log(`[TRACK_SYNC] Final playlist for game ${gameId} (${game.consolidatedPlaylist.length} tracks):`);
     game.consolidatedPlaylist.forEach((item, index) => {
-      console.log(`[TRACK_SYNC]   ${index+1}. "${item.track.songTitle}" by ${Array.isArray(item.track.songArtists) ? item.track.songArtists.join(', ') : item.track.songArtists} (from ${item.owner.username})`);
-      console.log(`[TRACK_SYNC]       Preview URL: ${item.track.previewUrl ? 'Available' : 'Missing'}`);
+      const trackType = item.track.isMockTrack ? '[MOCK]' : '[USER]';
+      console.log(`[TRACK_SYNC]   ${index+1}. ${trackType} "${item.track.songTitle}" by ${
+        Array.isArray(item.track.songArtists) ? 
+          item.track.songArtists.join(', ') : 
+          item.track.songArtists
+      } (from ${item.owner.username})`);
+      console.log(`[TRACK_SYNC]       Preview URL: ${item.track.previewUrl ? item.track.previewUrl.substring(0, 30) + '...' : 'Missing'}`);
     });
     
-    return game.consolidatedPlaylist;
+    // Share the consolidated playlist with clients
+    sharePlaylistWithClients(gameId);
   }
-  
-  // Helper function to add mock/fallback tracks to a game that doesn't have enough
-  function addMockTracksToGame(game) {
+
+  function addMockTracksToGame(game, tracksToAdd = null) {
     const mockTracks = [
       {
         songTitle: "Bohemian Rhapsody",
@@ -583,6 +614,7 @@ io.on('connection', (socket) => {
         imageUrl: "https://i.scdn.co/image/ab67616d0000b2739f39192f4f0fae773d3f8a95",
         previewUrl: "https://p.scdn.co/mp3-preview/1f3bd078c7ad27b427fa210f6efd957fc5eecea0",
         duration: 354000,
+        isMockTrack: true
       },
       {
         songTitle: "Don't Stop Believin'",
@@ -590,7 +622,8 @@ io.on('connection', (socket) => {
         albumName: "Escape",
         imageUrl: "https://i.scdn.co/image/ab67616d0000b273c5653f9038e42efad2f8def2",
         previewUrl: "https://p.scdn.co/mp3-preview/21b9abd3cd2eea634e17a917196fdd5ba2e82670",
-        duration: 250000,
+        duration: 251000,
+        isMockTrack: true
       },
       {
         songTitle: "Billie Jean",
@@ -599,47 +632,126 @@ io.on('connection', (socket) => {
         imageUrl: "https://i.scdn.co/image/ab67616d0000b2734121faee8df82c526cbab2be",
         previewUrl: "https://p.scdn.co/mp3-preview/f504e6b8e037771318656394f532dede4f9bcaea",
         duration: 294000,
+        isMockTrack: true
+      },
+      {
+        songTitle: "Sweet Child O' Mine",
+        songArtists: ["Guns N' Roses"],
+        albumName: "Appetite for Destruction",
+        imageUrl: "https://i.scdn.co/image/ab67616d0000b273e44963b8bb127552ac0090e0",
+        previewUrl: "https://p.scdn.co/mp3-preview/9af2ebe7ff34dbdbcb042fba67b81bcdd6f9dbe3",
+        duration: 356000,
+        isMockTrack: true
+      },
+      {
+        songTitle: "I Want It That Way",
+        songArtists: ["Backstreet Boys"],
+        albumName: "Millennium",
+        imageUrl: "https://i.scdn.co/image/ab67616d0000b27384c52f39de3a4e687424f622",
+        previewUrl: "https://p.scdn.co/mp3-preview/c9a980c0a1e48b84795c2c28ab212a476d5dae43",
+        duration: 213000,
+        isMockTrack: true
       }
     ];
-    
-    // Distribute mock tracks among players
-    if (game.players && game.players.length > 0) {
-      console.log(`[TRACK_SYNC] Creating mock playlist with ${mockTracks.length} tracks for ${game.players.length} players`);
+
+    // If we already have real tracks, check how many mock tracks to add
+    if (tracksToAdd) {
+      console.log(`[TRACK_SYNC] Adding ${tracksToAdd} mock tracks to supplement real tracks`);
       
-      // Clear existing consolidated playlist
-      game.consolidatedPlaylist = [];
+      const availableMockTracks = [...mockTracks].slice(0, tracksToAdd);
+      const players = game.players.slice(); // Create a copy so we can shuffle
+      shuffleArray(players);
       
-      // Assign each mock track to a player
-      mockTracks.forEach((track, index) => {
-        const playerIndex = index % game.players.length;
-        const player = game.players[playerIndex];
-        
-        const trackId = `mock_track_${index}`;
+      // Assign mock tracks to players
+      for (let i = 0; i < availableMockTracks.length; i++) {
+        const playerIndex = i % players.length;
+        const player = players[playerIndex];
         
         game.consolidatedPlaylist.push({
-          track: {
-            songTitle: track.songTitle,
-            songArtists: track.songArtists,
-            albumName: track.albumName,
-            imageUrl: track.imageUrl,
-            previewUrl: track.previewUrl,
-            duration: track.duration,
-            trackId: trackId
-          },
+          track: availableMockTracks[i],
           owner: {
             id: player.id,
             username: player.username
           }
         });
         
-        console.log(`[TRACK_SYNC] Added mock track "${track.songTitle}" assigned to ${player.username}`);
-      });
-      
-      // Set max rounds based on mock track count
-      game.maxRounds = Math.min(game.maxRounds || 3, mockTracks.length);
-      console.log(`[TRACK_SYNC] Set max rounds to ${game.maxRounds} based on available mock tracks`);
+        console.log(`[TRACK_SYNC] Added mock track "${availableMockTracks[i].songTitle}" assigned to ${player.username}`);
+      }
     } else {
-      console.error(`[TRACK_SYNC] Cannot add mock tracks - no players in game`);
+      // If we need only mock tracks, create a full playlist
+      const playerCount = game.players.length;
+      const tracksPerPlayer = Math.max(Math.ceil(3 / playerCount), 1); // At least 3 rounds total
+      const totalMockTracksNeeded = Math.min(playerCount * tracksPerPlayer, mockTracks.length);
+      
+      console.log(`[TRACK_SYNC] Creating mock playlist with ${totalMockTracksNeeded} tracks for ${playerCount} players`);
+      
+      // Create a copy of players array so we can shuffle
+      const players = game.players.slice();
+      
+      // Use Fisher-Yates shuffle
+      shuffleArray(players);
+      
+      // Assign tracks to players for balanced gameplay
+      game.consolidatedPlaylist = [];
+      
+      for (let i = 0; i < totalMockTracksNeeded; i++) {
+        const playerIndex = i % players.length;
+        const player = players[playerIndex];
+        
+        if (i < mockTracks.length) {
+          game.consolidatedPlaylist.push({
+            track: mockTracks[i],
+            owner: {
+              id: player.id,
+              username: player.username
+            }
+          });
+          
+          console.log(`[TRACK_SYNC] Added mock track "${mockTracks[i].songTitle}" assigned to ${player.username}`);
+        }
+      }
+      
+      game.maxRounds = Math.min(totalMockTracksNeeded, 5); // Limit mock games to 5 rounds
+      console.log(`[TRACK_SYNC] Set max rounds to ${game.maxRounds} based on available mock tracks`);
+    }
+    
+    return game.consolidatedPlaylist;
+  }
+  
+  function sharePlaylistWithClients(gameId) {
+    const game = activeGames[gameId];
+    
+    if (!game) {
+      console.error(`[TRACK_SYNC] Game ${gameId} not found when sharing playlist`);
+      return;
+    }
+    
+    if (!game.consolidatedPlaylist || !Array.isArray(game.consolidatedPlaylist)) {
+      console.error(`[TRACK_SYNC] Game ${gameId} has no playlist to share`);
+      return;
+    }
+    
+    // Share the playlist with all clients
+    console.log(`[TRACK_SYNC] Sharing playlist with ${game.players.length} players in game ${gameId}`);
+    
+    // Count real tracks vs mock tracks
+    const realTracks = game.consolidatedPlaylist.filter(item => !item.track.isMockTrack);
+    const mockTracks = game.consolidatedPlaylist.filter(item => item.track.isMockTrack);
+    
+    console.log(`[TRACK_SYNC] Playlist contains ${realTracks.length} real tracks and ${mockTracks.length} mock tracks`);
+    
+    // Notify all clients
+    io.to(gameId).emit('playlist_shared', {
+      gameId,
+      playlist: game.consolidatedPlaylist,
+      maxRounds: game.maxRounds
+    });
+    
+    console.log(`[TRACK_SYNC] Playlist shared, game ready for play with ${game.maxRounds} rounds`);
+    
+    // If this is a fresh game, start round 1
+    if (!game.currentRound || game.currentRound < 1) {
+      selectRandomSongForRound(gameId, 1);
     }
   }
 
@@ -650,6 +762,116 @@ io.on('connection', (socket) => {
       [array[i], array[j]] = [array[j], array[i]];
     }
     return array;
+  }
+
+  // Selects a random song for a specific round and notifies clients
+  function selectRandomSongForRound(gameId, roundNumber) {
+    console.log(`[TRACK_SYNC] Selecting song for game ${gameId} round ${roundNumber}`);
+    const game = activeGames[gameId];
+    
+    if (!game) {
+      console.error(`[TRACK_SYNC] Game ${gameId} not found for song selection`);
+      return;
+    }
+    
+    if (!game.consolidatedPlaylist || !Array.isArray(game.consolidatedPlaylist) || game.consolidatedPlaylist.length === 0) {
+      console.error(`[TRACK_SYNC] Game ${gameId} has no playlist for song selection`);
+      return;
+    }
+    
+    // Set the current round in the game state
+    game.currentRound = roundNumber;
+    
+    // 1. First, check if we already have a song for this round
+    if (game.roundSongs && game.roundSongs[roundNumber]) {
+      console.log(`[TRACK_SYNC] Using existing song selection for round ${roundNumber}`);
+      startRoundWithSong(gameId, roundNumber, game.roundSongs[roundNumber]);
+      return;
+    }
+    
+    // 2. Try to select a new song by prioritizing real tracks over mock tracks
+    
+    // Get all available tracks that haven't been used in previous rounds
+    const usedTrackIds = Object.values(game.roundSongs || {}).map(song => song.trackId || song.title);
+    
+    // Filter available tracks: first real tracks, then fallback to mock if needed
+    let availableTracks = game.consolidatedPlaylist.filter(item => 
+      !usedTrackIds.includes(item.track.trackId) && 
+      !usedTrackIds.includes(item.track.songTitle) &&
+      !item.track.isMockTrack && // Prefer real tracks first
+      item.track.previewUrl // Must have a preview URL
+    );
+    
+    // If we don't have enough real tracks, include mock tracks too
+    if (availableTracks.length === 0) {
+      console.log(`[TRACK_SYNC] No unused real tracks with preview URLs available, including mock tracks`);
+      availableTracks = game.consolidatedPlaylist.filter(item => 
+        !usedTrackIds.includes(item.track.trackId) && 
+        !usedTrackIds.includes(item.track.songTitle) &&
+        item.track.previewUrl // Must have a preview URL
+      );
+    }
+    
+    // If we still don't have enough tracks, use any available track with preview URL
+    if (availableTracks.length === 0) {
+      console.log(`[TRACK_SYNC] No unused tracks available, reusing tracks with preview URLs`);
+      availableTracks = game.consolidatedPlaylist.filter(item => item.track.previewUrl);
+    }
+    
+    // If we still don't have tracks, this is a critical error
+    if (availableTracks.length === 0) {
+      console.error(`[TRACK_SYNC] CRITICAL: No tracks with preview URLs available for game ${gameId}`);
+      
+      // Create an emergency track
+      const emergencyTrack = {
+        title: "Emergency Fallback Track",
+        artists: "System",
+        albumName: "Emergency",
+        hasPreviewUrl: false,
+        previewUrl: null,
+        imageUrl: "https://via.placeholder.com/300",
+        assignedPlayer: game.players[0]?.username || "Unknown"
+      };
+      
+      startRoundWithSong(gameId, roundNumber, emergencyTrack);
+      return;
+    }
+    
+    // Select a random track from available tracks
+    const randomIndex = Math.floor(Math.random() * availableTracks.length);
+    const selectedTrack = availableTracks[randomIndex];
+    
+    console.log(`[TRACK_SYNC] Selected song for round ${roundNumber}: "${selectedTrack.track.songTitle}" (Trace ID: ROUND_${gameId}_${roundNumber}_${Date.now()})`);
+    console.log(`[TRACK_SYNC] Song owner: ${selectedTrack.owner.username}`);
+    console.log(`[TRACK_SYNC] PreviewUrl available: ${selectedTrack.track.previewUrl ? 'true' : 'false'}`);
+    
+    if (selectedTrack.track.isMockTrack) {
+      console.log(`[TRACK_SYNC] USING MOCK TRACK for round ${roundNumber}`);
+    }
+    
+    // Create the round song object
+    const roundSong = {
+      title: selectedTrack.track.songTitle,
+      artists: Array.isArray(selectedTrack.track.songArtists) ? 
+        selectedTrack.track.songArtists.join(', ') : 
+        selectedTrack.track.songArtists,
+      albumName: selectedTrack.track.albumName,
+      hasPreviewUrl: !!selectedTrack.track.previewUrl,
+      previewUrl: selectedTrack.track.previewUrl,
+      imageUrl: selectedTrack.track.imageUrl,
+      assignedPlayer: selectedTrack.owner.username,
+      trackId: selectedTrack.track.trackId || selectedTrack.track.songTitle,
+      roundTraceId: `ROUND_${gameId}_${roundNumber}_${Date.now()}`
+    };
+    
+    // Save this track as the round song
+    if (!game.roundSongs) {
+      game.roundSongs = {};
+    }
+    game.roundSongs[roundNumber] = roundSong;
+    
+    // Start the round with this song
+    startRoundWithSong(gameId, roundNumber, roundSong);
   }
 
   // Handle song selection for a round
@@ -900,7 +1122,6 @@ io.on('connection', (socket) => {
     game.currentRoundTraceId = newRoundTraceId;
     
     // Select the next song for this round
-    // In the shared song pool implementation, we'll pick a song from the consolidated pool
     const availableSongs = game.consolidatedPlaylist || [];
     
     if (!availableSongs || availableSongs.length === 0) {
@@ -909,14 +1130,34 @@ io.on('connection', (socket) => {
       return;
     }
     
-    // Select a random song from the pool
-    const roundIndex = (game.currentRound - 1) % availableSongs.length;
-    const selectedItem = availableSongs[roundIndex];
+    // Check if we've already used all songs and need to recycle
+    const maxRounds = Math.min(game.maxRounds || 3, availableSongs.length);
+    const currentRoundIndex = (game.currentRound - 1) % availableSongs.length;
+    
+    // Log if we're starting to recycle songs
+    if (game.currentRound > availableSongs.length) {
+      console.log(`[TRACK_SYNC] Round ${game.currentRound} exceeds available songs (${availableSongs.length}), recycling tracks`);
+    }
+    
+    // Select a song from the pool based on round index
+    const selectedItem = availableSongs[currentRoundIndex];
     
     if (!selectedItem || !selectedItem.track) {
       console.error(`[TRACK_SYNC] Invalid song selected for round ${game.currentRound}`);
       socket.emit('error', { message: 'Failed to select a song for this round' });
       return;
+    }
+    
+    // Check if this song is a user-provided track or a mock track
+    const isMockTrack = selectedItem.track.isMockTrack || 
+                        selectedItem.track.songTitle === "Bohemian Rhapsody" || 
+                        selectedItem.track.songTitle === "Don't Stop Believin'" || 
+                        selectedItem.track.songTitle === "Billie Jean";
+    
+    if (isMockTrack) {
+      console.log(`[TRACK_SYNC] Using mock track: "${selectedItem.track.songTitle}" for round ${game.currentRound}`);
+    } else {
+      console.log(`[TRACK_SYNC] Using real user track: "${selectedItem.track.songTitle}" for round ${game.currentRound} (Track ${currentRoundIndex+1}/${availableSongs.length})`);
     }
     
     const selectedSong = selectedItem.track;
@@ -936,8 +1177,12 @@ io.on('connection', (socket) => {
     if (!game.roundSongs) {
       game.roundSongs = {};
     }
+    
     game.roundSongs[game.currentRound] = {
-      song: roundSong,
+      song: {
+        ...roundSong,
+        assignedToPlayer: songOwner
+      },
       owner: songOwner,
       roundTraceId: newRoundTraceId
     };
@@ -946,7 +1191,10 @@ io.on('connection', (socket) => {
     io.to(gameId).emit('round_started', {
       gameId,
       roundNumber: game.currentRound,
-      song: roundSong,
+      song: {
+        ...roundSong,
+        assignedToPlayer: songOwner
+      },
       roundTraceId: newRoundTraceId
     });
     
@@ -1021,224 +1269,135 @@ io.on('connection', (socket) => {
     });
   });
 
-  // Function to check for song consistency and force sync if needed
-  function checkSongConsistency(gameId) {
+  // Starts a round with a specific song
+  function startRoundWithSong(gameId, roundNumber, song) {
     const game = activeGames[gameId];
-    if (!game || !game.clientPlaying) return;
     
-    // Check if game is configured properly for syncing
-    if (game.status !== 'playing') {
-      console.log(`[TRACK_SYNC] Game ${gameId} not in playing state yet (${game.status}), skipping sync check`);
+    if (!game) {
+      console.error(`[TRACK_SYNC] Game ${gameId} not found when starting round`);
       return;
     }
     
-    const clientSongs = Object.values(game.clientPlaying || {});
-    if (clientSongs.length <= 1) return;
+    // Set the current round in the game
+    game.currentRound = roundNumber;
     
-    const firstSong = clientSongs[0];
-    const allSame = clientSongs.every(song => 
-      song.songTitle === firstSong.songTitle && 
-      song.roundTraceId === firstSong.roundTraceId
-    );
+    // Prepare the round data
+    const roundData = {
+      gameId,
+      roundNumber,
+      song,
+      roundTraceId: song.roundTraceId
+    };
     
-    if (!allSame) {
-      console.error(`[TRACK_SYNC] CRITICAL: Detected song inconsistency in game ${gameId}. Forcing sync...`);
+    // Reset any previous voting
+    if (game.votes) {
+      game.votes = {};
+    }
+    
+    // Debug log before starting the round
+    console.log(`[TRACK_SYNC] Round ${roundNumber} started for game ${gameId} with trace ID ${song.roundTraceId}`);
+    
+    // Notify all clients
+    io.to(gameId).emit('round_started', roundData);
+    
+    // Schedule a check for song consistency after a short delay
+    setTimeout(() => {
+      checkSongConsistency(gameId);
+    }, 2000);
+  }
+  
+  // Checks if all clients are playing the same song in a game
+  function checkSongConsistency(gameId) {
+    const game = activeGames[gameId];
+    
+    if (!game) {
+      console.error(`[TRACK_SYNC] Game ${gameId} not found for song consistency check`);
+      return;
+    }
+    
+    if (!game.clientPlaying) {
+      console.warn(`[TRACK_SYNC] No client playing data available for game ${gameId}`);
+      return;
+    }
+    
+    // If we have fewer than 2 clients, no need to check consistency
+    const clientIds = Object.keys(game.clientPlaying);
+    if (clientIds.length < 2) {
+      return;
+    }
+    
+    // Group clients by song title to find the majority song
+    const songGroups = {};
+    
+    clientIds.forEach(clientId => {
+      const songData = game.clientPlaying[clientId];
+      const songKey = songData.songTitle;
       
-      // CRITICAL FIX: Handle round 0 immediately before any other processing
-      if (!game.currentRound || game.currentRound === 0) {
-        console.error(`[TRACK_SYNC] Cannot force sync - game round is ${game.currentRound}. Setting to round 1 and using client data.`);
-        
-        // Force to round 1
-        game.currentRound = 1;
-        console.log(`[TRACK_SYNC] Forced game round to 1`);
-        
-        // Find client with the best song data
-        console.log(`[TRACK_SYNC] Clients playing songs:`, Object.keys(game.clientPlaying).length);
-        
-        // Find most common song among clients or one with the best data
-        const songCounts = {};
-        const songDataByTitle = {};
-        
-        // Count frequency of each song and collect song data
-        Object.entries(game.clientPlaying).forEach(([clientId, songInfo]) => {
-          const songTitle = songInfo.songTitle;
-          songCounts[songTitle] = (songCounts[songTitle] || 0) + 1;
-          
-          // Store song data if it has preview URL or is more complete
-          if (!songDataByTitle[songTitle] || 
-              (!songDataByTitle[songTitle].previewUrl && songInfo.previewUrl)) {
-            songDataByTitle[songTitle] = songInfo;
-          }
-        });
-        
-        // Find most common song
-        let bestSongTitle = Object.keys(songCounts)[0];
-        let maxCount = songCounts[bestSongTitle] || 0;
-        
-        Object.entries(songCounts).forEach(([title, count]) => {
-          if (count > maxCount || 
-              (count === maxCount && songDataByTitle[title].previewUrl && !songDataByTitle[bestSongTitle].previewUrl)) {
-            bestSongTitle = title;
-            maxCount = count;
-          }
-        });
-        
-        // Get the best song data
-        const bestSong = songDataByTitle[bestSongTitle];
-        console.log(`[TRACK_SYNC] Selected best song "${bestSongTitle}" played by ${maxCount} clients`);
-        
-        if (bestSong) {
-          // Create a trace ID for this emergency sync
-          const forceSyncTraceId = `EMERGENCY_SYNC_${gameId}_R1_${Date.now()}`;
-          
-          // Create a song object for sync
-          const syncSong = {
-            songTitle: bestSong.songTitle,
-            songArtists: bestSong.songArtists ? 
-              (Array.isArray(bestSong.songArtists) ? bestSong.songArtists : [bestSong.songArtists]) : 
-              ['Unknown Artist'],
-            albumName: bestSong.albumName || 'Unknown Album',
-            imageUrl: bestSong.imageUrl || 'https://via.placeholder.com/300',
-            previewUrl: bestSong.previewUrl,
-            roundTraceId: forceSyncTraceId
-          };
-          
-          console.log(`[TRACK_SYNC] EMERGENCY SYNC: Using "${syncSong.songTitle}" as source of truth`);
-          console.log(`[TRACK_SYNC] Has preview URL: ${!!syncSong.previewUrl}`);
-          
-          // Force all clients to sync to this song
-          io.to(gameId).emit('force_song_sync', {
-            gameId,
-            roundNumber: 1,
-            song: syncSong,
-            roundTraceId: forceSyncTraceId
-          });
-          
-          console.log(`[TRACK_SYNC] Emergency sync signal sent to all clients in game ${gameId}`);
-          return;
-        } else {
-          console.error(`[TRACK_SYNC] CRITICAL ERROR: Could not find any valid song data for emergency sync`);
-          return;
-        }
+      if (!songGroups[songKey]) {
+        songGroups[songKey] = [];
       }
-      
-      // Continue with normal flow for non-zero rounds
-      // Log available round data
-      console.log(`[TRACK_SYNC] Current round: ${game.currentRound}`);
-      console.log(`[TRACK_SYNC] Round songs available:`, Object.keys(game.roundSongs || {}));
-      
-      // Get the correct song from the round data
-      const correctSong = game.roundSongs[game.currentRound];
-      
-      if (!correctSong || !correctSong.song) {
-        console.error(`[TRACK_SYNC] Cannot find correct song for round ${game.currentRound}`);
-        
-        // If we can't find the song for the current round, try to use the first client's song
-        // This is a fallback to at least get all clients on the same song
-        if (firstSong && firstSong.songTitle) {
-          console.log(`[TRACK_SYNC] Using first client's song as fallback: "${firstSong.songTitle}"`);
-          
-          // Create a trace ID for this forced sync
-          const forceSyncTraceId = `FORCESYNC_FALLBACK_G${gameId}_R${game.currentRound}_${Date.now()}`;
-          
-          // Find the client with the most complete song data
-          let bestSong = firstSong;
-          let hasFoundPreviewUrl = !!firstSong.previewUrl;
-          
-          if (!hasFoundPreviewUrl) {
-            console.log(`[TRACK_SYNC] Searching for client with valid previewUrl...`);
-            // Search all clients for a valid previewUrl
-            Object.entries(game.clientPlaying || {}).forEach(([clientId, songData]) => {
-              if (songData.previewUrl) {
-                console.log(`[TRACK_SYNC] Found client ${clientId} with valid previewUrl`);
-                bestSong = songData;
-                hasFoundPreviewUrl = true;
-              }
-            });
-          }
-          
-          // Create a minimalist song object from what we know
-          const fallbackSong = {
-            songTitle: bestSong.songTitle,
-            songArtists: bestSong.songArtists ? 
-              (Array.isArray(bestSong.songArtists) ? bestSong.songArtists : [bestSong.songArtists]) : 
-              ['Unknown Artist'],
-            roundTraceId: forceSyncTraceId,
-            previewUrl: bestSong.previewUrl,
-            albumName: bestSong.albumName || 'Unknown Album',
-            imageUrl: bestSong.imageUrl || 'https://via.placeholder.com/300'
-          };
-
-          // CRITICAL: Verify and log preview URL for debugging
-          console.log(`[TRACK_SYNC] Fallback song has previewUrl: ${!!fallbackSong.previewUrl}`);
-          if (fallbackSong.previewUrl) {
-            console.log(`[TRACK_SYNC] Fallback previewUrl: ${fallbackSong.previewUrl.substring(0, 40)}...`);
-          } else {
-            console.error(`[TRACK_SYNC] WARNING: Fallback song has no previewUrl, sync likely to fail`);
-          }
-          
-          // Send the force_sync event to all clients
-          io.to(gameId).emit('force_song_sync', {
-            gameId,
-            roundNumber: game.currentRound,
-            song: fallbackSong,
-            roundTraceId: forceSyncTraceId
-          });
-          
-          console.log(`[TRACK_SYNC] Force sync sent with fallback song "${fallbackSong.songTitle}"`);
-        } else {
-          console.error(`[TRACK_SYNC] No valid fallback song available. Sync failed.`);
-        }
-        return;
+      songGroups[songKey].push({
+        clientId,
+        roundNumber: songData.roundNumber,
+        traceId: songData.roundTraceId,
+        hasPreviewUrl: !!songData.previewUrl
+      });
+    });
+    
+    // Find the song with the most clients
+    let majorityGroup = null;
+    let maxClients = 0;
+    
+    Object.keys(songGroups).forEach(songKey => {
+      if (songGroups[songKey].length > maxClients) {
+        maxClients = songGroups[songKey].length;
+        majorityGroup = songKey;
       }
+    });
+    
+    // Check if all clients are playing the same song
+    const allConsistent = Object.keys(songGroups).length === 1;
+    
+    if (allConsistent) {
+      console.log(`[TRACK_SYNC] All ${clientIds.length} clients in game ${gameId} are playing the same song: "${majorityGroup}"`);
+    } else {
+      console.log(`[TRACK_SYNC] WARNING: Not all clients in game ${gameId} are playing the same song!`);
       
-      // Create a trace ID for this forced sync
-      const forceSyncTraceId = `FORCESYNC_G${gameId}_R${game.currentRound}_${Date.now()}`;
+      // If there are multiple different songs, log details
+      console.log(`[TRACK_SYNC] Detailed song comparison for game ${gameId}:`);
       
-      // Log the song we're using for sync
-      console.log(`[TRACK_SYNC] Using song from game.roundSongs:`, {
-        title: correctSong.song.songTitle,
-        artists: Array.isArray(correctSong.song.songArtists) ? 
-          correctSong.song.songArtists.join(',') : correctSong.song.songArtists,
-        hasPreviewUrl: !!correctSong.song.previewUrl,
-        previewUrl: correctSong.song.previewUrl ? correctSong.song.previewUrl.substring(0, 30) + '...' : 'NONE'
+      Object.keys(songGroups).forEach(songKey => {
+        const group = songGroups[songKey];
+        const isMajority = songKey === majorityGroup;
+        console.log(`[TRACK_SYNC]   Clients playing "${songKey}": ${group.length} ${isMajority ? '(MAJORITY)' : ''}`);
+        
+        // Show details of first client in this group
+        const firstClient = group[0];
+        console.log(`[TRACK_SYNC]     Round: ${firstClient.roundNumber}, Has PreviewURL: ${firstClient.hasPreviewUrl}`);
       });
       
-      // Prepare the correct song data to send to all clients
-      const syncSongData = {
-        ...correctSong.song,
-        roundTraceId: forceSyncTraceId
-      };
-      
-      // CRITICAL: Verify previewUrl is actually present in the data
-      if (!syncSongData.previewUrl) {
-        console.error(`[TRACK_SYNC] ERROR: Force sync song is missing previewUrl!`);
-        // Try to find a client with a valid previewUrl
-        const clientWithPreviewUrl = Object.values(game.clientPlaying || {}).find(song => song.previewUrl);
-        if (clientWithPreviewUrl) {
-          console.log(`[TRACK_SYNC] Found client with valid previewUrl, using that instead`);
-          syncSongData.previewUrl = clientWithPreviewUrl.previewUrl;
+      // Force sync if significant inconsistency
+      if (maxClients < clientIds.length / 2) {
+        console.log(`[TRACK_SYNC] CRITICAL: Detected song inconsistency in game ${gameId}. Forcing sync...`);
+        forceSongSync(gameId);
+      } else {
+        // Check if this is the first inconsistency for this round
+        const isFirstInconsistencyForRound = !game.lastInconsistencyDetectedForRound || 
+                                             game.lastInconsistencyDetectedForRound !== game.currentRound;
+        
+        // Only sync if it's been more than 5 seconds since last sync OR if it's the first inconsistency for this round
+        const now = Date.now();
+        if (isFirstInconsistencyForRound || !game.lastForceSyncTime || (now - game.lastForceSyncTime > 5000)) {
+          // Record that we detected an inconsistency for this round
+          game.lastInconsistencyDetectedForRound = game.currentRound;
+          
+          console.log(`[TRACK_SYNC] CRITICAL: Detected song inconsistency in game ${gameId}. Forcing sync...`);
+          forceSongSync(gameId);
         } else {
-          console.error(`[TRACK_SYNC] No clients have a valid previewUrl, force sync likely to fail`);
+          const timeSinceLastSync = ((now - game.lastForceSyncTime) / 1000).toFixed(3);
+          console.log(`[TRACK_SYNC] Skipping force sync - last sync was ${timeSinceLastSync} seconds ago`);
         }
       }
-      
-      console.log(`[TRACK_SYNC] Forcing song sync with "${syncSongData.songTitle}" (Trace ID: ${forceSyncTraceId})`);
-      console.log(`[TRACK_SYNC] Preview URL present: ${!!syncSongData.previewUrl}`);
-      if (syncSongData.previewUrl) {
-        console.log(`[TRACK_SYNC] Preview URL: ${syncSongData.previewUrl.substring(0, 40)}...`);
-      }
-      
-      // Send the force_sync event to all clients in the game
-      io.to(gameId).emit('force_song_sync', {
-        gameId,
-        roundNumber: game.currentRound,
-        song: syncSongData,
-        roundTraceId: forceSyncTraceId
-      });
-      
-      // Log what we're syncing to
-      console.log(`[TRACK_SYNC] Force sync sent to all clients in game ${gameId}`);
     }
   }
 
@@ -1252,6 +1411,12 @@ io.on('connection', (socket) => {
     if (!activeGames[gameId].clientPlaying) {
       activeGames[gameId].clientPlaying = {};
     }
+    
+    // Get the existing data for this client if available
+    const previousData = activeGames[gameId].clientPlaying[socket.id];
+    const isFirstReport = !previousData;
+    const isChangingRounds = previousData && previousData.roundNumber !== roundNumber;
+    const isChangingSongs = previousData && previousData.songTitle !== songTitle;
     
     // Ensure the game has a valid current round
     if (!activeGames[gameId].currentRound || activeGames[gameId].currentRound < 1) {
@@ -1272,7 +1437,6 @@ io.on('connection', (socket) => {
     }
     
     // Check if this client is sending the same song data repeatedly
-    const previousData = activeGames[gameId].clientPlaying[socket.id];
     if (previousData && 
         previousData.songTitle === songTitle && 
         previousData.roundTraceId === roundTraceId) {
@@ -1282,6 +1446,41 @@ io.on('connection', (socket) => {
     } else {
       // New song data, log it more prominently
       console.log(`[TRACK_SYNC] Client ${socket.id} is playing "${songTitle}" in round ${roundNumber}`);
+      
+      // If this is the first report or the client is changing songs/rounds, we should consider force sync
+      if (isFirstReport || isChangingRounds || isChangingSongs) {
+        // Check if the client is out of sync with the game's current round
+        if (roundNumber !== activeGames[gameId].currentRound) {
+          console.log(`[TRACK_SYNC] Round mismatch: Client reports round ${roundNumber}, game is on round ${activeGames[gameId].currentRound}`);
+          
+          // Only sync if we haven't just done so
+          const now = Date.now();
+          if (!activeGames[gameId].lastForceSyncTime || now - activeGames[gameId].lastForceSyncTime > 2000) {
+            console.log(`[TRACK_SYNC] Force syncing client to correct round`);
+            // Force sync to ensure client is on the right round
+            forceSongSync(gameId);
+            return;
+          }
+        }
+        
+        // Also check if the song matches the expected song for this round
+        const expectedSong = activeGames[gameId].roundSongs && activeGames[gameId].roundSongs[roundNumber];
+        if (expectedSong && expectedSong.song) {
+          const expectedTitle = expectedSong.song.songTitle || expectedSong.song.title;
+          if (expectedTitle && expectedTitle !== songTitle) {
+            console.log(`[TRACK_SYNC] Song mismatch: Client playing "${songTitle}", expected "${expectedTitle}" for round ${roundNumber}`);
+            
+            // Only sync if we haven't just done so
+            const now = Date.now();
+            if (!activeGames[gameId].lastForceSyncTime || now - activeGames[gameId].lastForceSyncTime > 2000) {
+              console.log(`[TRACK_SYNC] Force syncing client to correct song`);
+              // Force sync to ensure client plays the right song
+              forceSongSync(gameId);
+              return;
+            }
+          }
+        }
+      }
     }
     
     // Look up assigned player if provided or try to find from consolidated playlist
@@ -1397,6 +1596,14 @@ io.on('connection', (socket) => {
       } else {
         console.error(`[TRACK_SYNC] WARNING: Not all clients in game ${gameId} are playing the same song!`);
         
+        // If this is the first song report from this client for this round, force sync immediately
+        // This helps new clients joining mid-round
+        if (isFirstReport) {
+          console.log(`[TRACK_SYNC] First song report from client ${socket.id}, forcing immediate sync`);
+          forceSongSync(gameId);
+          return;
+        }
+        
         // Only trigger a force sync if we haven't done so recently (last 5 seconds)
         const now = Date.now();
         const lastForceSyncTime = game.lastForceSyncTime || 0;
@@ -1485,6 +1692,270 @@ io.on('connection', (socket) => {
       }
     }
   });
+
+  // Forces all clients to synchronize to the current song
+  function forceSongSync(gameId) {
+    const game = activeGames[gameId];
+    
+    if (!game) {
+      console.error(`[TRACK_SYNC] Game ${gameId} not found for force sync`);
+      return;
+    }
+    
+    // Set a timestamp for the last force sync
+    const now = Date.now();
+    game.lastForceSyncTime = now;
+    const syncTimestamp = new Date().toISOString();
+    
+    console.log(`[TRACK_SYNC] Executing force sync at ${syncTimestamp} for round ${game.currentRound}`);
+    
+    // Choose the song to use for sync:
+    // 1. First try to use the proper song for the current round
+    // 2. If not available, use the song that corresponds to the current round in the consolidated playlist
+    // 3. If still not clear, use the song played by the majority of clients
+    
+    console.log(`[TRACK_SYNC] Current round: ${game.currentRound}`);
+    console.log(`[TRACK_SYNC] Round songs available:`, Object.keys(game.roundSongs || {}));
+    
+    // Option 1: Try to use the proper song for the current round
+    if (game.roundSongs && game.roundSongs[game.currentRound]) {
+      const roundSong = game.roundSongs[game.currentRound];
+      
+      console.log(`[TRACK_SYNC] Using song from game.roundSongs for round ${game.currentRound}:`, {
+        title: roundSong.song ? roundSong.song.songTitle : (roundSong.title || 'Unknown'),
+        artists: roundSong.song ? 
+          (Array.isArray(roundSong.song.songArtists) ? roundSong.song.songArtists.join(', ') : roundSong.song.songArtists) : 
+          (roundSong.artists || 'Unknown'),
+        hasPreviewUrl: roundSong.song ? !!roundSong.song.previewUrl : !!roundSong.previewUrl,
+        assignedPlayer: roundSong.song ? 
+          (roundSong.song.assignedToPlayer ? roundSong.song.assignedToPlayer.username : 'unknown') : 
+          'unknown'
+      });
+      
+      // Create a new trace ID for this force sync
+      const syncTraceId = `FORCESYNC_G${gameId}_R${game.currentRound}_${now}`;
+      
+      // Construct the sync song data
+      const syncSong = roundSong.song ? {
+        ...roundSong.song,
+        roundTraceId: syncTraceId
+      } : {
+        title: roundSong.title || 'Unknown Song',
+        artists: roundSong.artists || 'Unknown Artist',
+        albumName: roundSong.albumName || 'Unknown Album',
+        imageUrl: roundSong.imageUrl || 'https://via.placeholder.com/300',
+        previewUrl: roundSong.previewUrl,
+        roundTraceId: syncTraceId,
+        assignedPlayer: roundSong.assignedPlayer || 'unknown'
+      };
+      
+      console.log(`[TRACK_SYNC] Forcing song sync with "${syncSong.title || syncSong.songTitle}" (Trace ID: ${syncTraceId})`);
+      console.log(`[TRACK_SYNC] Preview URL present: ${!!(syncSong.previewUrl)}`);
+      
+      if (syncSong.previewUrl) {
+        console.log(`[TRACK_SYNC] Preview URL: ${syncSong.previewUrl.substring(0, 40)}...`);
+      }
+      
+      // Send the force sync command to all clients
+      io.to(gameId).emit('force_song_sync', {
+        gameId,
+        roundNumber: game.currentRound,
+        song: syncSong,
+        roundTraceId: syncTraceId,
+        syncTimestamp: syncTimestamp
+      });
+      
+      console.log(`[TRACK_SYNC] Force sync sent to all clients in game ${gameId} at ${syncTimestamp}`);
+      return;
+    }
+    
+    // Option 2: Use a song from the consolidated playlist based on the current round
+    if (game.consolidatedPlaylist && game.consolidatedPlaylist.length > 0) {
+      // Get the song that corresponds to the current round
+      const currentRoundIndex = (game.currentRound - 1) % game.consolidatedPlaylist.length;
+      const roundBasedSong = game.consolidatedPlaylist[currentRoundIndex];
+      
+      if (roundBasedSong && roundBasedSong.track) {
+        // Use the song matching the current round
+        const syncTraceId = `FORCESYNC_ROUND_G${gameId}_R${game.currentRound}_${now}`;
+        
+        // Construct the sync song data
+        const syncSong = {
+          songTitle: roundBasedSong.track.songTitle,
+          songArtists: roundBasedSong.track.songArtists,
+          albumName: roundBasedSong.track.albumName || 'Unknown Album',
+          imageUrl: roundBasedSong.track.imageUrl || 'https://via.placeholder.com/300',
+          previewUrl: roundBasedSong.track.previewUrl,
+          roundTraceId: syncTraceId,
+          assignedToPlayer: roundBasedSong.owner
+        };
+        
+        console.log(`[TRACK_SYNC] Using round-appropriate song for sync: "${syncSong.songTitle}" (Round ${game.currentRound}, Track ${currentRoundIndex+1}/${game.consolidatedPlaylist.length})`);
+        console.log(`[TRACK_SYNC] Preview URL present: ${!!syncSong.previewUrl}`);
+        
+        // Store this as the proper song for this round
+        if (!game.roundSongs) {
+          game.roundSongs = {};
+        }
+        
+        game.roundSongs[game.currentRound] = {
+          song: syncSong,
+          owner: roundBasedSong.owner,
+          roundTraceId: syncTraceId
+        };
+        
+        // Send the force sync command to all clients
+        io.to(gameId).emit('force_song_sync', {
+          gameId,
+          roundNumber: game.currentRound,
+          song: syncSong,
+          roundTraceId: syncTraceId,
+          syncTimestamp: syncTimestamp
+        });
+        
+        console.log(`[TRACK_SYNC] Force sync sent to all clients in game ${gameId} at ${syncTimestamp}`);
+        return;
+      }
+    }
+    
+    // Option 3: Try using the song played by the majority of clients
+    if (game.clientPlaying && Object.keys(game.clientPlaying).length > 0) {
+      // Group songs by title
+      const songCounts = {};
+      const songDataByTitle = {};
+      
+      Object.entries(game.clientPlaying).forEach(([clientId, songInfo]) => {
+        const songTitle = songInfo.songTitle;
+        
+        if (!songCounts[songTitle]) {
+          songCounts[songTitle] = 0;
+          songDataByTitle[songTitle] = songInfo;
+        }
+        
+        songCounts[songTitle]++;
+        
+        // Use the song data with a preview URL if available
+        if (songInfo.previewUrl && !songDataByTitle[songTitle].previewUrl) {
+          songDataByTitle[songTitle] = songInfo;
+        }
+      });
+      
+      // Find the song with the most clients
+      let majoritySongTitle = null;
+      let maxCount = 0;
+      
+      Object.entries(songCounts).forEach(([title, count]) => {
+        if (count > maxCount) {
+          maxCount = count;
+          majoritySongTitle = title;
+        }
+      });
+      
+      if (majoritySongTitle) {
+        const majoritySong = songDataByTitle[majoritySongTitle];
+        
+        // Create a trace ID for this force sync
+        const syncTraceId = `FORCESYNC_MAJORITY_G${gameId}_R${game.currentRound}_${now}`;
+        
+        // Construct the sync song data
+        const syncSong = {
+          songTitle: majoritySong.songTitle,
+          songArtists: majoritySong.songArtists ? 
+            (Array.isArray(majoritySong.songArtists) ? majoritySong.songArtists : [majoritySong.songArtists]) : 
+            ['Unknown Artist'],
+          albumName: majoritySong.albumName || 'Unknown Album',
+          imageUrl: majoritySong.imageUrl || 'https://via.placeholder.com/300',
+          previewUrl: majoritySong.previewUrl,
+          roundTraceId: syncTraceId,
+          assignedToPlayer: majoritySong.assignedToPlayer
+        };
+        
+        console.log(`[TRACK_SYNC] Forcing majority song sync with "${syncSong.songTitle}" (Trace ID: ${syncTraceId})`);
+        console.log(`[TRACK_SYNC] Preview URL present: ${!!syncSong.previewUrl}`);
+        
+        if (syncSong.previewUrl) {
+          console.log(`[TRACK_SYNC] Preview URL: ${syncSong.previewUrl.substring(0, 40)}...`);
+        }
+        
+        // Send the force sync command to all clients
+        io.to(gameId).emit('force_song_sync', {
+          gameId,
+          roundNumber: game.currentRound,
+          song: syncSong,
+          roundTraceId: syncTraceId,
+          syncTimestamp: syncTimestamp
+        });
+        
+        console.log(`[TRACK_SYNC] Force sync sent to all clients in game ${gameId} at ${syncTimestamp}`);
+        return;
+      }
+    }
+    
+    // If we get here, try fallback to any song with a valid preview URL
+    if (game.consolidatedPlaylist && game.consolidatedPlaylist.length > 0) {
+      // Find a song with a preview URL
+      const validSongs = game.consolidatedPlaylist.filter(item => !!item.track.previewUrl);
+      
+      if (validSongs.length > 0) {
+        // Use the first valid song
+        const fallbackSong = validSongs[0];
+        
+        // Create a trace ID for this force sync
+        const syncTraceId = `FORCESYNC_FALLBACK_G${gameId}_R${game.currentRound}_${now}`;
+        
+        // Construct the sync song data
+        const syncSong = {
+          songTitle: fallbackSong.track.songTitle,
+          songArtists: fallbackSong.track.songArtists,
+          albumName: fallbackSong.track.albumName || 'Unknown Album',
+          imageUrl: fallbackSong.track.imageUrl || 'https://via.placeholder.com/300',
+          previewUrl: fallbackSong.track.previewUrl,
+          roundTraceId: syncTraceId,
+          assignedToPlayer: fallbackSong.owner
+        };
+        
+        console.log(`[TRACK_SYNC] Forcing fallback song sync with "${syncSong.songTitle}" (Trace ID: ${syncTraceId})`);
+        console.log(`[TRACK_SYNC] Preview URL present: ${!!syncSong.previewUrl}`);
+        
+        // Send the force sync command to all clients
+        io.to(gameId).emit('force_song_sync', {
+          gameId,
+          roundNumber: game.currentRound,
+          song: syncSong,
+          roundTraceId: syncTraceId,
+          syncTimestamp: syncTimestamp
+        });
+        
+        console.log(`[TRACK_SYNC] Force sync sent to all clients in game ${gameId} at ${syncTimestamp}`);
+        return;
+      }
+    }
+    
+    // If all else fails, use an emergency mock track
+    console.error(`[TRACK_SYNC] CRITICAL: No valid song found for force sync in game ${gameId}`);
+    
+    // Create an emergency track
+    const emergencyTrack = {
+      songTitle: "Emergency Fallback Song",
+      songArtists: ["System"],
+      albumName: "Emergency",
+      imageUrl: "https://via.placeholder.com/300",
+      previewUrl: "https://p.scdn.co/mp3-preview/1f3bd078c7ad27b427fa210f6efd957fc5eecea0", // Bohemian Rhapsody as fallback
+      roundTraceId: `EMERGENCY_G${gameId}_R${game.currentRound}_${now}`,
+      isMockTrack: true
+    };
+    
+    // Send the emergency track to all clients
+    io.to(gameId).emit('force_song_sync', {
+      gameId,
+      roundNumber: game.currentRound,
+      song: emergencyTrack,
+      roundTraceId: emergencyTrack.roundTraceId,
+      syncTimestamp: syncTimestamp
+    });
+    
+    console.log(`[TRACK_SYNC] Emergency song sync sent to all clients in game ${gameId} at ${syncTimestamp}`);
+  }
 });
 
 // Basic route for checking server status

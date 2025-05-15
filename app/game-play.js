@@ -12,7 +12,7 @@ import {
   ScrollView,
 } from "react-native";
 import { useNavigation, useRouter, useLocalSearchParams } from "expo-router";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
 import Slider from "@react-native-community/slider";
@@ -236,6 +236,71 @@ export default function GamePlay() {
     });
   }, [token, isInitialized, hasFetchedSongs]);
 
+  // Add this function to share tracks with the server
+  const shareTracks = useCallback(async (tracksToShare) => {
+    if (!emit || !isMultiplayer || !gameId) {
+      console.log("[TRACK_SYNC] Not sharing tracks - not in multiplayer mode or missing emit function");
+      return;
+    }
+    
+    console.log(`[TRACK_SYNC] Preparing to share ${tracksToShare.length} tracks with server`);
+    
+    // Count how many have preview URLs already
+    const tracksWithPreview = tracksToShare.filter(t => !!t.previewUrl);
+    console.log(`[TRACK_SYNC] ${tracksWithPreview.length}/${tracksToShare.length} tracks already have preview URLs`);
+    
+    let tracksToSend = tracksToShare;
+    
+    // If few or no tracks have preview URLs, try enriching with Deezer
+    if (tracksWithPreview.length < 3) {
+      console.log("[TRACK_SYNC] Few tracks have preview URLs, attempting Deezer enrichment");
+      
+      try {
+        // Use enrichTracksWithDeezerPreviews to get Deezer previews
+        const enrichedTracks = await enrichTracksWithDeezerPreviews(tracksToShare);
+        const enrichedWithPreview = enrichedTracks.filter(t => !!t.previewUrl);
+        
+        console.log(`[TRACK_SYNC] After Deezer enrichment: ${enrichedWithPreview.length}/${enrichedTracks.length} tracks have preview URLs`);
+        
+        // Only use enriched tracks if they have more preview URLs
+        if (enrichedWithPreview.length > tracksWithPreview.length) {
+          console.log("[TRACK_SYNC] Using Deezer-enriched tracks with more preview URLs");
+          tracksToSend = enrichedWithPreview;
+        }
+      } catch (error) {
+        console.error("[TRACK_SYNC] Error enriching tracks with Deezer:", error);
+      }
+    }
+    
+    // Send tracks to server
+    console.log(`[TRACK_SYNC] Sharing ${tracksToSend.length} tracks with server`);
+    console.log(`[TRACK_SYNC] ${tracksToSend.filter(t => !!t.previewUrl).length} of these tracks have preview URLs`);
+    
+    // Attempt to send tracks to server
+    try {
+      emit('share_tracks', { gameId, tracks: tracksToSend });
+      console.log("[TRACK_SYNC] Successfully shared tracks with server");
+    } catch (error) {
+      console.error("[TRACK_SYNC] Error sharing tracks with server:", error);
+    }
+  }, [emit, gameId, isMultiplayer]);
+  
+  // Update the track fetching useEffect to call shareTracks:
+  useEffect(() => {
+    // Skip if we've already shared our tracks
+    if (hasSharedTracks) return;
+    
+    // If we have songs and we're in multiplayer, share them with the server
+    if (allSongs.length > 0 && isMultiplayer && emit && !hasSharedTracks) {
+      console.log(`[TRACK_SYNC] First time with songs ready, sharing ${allSongs.length} tracks with server`);
+      shareTracks(allSongs);
+      setHasSharedTracks(true);
+    }
+  }, [allSongs, isMultiplayer, emit, hasSharedTracks, shareTracks]);
+  
+  // Add this state at the top with other states:
+  const [hasSharedTracks, setHasSharedTracks] = useState(false);
+
   // Fetch songs when component mounts - but only once
   useEffect(() => {
     // Skip if we've already fetched songs or if still loading
@@ -354,45 +419,40 @@ export default function GamePlay() {
             // NOTE: Spotify preview URLs are now deprecated
             console.log("Spotify preview URLs are deprecated - we will rely on Deezer for audio playback");
             
-            // Try to enrich all tracks with Deezer immediately rather than filtering first
-            console.log("Enriching all tracks with Deezer preview URLs");
-            
-            // Use Promise.all with a timeout to avoid waiting too long
-            const fetchWithTimeout = async (trackId) => {
-              try {
-                return await Promise.race([
-                  getTrackDetails(trackId, currentToken),
-                  new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error("Timeout")), 5000)
-                  ),
-                ]);
-              } catch (e) {
-                console.log(`Fetch timed out or failed for track ${trackId}`);
-                return null;
-              }
-            };
+            // IMPORTANT CHANGE: Always try to enrich all tracks with Deezer
+            console.log("Enriching all tracks with Deezer preview URLs BEFORE filtering");
             
             try {
               // Try to enrich all tracks with Deezer preview URLs
-              const tracksToTry = tracks.slice(0, 15); // Limit to 15 tracks to process
+              // Take more tracks to increase chances of finding ones with preview URLs
+              const tracksToTry = tracks.slice(0, 20); // Increased from 15 to 20 tracks to process
+              console.log(`Attempting to enrich ${tracksToTry.length} tracks with Deezer`);
+              
+              // Use enrichTracksWithDeezerPreviews to get Deezer previews
               const deezerEnrichedTracks = await enrichTracksWithDeezerPreviews(tracksToTry);
               
               // Filter tracks that now have preview URLs
               const validDeezerTracks = deezerEnrichedTracks.filter(
                 (track) => track.previewUrl
               );
+              
               console.log(
-                `Found ${validDeezerTracks.length} tracks with Deezer preview URLs`
+                `Found ${validDeezerTracks.length} tracks with Deezer preview URLs out of ${deezerEnrichedTracks.length} processed`
               );
               
-              if (validDeezerTracks.length >= 3) {
-                console.log("Using tracks with Deezer preview URLs");
+              if (validDeezerTracks.length >= 2) {
+                console.log("Using tracks with Deezer preview URLs as they're available");
                 tracks = validDeezerTracks;
+                console.log("Sample enriched track:", JSON.stringify({
+                  title: tracks[0].songTitle,
+                  preview: tracks[0].previewUrl?.substring(0, 30) + '...',
+                  source: 'Deezer'
+                }));
               } else {
-                console.log("Not enough tracks with Deezer preview URLs, using available songs anyway");
-                // Use whatever tracks we have, even without preview URLs
-                // The host-only playback model will handle this
-                tracks = tracks.slice(0, 15);
+                // If we don't have enough tracks with preview URLs, 
+                // still use whatever we got from Deezer (even if just 1)
+                console.log("Not enough tracks with Deezer preview URLs, using what we have");
+                tracks = validDeezerTracks.length > 0 ? validDeezerTracks : deezerEnrichedTracks.slice(0, 10);
               }
             } catch (deezerError) {
               console.error(
@@ -403,6 +463,14 @@ export default function GamePlay() {
               // Still use the tracks we have
               console.log("Using available tracks despite Deezer error");
               tracks = tracks.slice(0, 15);
+            }
+
+            // This flag helps debug whether tracks are being enriched properly
+            const hasPreviewUrls = tracks.some(track => !!track.previewUrl);
+            console.log(`Tracks now have preview URLs: ${hasPreviewUrls ? 'YES' : 'NO'}`);
+            if (hasPreviewUrls) {
+              const previewCount = tracks.filter(track => !!track.previewUrl).length;
+              console.log(`${previewCount}/${tracks.length} tracks have preview URLs`);
             }
 
             // Add additional data fields as needed
@@ -480,6 +548,7 @@ export default function GamePlay() {
       }
 
       console.log(`Using ${tracks.length} tracks for the game`);
+      console.log(`Tracks with preview URLs: ${tracks.filter(t => !!t.previewUrl).length}/${tracks.length}`);
 
       // Process the tracks for the game
       const processedSongs = tracks.slice(0, 15).map((track) => ({
@@ -492,6 +561,21 @@ export default function GamePlay() {
       setIsLoading(false);
       setGameStage("playing");
       setHasFetchedSongs(true);
+      
+      // If we're in multiplayer, ensure we're sending tracks with preview URLs to the server
+      if (isMultiplayer && emit) {
+        const tracksWithPreviews = processedSongs.filter(track => !!track.previewUrl);
+        if (tracksWithPreviews.length > 0) {
+          console.log(`[TRACK_SYNC] Sending ${tracksWithPreviews.length} tracks with preview URLs to server`);
+          // Only send tracks that have preview URLs to avoid server using mock tracks
+          return tracksWithPreviews;
+        } else {
+          console.warn('[TRACK_SYNC] No tracks with preview URLs to send to server!');
+          return processedSongs;
+        }
+      }
+      
+      return processedSongs;
     };
 
     // Only fetch songs once and after auth is initialized
@@ -768,6 +852,9 @@ export default function GamePlay() {
       if (isHost) {
         console.log(`Requesting next round for game ${gameId}`);
         
+        // IMPORTANT: Don't reset played songs in multiplayer mode
+        // Let the server handle song selection
+        
         // Request server to advance to next round with minimal data
         sendNextRound(gameId);
       } else {
@@ -856,6 +943,27 @@ export default function GamePlay() {
       if (data.gameId !== gameId) return;
       
       console.log(`[TRACK_SYNC] Received consolidated playlist with ${data.playlist.length} tracks`);
+      
+      // Count the number of mock tracks
+      const mockTracks = data.playlist.filter(item => 
+        item.track.songTitle === "Bohemian Rhapsody" || 
+        item.track.songTitle === "Don't Stop Believin'" || 
+        item.track.songTitle === "Billie Jean"
+      );
+      
+      if (mockTracks.length > 0) {
+        console.warn(`[TRACK_SYNC] WARNING: Received ${mockTracks.length} mock tracks from server!`);
+        console.warn(`[TRACK_SYNC] This is happening because the server couldn't find any tracks with preview URLs`);
+        console.warn(`[TRACK_SYNC] Try enriching tracks with Deezer before sending to server`);
+      }
+      
+      // Log all tracks for debugging purposes
+      console.log('[TRACK_SYNC] Available tracks in playlist:');
+      data.playlist.forEach((item, index) => {
+        const isMock = item.track.isMockTrack ? '[MOCK]' : '[USER]';
+        console.log(`[TRACK_SYNC] ${index+1}. ${isMock} "${item.track.songTitle}" by ${Array.isArray(item.track.songArtists) ? item.track.songArtists.join(', ') : item.track.songArtists}`);
+        console.log(`[TRACK_SYNC]    Owner: ${item.owner.username}, Preview URL: ${item.track.previewUrl ? 'Available' : 'Missing'}`);
+      });
       
       // Store the consolidated playlist
       setConsolidatedPlaylist(data.playlist);
