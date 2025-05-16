@@ -254,7 +254,7 @@ io.on('connection', (socket) => {
   });
 
   // Handle joining a game
-  socket.on('join_game', (data) => {
+  socket.on('join_game', async (data) => {
     const { gameId, username, profilePicture, playerTracks } = data;
 
 
