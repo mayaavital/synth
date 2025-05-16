@@ -20,7 +20,7 @@ import { useWebSocket, EVENTS } from "../utils/useWebSocket";
 import QRCode from 'react-native-qrcode-svg';
 // Import Spotify utilities
 import getEnv from "../utils/env";
-import { getMyRecentlyPlayedTracks } from "../utils/apiOptions";
+import { getMyRecentlyPlayedTracks, getSpotifyUserProfile } from "../utils/apiOptions";
 import useSpotifyAuth from "../utils/useSpotifyAuth";
 
 export default function MultiplayerGame() {
@@ -66,6 +66,9 @@ export default function MultiplayerGame() {
   // UI state
   const [showServerInput, setShowServerInput] = useState(false);
   const [showQrCode, setShowQrCode] = useState(false);
+
+  // Add state for user profile
+  const [userProfile, setUserProfile] = useState(null);
 
   // Load saved username from storage
   useEffect(() => {
@@ -314,6 +317,30 @@ export default function MultiplayerGame() {
     }
   }, [connect, serverUrl]);
 
+  // Load Spotify profile when token is available
+  useEffect(() => {
+    const fetchSpotifyProfile = async () => {
+      if (!spotifyToken) return;
+      
+      try {
+        const profile = await getSpotifyUserProfile(spotifyToken);
+        if (profile) {
+          console.log('Fetched Spotify profile:', profile.displayName);
+          setUserProfile(profile);
+          
+          // Optionally set username from Spotify if not set by user
+          if (!username && profile.displayName) {
+            setUsername(profile.displayName);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching Spotify profile:', error);
+      }
+    };
+    
+    fetchSpotifyProfile();
+  }, [spotifyToken, username]);
+
   // Create a new game
   const handleCreateGame = useCallback(async () => {
     if (!username.trim()) {
@@ -342,7 +369,17 @@ export default function MultiplayerGame() {
         gameName,
         hostUsername: username,
         maxRounds: 3,
+        hostTracks: playerTracks,
+        tracks: playerTracks,
+        // Add profile information
+        profileInfo: userProfile ? {
+          displayName: userProfile.displayName,
+          profilePicture: userProfile.profilePicture,
+          spotifyId: userProfile.id
+        } : null
       };
+      
+      console.log(`Creating game with ${playerTracks.length} host tracks and profile info: ${userProfile ? 'Yes' : 'No'}`);
       
       createGame(gameData);
     } catch (err) {
@@ -350,7 +387,7 @@ export default function MultiplayerGame() {
       setError(`Failed to create game: ${err.message}`);
       setLoading(false);
     }
-  }, [username, gameName, createGame, fetchRecentTracks]);
+  }, [username, gameName, createGame, fetchRecentTracks, userProfile]);
 
   // Join an existing game
   const handleJoinGame = useCallback(async () => {
@@ -394,8 +431,14 @@ export default function MultiplayerGame() {
                   await connect(serverUrl || undefined);
                   // Wait a moment for the connection to stabilize
                   setTimeout(() => {
-                    // Try joining again with tracks
-                    const joinSuccess = joinGame(joinCode, username, null, playerTracks);
+                    // Try joining again with tracks and profile
+                    const profileInfo = userProfile ? {
+                      displayName: userProfile.displayName,
+                      profilePicture: userProfile.profilePicture,
+                      spotifyId: userProfile.id
+                    } : null;
+                    
+                    const joinSuccess = joinGame(joinCode, username, profileInfo, playerTracks);
                     if (joinSuccess) {
                       setGameId(joinCode);
                     } else {
@@ -416,7 +459,16 @@ export default function MultiplayerGame() {
       
       // We're connected, try to join with tracks
       console.log(`Attempting to join game ${joinCode} as ${username} with ${playerTracks.length} tracks...`);
-      const joinSuccess = joinGame(joinCode, username, null, playerTracks);
+      
+      // Add profile information to join request
+      const profileInfo = userProfile ? {
+        displayName: userProfile.displayName,
+        profilePicture: userProfile.profilePicture,
+        spotifyId: userProfile.id
+      } : null;
+      
+      console.log('Including profile info in join request:', profileInfo);
+      const joinSuccess = joinGame(joinCode, username, profileInfo, playerTracks);
       
       if (joinSuccess) {
         setGameId(joinCode);
@@ -437,7 +489,7 @@ export default function MultiplayerGame() {
       setError(`Failed to join game: ${err.message}`);
       setLoading(false);
     }
-  }, [username, joinCode, joinGame, isConnected, connect, serverUrl, connectionStep, loading, fetchRecentTracks]);
+  }, [username, joinCode, joinGame, isConnected, connect, serverUrl, connectionStep, loading, fetchRecentTracks, userProfile]);
 
   // Mark player as ready
   const handleReady = useCallback(() => {
@@ -493,6 +545,8 @@ export default function MultiplayerGame() {
       }
       
       // If we have a token, use it
+      let tracksToProcess = [];
+      
       if (token) {
         try {
           console.log('Using token to fetch recently played tracks');
@@ -500,7 +554,7 @@ export default function MultiplayerGame() {
           
           if (tracks && tracks.length > 0) {
             // Convert to the format expected by the multiplayer game
-            const processedTracks = tracks.slice(0, 5).map(track => ({
+            tracksToProcess = tracks.slice(0, 5).map(track => ({
               songTitle: track.songTitle,
               songArtists: track.songArtists.map(artist => artist.name || artist),
               albumName: track.albumName,
@@ -512,8 +566,7 @@ export default function MultiplayerGame() {
               duration: track.duration
             }));
             
-            console.log(`Found ${processedTracks.length} valid tracks for multiplayer`);
-            return processedTracks;
+            console.log(`Found ${tracksToProcess.length} valid tracks for multiplayer`);
           }
         } catch (apiError) {
           console.error('Error calling Spotify API:', apiError);
@@ -522,23 +575,44 @@ export default function MultiplayerGame() {
         console.log('No valid Spotify token available');
       }
       
-      // Fallback to mock data if API call fails or returns no tracks
-      console.log('Using mock tracks for multiplayer');
-      const mockTracks = [];
-      for (let i = 1; i <= 5; i++) {
-        mockTracks.push({
-          songTitle: `Test Song ${i}`,
-          songArtists: ['Test Artist'],
-          albumName: 'Test Album',
-          imageUrl: 'https://via.placeholder.com/300',
-          previewUrl: 'https://p.scdn.co/mp3-preview/your-preview-url',
-          uri: `spotify:track:mock${i}`,
-          trackId: `mock${i}`,
-          duration: 30000
-        });
+      // If we didn't get any tracks from Spotify, use mock tracks
+      if (!tracksToProcess.length) {
+        console.log('Using mock tracks for multiplayer');
+        tracksToProcess = [];
+        for (let i = 1; i <= 5; i++) {
+          tracksToProcess.push({
+            songTitle: `Test Song ${i}`,
+            songArtists: ['Test Artist'],
+            albumName: 'Test Album',
+            imageUrl: 'https://via.placeholder.com/300',
+            previewUrl: null, // Set to null to force Deezer enrichment
+            uri: `spotify:track:mock${i}`,
+            trackId: `mock${i}`,
+            duration: 30000
+          });
+        }
       }
       
-      return mockTracks;
+      // IMPORTANT: Always enrich tracks with Deezer preview URLs
+      console.log('Enriching all tracks with Deezer preview URLs before sending to server');
+      
+      try {
+        // Import the enrichTracksWithDeezerPreviews function
+        const { enrichTracksWithDeezerPreviews } = require('../utils/deezerApi');
+        
+        // Enrich all tracks with Deezer, even if they already have preview URLs
+        const enrichedTracks = await enrichTracksWithDeezerPreviews(tracksToProcess);
+        
+        // Log the enrichment results
+        const tracksWithPreviewUrls = enrichedTracks.filter(track => !!track.previewUrl).length;
+        console.log(`After Deezer enrichment: ${tracksWithPreviewUrls}/${enrichedTracks.length} tracks have preview URLs`);
+        
+        return enrichedTracks;
+      } catch (deezerError) {
+        console.error('Error enriching tracks with Deezer:', deezerError);
+        // Continue with original tracks if enrichment fails
+        return tracksToProcess;
+      }
     } catch (error) {
       console.error('Error fetching recent tracks:', error);
       setError(`Could not fetch your tracks: ${error.message}`);

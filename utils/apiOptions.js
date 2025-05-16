@@ -271,3 +271,36 @@ export const getTrackDetails = async (trackId, token) => {
     return null;
   }
 };
+
+// Add this new function to get user profile
+export const getSpotifyUserProfile = async (token) => {
+  try {
+    const response = await fetch(`https://api.spotify.com/v1/me`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error.message || 'Failed to fetch user profile');
+    }
+
+    const data = await response.json();
+    
+    // Return formatted profile data
+    return {
+      id: data.id,
+      displayName: data.display_name || data.id,
+      profilePicture: data.images && data.images.length > 0 ? data.images[0].url : null,
+      email: data.email,
+      spotifyUri: data.uri,
+      country: data.country,
+      product: data.product  // premium, free, etc.
+    };
+  } catch (error) {
+    console.error('Error fetching Spotify user profile:', error);
+    return null;
+  }
+};

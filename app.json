@@ -15,6 +15,10 @@
     "assetBundlePatterns": [
       "**/*"
     ],
+    "packagerOpts": {
+      "config": "metro.config.js",
+      "sourceExts": ["js", "jsx", "ts", "tsx", "json"]
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.csprout3.synth",
