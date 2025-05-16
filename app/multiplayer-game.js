@@ -20,7 +20,7 @@ import { useWebSocket, EVENTS } from "../utils/useWebSocket";
 import QRCode from 'react-native-qrcode-svg';
 // Import Spotify utilities
 import getEnv from "../utils/env";
-import { getMyRecentlyPlayedTracks } from "../utils/apiOptions";
+import { getMyRecentlyPlayedTracks, getSpotifyUserProfile } from "../utils/apiOptions";
 import useSpotifyAuth from "../utils/useSpotifyAuth";
 
 export default function MultiplayerGame() {
@@ -66,6 +66,9 @@ export default function MultiplayerGame() {
   // UI state
   const [showServerInput, setShowServerInput] = useState(false);
   const [showQrCode, setShowQrCode] = useState(false);
+
+  // Add state for user profile
+  const [userProfile, setUserProfile] = useState(null);
 
   // Load saved username from storage
   useEffect(() => {
@@ -314,6 +317,30 @@ export default function MultiplayerGame() {
     }
   }, [connect, serverUrl]);
 
+  // Load Spotify profile when token is available
+  useEffect(() => {
+    const fetchSpotifyProfile = async () => {
+      if (!spotifyToken) return;
+      
+      try {
+        const profile = await getSpotifyUserProfile(spotifyToken);
+        if (profile) {
+          console.log('Fetched Spotify profile:', profile.displayName);
+          setUserProfile(profile);
+          
+          // Optionally set username from Spotify if not set by user
+          if (!username && profile.displayName) {
+            setUsername(profile.displayName);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching Spotify profile:', error);
+      }
+    };
+    
+    fetchSpotifyProfile();
+  }, [spotifyToken, username]);
+
   // Create a new game
   const handleCreateGame = useCallback(async () => {
     if (!username.trim()) {
@@ -342,7 +369,17 @@ export default function MultiplayerGame() {
         gameName,
         hostUsername: username,
         maxRounds: 3,
+        hostTracks: playerTracks,
+        tracks: playerTracks,
+        // Add profile information
+        profileInfo: userProfile ? {
+          displayName: userProfile.displayName,
+          profilePicture: userProfile.profilePicture,
+          spotifyId: userProfile.id
+        } : null
       };
+      
+      console.log(`Creating game with ${playerTracks.length} host tracks and profile info: ${userProfile ? 'Yes' : 'No'}`);
       
       createGame(gameData);
     } catch (err) {
@@ -350,7 +387,7 @@ export default function MultiplayerGame() {
       setError(`Failed to create game: ${err.message}`);
       setLoading(false);
     }
-  }, [username, gameName, createGame, fetchRecentTracks]);
+  }, [username, gameName, createGame, fetchRecentTracks, userProfile]);
 
   // Join an existing game
   const handleJoinGame = useCallback(async () => {
@@ -394,8 +431,14 @@ export default function MultiplayerGame() {
                   await connect(serverUrl || undefined);
                   // Wait a moment for the connection to stabilize
                   setTimeout(() => {
-                    // Try joining again with tracks
-                    const joinSuccess = joinGame(joinCode, username, null, playerTracks);
+                    // Try joining again with tracks and profile
+                    const profileInfo = userProfile ? {
+                      displayName: userProfile.displayName,
+                      profilePicture: userProfile.profilePicture,
+                      spotifyId: userProfile.id
+                    } : null;
+                    
+                    const joinSuccess = joinGame(joinCode, username, profileInfo, playerTracks);
                     if (joinSuccess) {
                       setGameId(joinCode);
                     } else {
@@ -416,7 +459,16 @@ export default function MultiplayerGame() {
       
       // We're connected, try to join with tracks
       console.log(`Attempting to join game ${joinCode} as ${username} with ${playerTracks.length} tracks...`);
-      const joinSuccess = joinGame(joinCode, username, null, playerTracks);
+      
+      // Add profile information to join request
+      const profileInfo = userProfile ? {
+        displayName: userProfile.displayName,
+        profilePicture: userProfile.profilePicture,
+        spotifyId: userProfile.id
+      } : null;
+      
+      console.log('Including profile info in join request:', profileInfo);
+      const joinSuccess = joinGame(joinCode, username, profileInfo, playerTracks);
       
       if (joinSuccess) {
         setGameId(joinCode);
@@ -437,7 +489,7 @@ export default function MultiplayerGame() {
       setError(`Failed to join game: ${err.message}`);
       setLoading(false);
     }
-  }, [username, joinCode, joinGame, isConnected, connect, serverUrl, connectionStep, loading, fetchRecentTracks]);
+  }, [username, joinCode, joinGame, isConnected, connect, serverUrl, connectionStep, loading, fetchRecentTracks, userProfile]);
 
   // Mark player as ready
   const handleReady = useCallback(() => {

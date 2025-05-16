@@ -1711,6 +1711,16 @@ export default function GamePlay() {
     }
   }, [isMultiplayer, players]);
 
+  // After players are updated, log their structure for debugging
+  useEffect(() => {
+    if (players.length > 0 && isMultiplayer) {
+      console.log('[TRACK_SYNC] Player structure debug:');
+      console.log('First player object:', players[0]);
+      console.log('Player IDs:', players.map(p => p.id).join(', '));
+      console.log('Player usernames:', players.map(p => p.username).join(', '));
+    }
+  }, [players, isMultiplayer]);
+
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container}>
