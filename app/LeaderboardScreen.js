@@ -23,7 +23,31 @@ const LeaderboardScreen = ({
   
   // Update displayPoints whenever playerPoints or players change
   useEffect(() => {
-    console.log("Raw player points in leaderboard:", playerPoints);
+    console.log("[TRACK_SYNC] Raw player points in leaderboard:", playerPoints);
+    
+    // Check if playerPoints has a special scoresWithUsernames or playerMappings property
+    if (playerPoints.scoresWithUsernames) {
+      console.log("[TRACK_SYNC] Using scoresWithUsernames directly:", playerPoints.scoresWithUsernames);
+      setDisplayPoints(playerPoints.scoresWithUsernames);
+      return;
+    }
+    
+    if (playerPoints.playerMappings) {
+      console.log("[TRACK_SYNC] Using playerMappings to map scores");
+      const newDisplayPoints = {};
+      
+      // Map socket IDs to usernames using the provided mapping
+      Object.entries(playerPoints.playerMappings).forEach(([username, socketId]) => {
+        if (playerPoints.scores && playerPoints.scores[socketId] !== undefined) {
+          newDisplayPoints[username] = playerPoints.scores[socketId];
+          console.log(`[TRACK_SYNC] Mapped ${socketId} to ${username} with score ${playerPoints.scores[socketId]}`);
+        }
+      });
+      
+      console.log("[TRACK_SYNC] Final mapped display points:", newDisplayPoints);
+      setDisplayPoints(newDisplayPoints);
+      return;
+    }
     
     // Create a map from socket ID to player object
     const playerMap = {};
@@ -32,7 +56,7 @@ const LeaderboardScreen = ({
     const socketIdMap = {}; // Direct socket ID to username mapping
     
     // Log raw player data for debugging
-    console.log("Raw player data:", players.map(p => p && {id: p.id, username: p.username}));
+    console.log("[TRACK_SYNC] Raw player data:", players.map(p => p && {id: p.id, username: p.username}));
     
     players.filter(player => player !== undefined).forEach(player => {
       if (player.id) {
@@ -54,9 +78,9 @@ const LeaderboardScreen = ({
       }
     });
     
-    console.log("Player ID mapping:", Object.keys(playerMap).join(", "));
-    console.log("Username mapping:", Object.keys(usernameMap).join(", "));
-    console.log("Socket ID mapping:", JSON.stringify(socketIdMap));
+    console.log("[TRACK_SYNC] Player ID mapping:", Object.keys(playerMap).join(", "));
+    console.log("[TRACK_SYNC] Username mapping:", Object.keys(usernameMap).join(", "));
+    console.log("[TRACK_SYNC] Socket ID mapping:", JSON.stringify(socketIdMap));
     
     // Create display points mapping
     const newDisplayPoints = {};
@@ -66,19 +90,19 @@ const LeaderboardScreen = ({
       // Look for points by player's ID
       if (player.id && playerPoints[player.id] !== undefined) {
         newDisplayPoints[player.username] = playerPoints[player.id];
-        console.log(`Found points for player by ID: ${player.username} = ${playerPoints[player.id]}`);
+        console.log(`[TRACK_SYNC] Found points for player by ID: ${player.username} = ${playerPoints[player.id]}`);
       }
       
       // Also look for points by username directly
       if (playerPoints[player.username] !== undefined) {
         newDisplayPoints[player.username] = playerPoints[player.username];
-        console.log(`Found points for player by username: ${player.username} = ${playerPoints[player.username]}`);
+        console.log(`[TRACK_SYNC] Found points for player by username: ${player.username} = ${playerPoints[player.username]}`);
       }
     });
     
     // If we have any unmapped scores, try additional approaches
     if (Object.keys(newDisplayPoints).length < Object.keys(playerPoints).length) {
-      console.log("Attempting to map remaining scores...");
+      console.log("[TRACK_SYNC] Attempting to map remaining scores...");
       
       // Try to map any socket IDs
       Object.keys(playerPoints).forEach(pointKey => {
@@ -91,7 +115,7 @@ const LeaderboardScreen = ({
           const playerWithId = players.find(p => p?.id === pointKey);
           if (playerWithId?.username) {
             newDisplayPoints[playerWithId.username] = playerPoints[pointKey];
-            console.log(`Mapped score from socket ID ${pointKey} to username ${playerWithId.username}`);
+            console.log(`[TRACK_SYNC] Mapped score from socket ID ${pointKey} to username ${playerWithId.username}`);
             return;
           }
           
@@ -99,72 +123,25 @@ const LeaderboardScreen = ({
           // First player's socket ID -> first player's username
           if (Object.keys(newDisplayPoints).length === 0 && players.length > 0 && players[0]?.username) {
             newDisplayPoints[players[0].username] = playerPoints[pointKey];
-            console.log(`Position-based fallback mapping: ${pointKey} -> ${players[0].username}`);
+            console.log(`[TRACK_SYNC] Position-based fallback mapping: ${pointKey} -> ${players[0].username}`);
             return;
           }
           
           // Second player's socket ID -> second player's username
           if (Object.keys(newDisplayPoints).length === 1 && players.length > 1 && players[1]?.username) {
             newDisplayPoints[players[1].username] = playerPoints[pointKey];
-            console.log(`Position-based fallback mapping: ${pointKey} -> ${players[1].username}`);
+            console.log(`[TRACK_SYNC] Position-based fallback mapping: ${pointKey} -> ${players[1].username}`);
             return;
           }
           
           // If all else fails, just keep the socket ID as the key
           newDisplayPoints[pointKey] = playerPoints[pointKey];
-          console.log(`Keeping socket ID as key: ${pointKey} = ${playerPoints[pointKey]}`);
+          console.log(`[TRACK_SYNC] Keeping socket ID as key: ${pointKey} = ${playerPoints[pointKey]}`);
         }
       });
     }
     
-    // If we still have fewer mapped points than total points, try to match by position
-    if (Object.keys(newDisplayPoints).length < Object.keys(playerPoints).length && players.length > 0) {
-      console.log("Using positional fallback for remaining points...");
-      
-      // Get unmapped point keys
-      const unmappedKeys = Object.keys(playerPoints).filter(key => 
-        !Object.keys(newDisplayPoints).includes(key) && 
-        !players.some(p => p?.username === key)
-      );
-      
-      // Get players without points
-      const unmappedPlayers = players.filter(p => 
-        p?.username && !Object.keys(newDisplayPoints).includes(p.username)
-      );
-      
-      // Map them in order
-      unmappedKeys.forEach((key, index) => {
-        if (index < unmappedPlayers.length) {
-          const player = unmappedPlayers[index];
-          newDisplayPoints[player.username] = playerPoints[key];
-          console.log(`Positional mapping: ${key} -> ${player.username} = ${playerPoints[key]}`);
-        }
-      });
-    }
-    
-    // If we still have no mappings, use a really aggressive approach by usernames
-    if (Object.keys(newDisplayPoints).length === 0 && players.length > 0) {
-      console.log("Using aggressive username-only mapping...");
-      
-      // Make a copy of players that we can sort and manipulate
-      const sortedPlayers = [...players].filter(p => p?.username);
-      
-      // Sort point keys by value (highest first)
-      const sortedPointKeys = Object.keys(playerPoints).sort((a, b) => 
-        playerPoints[b] - playerPoints[a]
-      );
-      
-      // Map in order of highest score
-      sortedPointKeys.forEach((key, index) => {
-        if (index < sortedPlayers.length) {
-          const player = sortedPlayers[index];
-          newDisplayPoints[player.username] = playerPoints[key];
-          console.log(`Score-based mapping: ${key} -> ${player.username} = ${playerPoints[key]}`);
-        }
-      });
-    }
-    
-    console.log("Final display points:", newDisplayPoints);
+    console.log("[TRACK_SYNC] Final display points:", newDisplayPoints);
     setDisplayPoints(newDisplayPoints);
   }, [playerPoints, players]);
 

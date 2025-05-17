@@ -35,8 +35,9 @@ import { useWebSocket, EVENTS } from "../utils/useWebSocket";
 import LeaderboardScreen from './LeaderboardScreen';
 
 const ALBUM_ID = "2noRn2Aes5aoNVsU6iWThc";
-const ROUNDS_TOTAL = 2;
-const MIN_PLAY_DURATION = 0; // Was 15000, now allow voting immediately
+const MIN_PLAY_DURATION = 8000; // 8 seconds
+const DEFAULT_ROUNDS = 3; // Default number of rounds if server doesn't provide a value
+const MAX_SYNC_HISTORY = 10; // Number of trace IDs to keep track of
 
 // Format time helper function
 const formatTime = (milliseconds) => {
@@ -73,11 +74,10 @@ export default function GamePlay() {
 
   // Track the last few trace IDs we've received to avoid infinite sync loops
   const lastSyncTraceIds = useRef([]);
-  const MAX_SYNC_HISTORY = 5;
-  
+  const SYNC_THROTTLE_MS = 3000; // Only process force_sync events at most every 3 seconds
+
   // Also track when we processed each sync to add time-based throttling
   const lastSyncTimestamp = useRef(0);
-  const SYNC_THROTTLE_MS = 3000; // Only process force_sync events at most every 3 seconds
 
   // Mock song data to fallback on if Spotify API is unavailable
   const mockSongs = [
@@ -130,6 +130,8 @@ export default function GamePlay() {
   const [hasFetchedSongs, setHasFetchedSongs] = useState(false);
   // NEW: Add state for the consolidated playlist
   const [consolidatedPlaylist, setConsolidatedPlaylist] = useState([]);
+  // NEW: Add state for max rounds from server
+  const [maxRounds, setMaxRounds] = useState(DEFAULT_ROUNDS);
 
   // Audio playback state variables
   const [sound, setSound] = useState(null);
@@ -833,6 +835,10 @@ export default function GamePlay() {
     setSelectedPlayer(null);
     setShowVoteResult(false);
     setCanVote(false);
+    
+    // Reset vote tracking state
+    setPendingVotes({});
+    setAllVotesCast(false);
 
     // Stop current playback
     if (sound) {
@@ -867,7 +873,7 @@ export default function GamePlay() {
     const nextRound = currentRound + 1;
     setCurrentRound(nextRound);
 
-    if (nextRound > ROUNDS_TOTAL) {
+    if (nextRound > maxRounds) {
       console.log("Game completed, showing results");
       setGameStage("results");
       return;
@@ -944,6 +950,12 @@ export default function GamePlay() {
       
       console.log(`[TRACK_SYNC] Received consolidated playlist with ${data.playlist.length} tracks`);
       
+      // Update maxRounds from server if provided
+      if (data.maxRounds) {
+        console.log(`[TRACK_SYNC] Server configured for ${data.maxRounds} rounds`);
+        setMaxRounds(data.maxRounds);
+      }
+      
       // Count the number of mock tracks
       const mockTracks = data.playlist.filter(item => 
         item.track.songTitle === "Bohemian Rhapsody" || 
@@ -999,8 +1011,19 @@ export default function GamePlay() {
         setIsLoading(false);
       }
       
+      // Check for maxRounds data
+      if (data.maxRounds) {
+        console.log(`[TRACK_SYNC] Server indicated max rounds: ${data.maxRounds}`);
+        setMaxRounds(data.maxRounds);
+      }
+      
       setCurrentRound(data.roundNumber);
       setGameStage("playing");
+      
+      // Reset vote tracking for new round
+      console.log(`[TRACK_SYNC] Resetting vote tracking for round ${data.roundNumber}`);
+      setPendingVotes({});
+      setAllVotesCast(false);
       
       // Set up the song for this round
       if (data.song) {
@@ -1052,16 +1075,16 @@ export default function GamePlay() {
     const playerVotedCleanup = on(EVENTS.PLAYER_VOTED, (data) => {
       if (data.gameId !== gameId) return;
       
-      console.log(`[TRACK_SYNC] Player voted event:`, JSON.stringify(data));
+      // Extract player information
+      const votedPlayerId = data.player?.id;
+      const votedPlayerUsername = data.player?.username;
       
-      // Extract the player ID, ensuring it's a string for consistent comparison
-      const votedPlayerId = String(data.player?.id || data.playerId || '');
-      const votedPlayerName = data.player?.username || 'unknown';
+      console.log(`[TRACK_SYNC] Player voted event:`, data);
+      console.log(`[TRACK_SYNC] Player ${votedPlayerUsername} (ID: ${votedPlayerId}) voted for round ${data.round}`);
       
-      console.log(`[TRACK_SYNC] Player ${votedPlayerName} (ID: ${votedPlayerId}) voted`);
-      
-      if (!votedPlayerId) {
-        console.warn('[TRACK_SYNC] Missing player ID in vote data');
+      // Ensure we're tracking for the current round
+      if (data.round !== currentRound) {
+        console.log(`[TRACK_SYNC] Ignoring vote for round ${data.round}, we're on round ${currentRound}`);
         return;
       }
       
@@ -1072,19 +1095,25 @@ export default function GamePlay() {
           [votedPlayerId]: true
         };
         
+        if (votedPlayerUsername) {
+          // Also track by username for redundancy
+          newPendingVotes[votedPlayerUsername] = true;
+        }
+        
         // Check if this completes all votes
-        const votedCount = Object.keys(newPendingVotes).length;
-        const totalPlayers = players.length;
+        const votedCount = Object.keys(newPendingVotes).filter(key => 
+          // Filter out username entries to avoid double counting
+          !players.some(p => p?.username === key)
+        ).length;
         
-        console.log(`[TRACK_SYNC] Vote progress: ${votedCount}/${totalPlayers} players have voted`);
+        const totalPlayers = players.filter(p => p !== undefined).length;
         
-        // If all players have voted or the server indicates voting is complete
-        if (data.allVotesSubmitted || votedCount >= totalPlayers) {
-          console.log('[TRACK_SYNC] All votes submitted, ready for results');
-          // Set allVotesCast after a short delay to ensure we're in the correct component state
-          setTimeout(() => {
-            setAllVotesCast(true);
-          }, 100);
+        // Log vote progress
+        console.log(`[TRACK_SYNC] Vote progress: ${votedCount}/${totalPlayers} votes received for round ${currentRound}`);
+        
+        if (votedCount >= totalPlayers) {
+          console.log(`[TRACK_SYNC] All votes received for round ${currentRound}!`);
+          setAllVotesCast(true);
         }
         
         return newPendingVotes;
@@ -1150,7 +1179,7 @@ export default function GamePlay() {
       setShowVoteResult(true);
       
       // Check if this is the last round
-      const isLastRound = data.isLastRound || (currentRound >= ROUNDS_TOTAL);
+      const isLastRound = data.isLastRound || (currentRound >= maxRounds);
       
       // After a delay, transition to the leaderboard stage
       setTimeout(() => {
@@ -1170,6 +1199,12 @@ export default function GamePlay() {
       
       const traceId = data.roundTraceId || data.song?.roundTraceId;
       const now = Date.now();
+      
+      // Update maxRounds if provided
+      if (data.maxRounds) {
+        console.log(`[TRACK_SYNC] Server indicated max rounds: ${data.maxRounds}`);
+        setMaxRounds(data.maxRounds);
+      }
       
       // Add moderate throttling - reduce from 3 seconds to 1 second
       // This allows faster synchronization while still avoiding spam
@@ -1384,6 +1419,7 @@ export default function GamePlay() {
         players: JSON.stringify(players.map((p) => p.username)),
         returningFromGame: true, // Flag to indicate returning from a game
         gameId: gameId, // Preserve the game ID for continuity
+        isMultiplayer: isMultiplayer.toString(), // Pass the multiplayer flag
       },
     });
   };
@@ -1688,7 +1724,7 @@ export default function GamePlay() {
     // This should work similar to handleNextRound but always progress to the next song
     setGameStage("playing");
     
-    if (currentRound >= ROUNDS_TOTAL) {
+    if (currentRound >= maxRounds) {
       setGameStage("results");
       return;
     }
@@ -1759,7 +1795,7 @@ export default function GamePlay() {
     <SafeAreaView style={styles.container}>
       <View style={styles.gameStatusBar}>
         <Text style={styles.roundText}>
-          Round {currentRound} of {ROUNDS_TOTAL}
+          Round {currentRound} of {maxRounds}
         </Text>
       </View>
 

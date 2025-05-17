@@ -102,6 +102,22 @@ export default function GameLobby() {
   useEffect(() => {
     // Check if we're returning from a game
     const returningFromGame = params.returningFromGame === "true";
+    const isMultiplayer = params.isMultiplayer === "true";
+    
+    // If returning from a multiplayer game, redirect to multiplayer-game screen
+    if (returningFromGame && isMultiplayer) {
+      console.log("Returning from multiplayer game, redirecting to multiplayer lobby");
+      router.replace({
+        pathname: "/multiplayer-game",
+        params: {
+          returningFromGame: "true",
+          gameId: params.gameId,
+          gameName: params.gameName,
+          players: params.players
+        }
+      });
+      return;
+    }
     
     // Parse player usernames from params if available
     let playerUsernames = [];

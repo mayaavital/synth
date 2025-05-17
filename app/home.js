@@ -275,7 +275,7 @@ export default function home() {
 
       {/* Game options */}
       <View style={styles.cardContainer}>
-        <TouchableOpacity
+        {/* <TouchableOpacity
           style={styles.card}
           onPress={() => router.push("/create-game")}
         >
@@ -303,7 +303,7 @@ export default function home() {
               Join a game that your friend already created.
             </Text>
           </View>
-        </TouchableOpacity>
+        </TouchableOpacity> */}
         
         <TouchableOpacity
           style={styles.card}

@@ -34,9 +34,6 @@ const activeGames = {};
 // Add a new data structure to track username to socket ID mappings within each game
 const gameUsernameMappings = {};
 
-// Also add an object to track scores by username
-const gameUsernameScores = {};
-
 // Generate a simple game code (4-6 alphanumeric characters)
 function generateSimpleGameCode() {
   const characters = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Removed similar-looking characters (0/O, 1/I)
@@ -55,58 +52,6 @@ function generateSimpleGameCode() {
 module.exports = {
   generateSimpleGameCode
 };
-
-// Add a new function to broadcast current scores to clients in a game
-function broadcastGameScores(gameId) {
-  const game = activeGames[gameId];
-  if (!game) return;
-  
-  // Construct the scores object with both socket ID and username keys
-  const scoresWithUsernames = {};
-  
-  // First use our persistent username-based scores (most reliable)
-  if (gameUsernameScores[gameId]) {
-    Object.entries(gameUsernameScores[gameId]).forEach(([username, points]) => {
-      scoresWithUsernames[username] = points;
-    });
-  }
-  
-  // Then add any socket-based scores as fallback
-  Object.entries(game.scores || {}).forEach(([playerId, points]) => {
-    const username = getUsernameById(gameId, playerId);
-    if (username) {
-      // Only update if it doesn't exist (to prevent overwriting username-based scores)
-      if (scoresWithUsernames[username] === undefined) {
-        scoresWithUsernames[username] = points;
-      }
-      // Always include the socket ID version for backward compatibility
-      scoresWithUsernames[playerId] = points;
-    } else {
-      // Just keep the original if no username is found
-      scoresWithUsernames[playerId] = points;
-    }
-  });
-  
-  // Ensure all players have a score
-  game.players.forEach(player => {
-    if (player.username && scoresWithUsernames[player.username] === undefined) {
-      scoresWithUsernames[player.username] = 0;
-    }
-    if (scoresWithUsernames[player.id] === undefined) {
-      scoresWithUsernames[player.id] = 0;
-    }
-  });
-  
-  // Send a dedicated score update event
-  io.to(gameId).emit('score_update', {
-    gameId,
-    scores: game.scores,
-    scoresWithUsernames,
-    playerMappings: gameUsernameMappings[gameId] || {}
-  });
-  
-  console.log(`[PLAYER_MAPPING] Broadcast score update to game ${gameId}: ${JSON.stringify(scoresWithUsernames)}`);
-}
 
 // Socket.io connection handler
 io.on('connection', (socket) => {
@@ -140,6 +85,7 @@ io.on('connection', (socket) => {
     const profileInfo = gameData.profileInfo || null;
     
     console.log(`Creating game ${gameId} with host ${hostUsername}, ${hostTracks.length} tracks provided by host`);
+    console.log(`Game configured for max ${gameData.maxRounds || 3} rounds`);
     
     // Create game room with the simple code (not prefixed with "game-")
     activeGames[gameId] = {
@@ -238,13 +184,8 @@ io.on('connection', (socket) => {
     }
     
     // Store/update the socket ID mapping for this username
-    const previousSocketId = gameUsernameMappings[gameId][username];
     gameUsernameMappings[gameId][username] = socket.id;
     console.log(`[PLAYER_MAPPING] Mapped username "${username}" to socket ID ${socket.id} in game ${gameId}`);
-    
-    if (previousSocketId && previousSocketId !== socket.id) {
-      console.log(`[PLAYER_MAPPING] Updated socket ID mapping for ${username} from ${previousSocketId} to ${socket.id}`);
-    }
     
     // Extract profile information if available
     const profilePic = profileInfo?.profilePicture || profilePicture || null;
@@ -302,20 +243,10 @@ io.on('connection', (socket) => {
       
       // Update the player's score entry
       if (activeGames[gameId].scores[oldSocketId] !== undefined) {
-        // Transfer the old socket ID score to the new socket ID
         activeGames[gameId].scores[socket.id] = activeGames[gameId].scores[oldSocketId];
-        console.log(`[PLAYER_MAPPING] Transferred score of ${activeGames[gameId].scores[oldSocketId]} from old socket ${oldSocketId} to new socket ${socket.id}`);
         delete activeGames[gameId].scores[oldSocketId];
       } else {
-        // If we don't have a score for the old socket ID, check our username scores
-        if (gameUsernameScores[gameId] && gameUsernameScores[gameId][username] !== undefined) {
-          // Use the score from our username-based tracking
-          activeGames[gameId].scores[socket.id] = gameUsernameScores[gameId][username];
-          console.log(`[PLAYER_MAPPING] Set score for ${socket.id} to ${gameUsernameScores[gameId][username]} based on username tracking`);
-        } else {
-          // No score found in either place, initialize to 0
-          activeGames[gameId].scores[socket.id] = 0;
-        }
+        activeGames[gameId].scores[socket.id] = 0;
       }
       
       // If this player was the host, update the host reference
@@ -457,7 +388,8 @@ io.on('connection', (socket) => {
               song: songWithTraceId,
               roundTraceId: round1TraceId,
               // Add username mappings to ensure clients can match socket IDs to usernames
-              playerMappings: gameUsernameMappings[gameId] || {}
+              playerMappings: gameUsernameMappings[gameId] || {},
+              maxRounds: game.maxRounds // Include maxRounds in every round_started event
             });
             
             console.log(`[TRACK_SYNC] Round 1 auto-started for game ${gameId}`);
@@ -558,7 +490,8 @@ io.on('connection', (socket) => {
         song: songWithTraceId,
         roundTraceId: round1TraceId,
         // Add username mappings to ensure clients can match socket IDs to usernames
-        playerMappings: gameUsernameMappings[gameId] || {}
+        playerMappings: gameUsernameMappings[gameId] || {},
+        maxRounds: game.maxRounds // Include maxRounds in every round_started event
       });
       
       console.log(`[TRACK_SYNC] Round 1 auto-started for game ${gameId}`);
@@ -765,14 +698,17 @@ io.on('connection', (socket) => {
     const availableTracks = game.consolidatedPlaylist.length;
     const recommendedRounds = Math.min(availableTracks, 10); // Cap at 10 rounds
     
-    // Ensure at least 3 rounds if possible
+    // Ensure at least 3 rounds if possible, respect the configured maxRounds
+    const configuredMaxRounds = game.maxRounds || 3;
+    
     if (availableTracks >= 3) {
-      game.maxRounds = recommendedRounds;
+      // Use the minimum of: available tracks, configured max rounds
+      game.maxRounds = Math.min(recommendedRounds, configuredMaxRounds);
     } else {
       game.maxRounds = availableTracks;
     }
     
-    console.log(`[TRACK_SYNC] Set max rounds to ${game.maxRounds} based on available tracks`);
+    console.log(`[TRACK_SYNC] Set max rounds to ${game.maxRounds} based on available tracks and configured max of ${configuredMaxRounds}`);
     
     // Log the final playlist for debugging
     console.log(`[TRACK_SYNC] Final playlist for game ${gameId} (${game.consolidatedPlaylist.length} tracks):`);
@@ -897,8 +833,10 @@ io.on('connection', (socket) => {
         }
       }
       
-      game.maxRounds = Math.min(totalMockTracksNeeded, 5); // Limit mock games to 5 rounds
-      console.log(`[TRACK_SYNC] Set max rounds to ${game.maxRounds} based on available mock tracks`);
+      // Respect the configured maxRounds
+      const configuredMaxRounds = game.maxRounds || 3;
+      game.maxRounds = Math.min(totalMockTracksNeeded, 5, configuredMaxRounds); // Limit mock games to 5 rounds or configured max
+      console.log(`[TRACK_SYNC] Set max rounds to ${game.maxRounds} based on available mock tracks and configured max of ${configuredMaxRounds}`);
     }
     
     return game.consolidatedPlaylist;
@@ -1169,8 +1107,11 @@ io.on('connection', (socket) => {
       }
     }
 
-    // Make sure we have a valid player ID format to vote for
-    game.votes[socket.id] = targetPlayerId;
+    // Store target player ID and username together for better debugging and validation
+    game.votes[socket.id] = {
+      id: targetPlayerId,
+      username: votedForUsername
+    };
     
     // Log which username is voting for which username (for clearer logs)
     const voterUsername = game.players.find(p => p.id === socket.id)?.username || 'Unknown';
@@ -1189,6 +1130,9 @@ io.on('connection', (socket) => {
       correctPlayerId = roundData.song.assignedToPlayer.id;
       correctPlayerUsername = roundData.song.assignedToPlayer.username;
       console.log(`Found assigned player in roundSongs: ${correctPlayerUsername} (${correctPlayerId})`);
+      
+      // Log complete assigned player data for debugging
+      console.log(`[VOTE_DEBUG] Complete assignedToPlayer data:`, JSON.stringify(roundData.song.assignedToPlayer));
     }
     // Then check consolidated playlist
     else if (game.consolidatedPlaylist && game.consolidatedPlaylist.length > 0) {
@@ -1200,6 +1144,19 @@ io.on('connection', (socket) => {
         correctPlayerId = playlistItem.owner.id;
         correctPlayerUsername = playlistItem.owner.username;
         console.log(`Found owner from consolidated playlist: ${correctPlayerUsername} (${correctPlayerId})`);
+        
+        // Log complete owner data for debugging
+        console.log(`[VOTE_DEBUG] Complete owner data from playlist:`, JSON.stringify(playlistItem.owner));
+      }
+    }
+    
+    // Always try to get the username from the gameUsernameMappings if available
+    if (correctPlayerUsername && gameUsernameMappings[gameId] && !correctPlayerId) {
+      // Look up ID for this username
+      const mappedId = getPlayerIdByUsername(gameId, correctPlayerUsername);
+      if (mappedId) {
+        console.log(`[VOTE_DEBUG] Found ID ${mappedId} for username ${correctPlayerUsername} in mappings`);
+        correctPlayerId = mappedId;
       }
     }
     
@@ -1241,76 +1198,132 @@ io.on('connection', (socket) => {
       }
       
       // Award points for correct guesses ONLY (as requested by user)
-      Object.entries(game.votes).forEach(([voterId, votedForId]) => {
-        // Award points for correct guesses
-        if (String(votedForId) === String(correctPlayerId) && voterId !== correctPlayerId) {
+      Object.entries(game.votes).forEach(([voterId, votedForData]) => {
+        // Extract vote info - handle both object and string formats
+        const votedForId = typeof votedForData === 'object' ? votedForData.id : votedForData;
+        const votedForUsername = typeof votedForData === 'object' ? votedForData.username : null;
+        
+        // Log raw vote data for debugging
+        console.log(`[VOTE_DEBUG] Vote in round ${currentRound}: voter=${voterId}, votedFor=${JSON.stringify(votedForData)}`);
+        console.log(`[VOTE_DEBUG] Correct player: id=${correctPlayerId}, username=${correctPlayerUsername}`);
+        
+        // FIRST ATTEMPT: Direct ID comparison (most reliable)
+        const directIdMatch = String(votedForId) === String(correctPlayerId);
+        
+        // SECOND ATTEMPT: Compare usernames
+        let usernameMatch = false;
+        
+        // Get voter username for logging
+        const voterUsername = getUsernameById(gameId, voterId) || 
+                              game.players.find(p => p.id === voterId)?.username || 
+                              'Unknown';
+                              
+        // Get username of voted-for player
+        const votedForUsernameResolved = votedForUsername || 
+                                      getUsernameById(gameId, votedForId) || 
+                                      game.players.find(p => p.id === votedForId)?.username || 
+                                      'Unknown';
+        
+        // Compare username of voted-for player with correct player username
+        if (correctPlayerUsername && votedForUsernameResolved) {
+          usernameMatch = votedForUsernameResolved === correctPlayerUsername;
+        }
+        
+        console.log(`[VOTE_DEBUG] Match results: directIdMatch=${directIdMatch}, usernameMatch=${usernameMatch}`);
+        
+        // Award point if either matching method succeeds (as long as player isn't voting for themselves)
+        if ((directIdMatch || usernameMatch) && voterId !== correctPlayerId) {
           game.scores[voterId] = (game.scores[voterId] || 0) + 1;
-          
+          console.log("game.scores", game.scores);
           // Add more detailed logging using username mappings
-          const voterUsername = getUsernameById(gameId, voterId) || 'Unknown';
-          const correctUsername = getUsernameById(gameId, correctPlayerId) || 'Unknown';
-          console.log(`[PLAYER_MAPPING] Player "${voterUsername}" earned 1 point for correctly guessing "${correctUsername}"`);
-          
-          // Also track scores by username in our persistent store
-          if (!gameUsernameScores[gameId]) {
-            gameUsernameScores[gameId] = {};
+          console.log(`[PLAYER_MAPPING] Player "${voterUsername}" earned 1 point for correctly guessing "${correctPlayerUsername}" (match type: ${directIdMatch ? 'ID' : 'username'})`);
+        } else {
+          // Log why no point was awarded for debugging
+          if (voterId === correctPlayerId || voterUsername === correctPlayerUsername) {
+            console.log(`[PLAYER_MAPPING] No point for "${voterUsername}": Cannot vote for yourself`);
+          } else if (!directIdMatch && !usernameMatch) {
+            console.log(`[PLAYER_MAPPING] No point for "${voterUsername}": Voted for ${votedForUsernameResolved} but correct was ${correctPlayerUsername}`);
           }
-          
-          // Update username-based score
-          gameUsernameScores[gameId][voterUsername] = (gameUsernameScores[gameId][voterUsername] || 0) + 1;
-          console.log(`[PLAYER_MAPPING] Updated username score: ${voterUsername} now has ${gameUsernameScores[gameId][voterUsername]} points`);
         }
       });
       
-      // Add username mappings to the scores for more consistent display on client side
+      // Create a username-keyed copy of scores for easier client-side handling
       const scoresWithUsernames = {};
       
-      // First, add all scores from our username-based tracking (most reliable)
-      if (gameUsernameScores[gameId]) {
-        Object.entries(gameUsernameScores[gameId]).forEach(([username, points]) => {
-          scoresWithUsernames[username] = points;
-          console.log(`[PLAYER_MAPPING] Using tracked username score: ${username} = ${points}`);
-        });
-      }
-      
-      // Then add scores from the current game state as fallback
+      // Enhanced mapping: build the scoresWithUsernames more carefully
       Object.entries(game.scores).forEach(([playerId, points]) => {
-        // Get the username for this player ID
+        // First try to get the username directly from our mapping
         const username = getUsernameById(gameId, playerId);
+        
         if (username) {
-          // Only update if it doesn't exist or has a lower score (to prevent overwriting)
-          if (scoresWithUsernames[username] === undefined || scoresWithUsernames[username] < points) {
-            scoresWithUsernames[username] = points;
-            console.log(`[PLAYER_MAPPING] Adding socket-based score: ${username} (${playerId}) = ${points}`);
-          }
+          // Create/update an entry with the username as key
+          scoresWithUsernames[username] = points;
           
           // Also keep the socketId version for backward compatibility
           scoresWithUsernames[playerId] = points;
+          
+          console.log(`[TRACK_SYNC] Mapped player ${playerId} to username ${username} with ${points} points`);
         } else {
-          // Just keep the original if no username is found
-          scoresWithUsernames[playerId] = points;
+          // Try to find player in the players list
+          const player = game.players.find(p => p.id === playerId || String(p.id) === String(playerId));
+          
+          if (player && player.username) {
+            scoresWithUsernames[player.username] = points;
+            scoresWithUsernames[playerId] = points;
+            console.log(`[TRACK_SYNC] Found player ${playerId} in players list with username ${player.username}`);
+          } else {
+            // Just keep the original if no username is found
+            scoresWithUsernames[playerId] = points;
+            console.log(`[TRACK_SYNC] No username found for player ${playerId}, keeping original ID`);
+          }
         }
       });
+      
+      // Add a safety check: if we have missing players in the scores, add them with 0 points
+      game.players.forEach(player => {
+        if (player && player.username && scoresWithUsernames[player.username] === undefined) {
+          scoresWithUsernames[player.username] = 0;
+          console.log(`[TRACK_SYNC] Adding missing player ${player.username} with 0 points`);
+        }
+      });
+      
+      console.log(`[TRACK_SYNC] Final scoresWithUsernames:`, scoresWithUsernames);
       
       // Check if this is the last round
       const isLastRound = currentRound >= game.maxRounds;
       
-      // Broadcast vote results with enhanced user mapping
+      // Convert votes to a simplified format for client consumption
+      const simplifiedVotes = {};
+      const votesForDebugging = {}; // More detailed format for debugging
+      
+      Object.entries(game.votes).forEach(([voterId, voteData]) => {
+        // For client consumption (backward compatibility)
+        simplifiedVotes[voterId] = typeof voteData === 'object' ? voteData.id : voteData;
+        
+        // For debugging - preserve full structure
+        votesForDebugging[voterId] = {
+          id: typeof voteData === 'object' ? voteData.id : voteData,
+          username: typeof voteData === 'object' ? voteData.username : null,
+          voterUsername: getUsernameById(gameId, voterId) || null
+        };
+      });
+      
+      console.log(`[VOTE_DEBUG] Final votes for round ${currentRound}:`, JSON.stringify(votesForDebugging));
+      console.log(`[VOTE_DEBUG] Final scores:`, JSON.stringify(game.scores));
+      
+      // Send results to all clients
       io.to(gameId).emit('vote_result', {
         gameId,
         round: currentRound,
-        votes: game.votes,
+        votes: simplifiedVotes,
+        scores: game.scores,
         correctPlayerId,
         correctPlayerUsername,
-        scores: game.scores,
-        scoresWithUsernames, // Add the username-keyed scores for better client handling
         isLastRound,
-        // Add player mappings to help clients display correct names
-        playerMappings: gameUsernameMappings[gameId] || {}
+        scoresWithUsernames,
+        ...getPlayerMappings(gameId),  // Add comprehensive mappings
+        maxRounds: game.maxRounds // Include maxRounds in vote_result
       });
-      
-      // Also broadcast a dedicated score update to ensure clients have the latest scores
-      broadcastGameScores(gameId);
       
       // Reset votes for next round - extra reset to ensure votes are cleared
       game.votes = {};
@@ -1441,7 +1454,8 @@ io.on('connection', (socket) => {
       roundTraceId: newRoundTraceId,
       votingReset: true, // Flag to tell clients to reset their voting UI
       // Add username mappings to ensure clients can match socket IDs to usernames
-      playerMappings: gameUsernameMappings[gameId] || {}
+      playerMappings: gameUsernameMappings[gameId] || {},
+      maxRounds: game.maxRounds // Include maxRounds in every round_started event
     });
     
     console.log(`[TRACK_SYNC] Round ${game.currentRound} started for game ${gameId} with trace ID ${newRoundTraceId}`);
@@ -1472,19 +1486,10 @@ io.on('connection', (socket) => {
     activeGames[gameId].lastInconsistencyDetectedForRound = null; // Reset inconsistency tracking
     activeGames[gameId].currentRoundTraceId = null; // Reset round trace ID
     
-    // Reset scores - also reset username scores for this game
+    // Reset scores
     Object.keys(activeGames[gameId].scores).forEach(playerId => {
       activeGames[gameId].scores[playerId] = 0;
     });
-    
-    // Reset username-based scores too
-    if (gameUsernameScores[gameId]) {
-      Object.keys(gameUsernameScores[gameId]).forEach(username => {
-        gameUsernameScores[gameId][username] = 0;
-      });
-      
-      console.log(`[PLAYER_MAPPING] Reset username scores for game ${gameId}`);
-    }
     
     // Reset ready status for all players except host
     activeGames[gameId].players.forEach((player, index) => {
@@ -2115,7 +2120,8 @@ io.on('connection', (socket) => {
         scores: game.scores, // Include current scores to ensure consistency
         votingReset: true, // Flag to reset voting UI state
         // Add username mappings to ensure clients can match socket IDs to usernames
-        playerMappings: gameUsernameMappings[gameId] || {}
+        playerMappings: gameUsernameMappings[gameId] || {},
+        maxRounds: game.maxRounds // Include maxRounds in force sync
       });
       
       console.log(`[TRACK_SYNC] Force sync sent to all clients in game ${gameId} at ${syncTimestamp}`);
@@ -2174,7 +2180,8 @@ io.on('connection', (socket) => {
           scores: game.scores, // Include current scores to ensure consistency
           votingReset: true, // Flag to reset voting UI state
           // Add username mappings to ensure clients can match socket IDs to usernames
-          playerMappings: gameUsernameMappings[gameId] || {}
+          playerMappings: gameUsernameMappings[gameId] || {},
+          maxRounds: game.maxRounds // Include maxRounds in force sync
         });
         
         console.log(`[TRACK_SYNC] Force sync sent to all clients in game ${gameId} at ${syncTimestamp}`);
@@ -2269,7 +2276,8 @@ io.on('connection', (socket) => {
           scores: game.scores, // Include current scores to ensure consistency
           votingReset: true, // Flag to reset voting UI state
           // Add username mappings to ensure clients can match socket IDs to usernames
-          playerMappings: gameUsernameMappings[gameId] || {}
+          playerMappings: gameUsernameMappings[gameId] || {},
+          maxRounds: game.maxRounds // Include maxRounds in force sync
         });
         
         console.log(`[TRACK_SYNC] Force sync sent to all clients in game ${gameId} at ${syncTimestamp}`);
@@ -2320,7 +2328,8 @@ io.on('connection', (socket) => {
           scores: game.scores, // Include current scores to ensure consistency
           votingReset: true, // Flag to reset voting UI state
           // Add username mappings to ensure clients can match socket IDs to usernames
-          playerMappings: gameUsernameMappings[gameId] || {}
+          playerMappings: gameUsernameMappings[gameId] || {},
+          maxRounds: game.maxRounds // Include maxRounds in force sync
         });
         
         console.log(`[TRACK_SYNC] Force sync sent to all clients in game ${gameId} at ${syncTimestamp}`);
@@ -2359,20 +2368,12 @@ io.on('connection', (socket) => {
       scores: game.scores, // Include current scores to ensure consistency
       votingReset: true, // Flag to reset voting UI state
       // Add username mappings to ensure clients can match socket IDs to usernames
-      playerMappings: gameUsernameMappings[gameId] || {}
+      playerMappings: gameUsernameMappings[gameId] || {},
+      maxRounds: game.maxRounds // Include maxRounds in force sync
     });
     
     console.log(`[TRACK_SYNC] Emergency song sync sent to all clients in game ${gameId} at ${syncTimestamp}`);
   }
-
-  // Add a new handler for clients requesting score updates
-  socket.on('request_score_update', (data) => {
-    const { gameId } = data;
-    if (!activeGames[gameId]) return;
-    
-    console.log(`[PLAYER_MAPPING] Client ${socket.id} requested score update for game ${gameId}`);
-    broadcastGameScores(gameId);
-  });
 });
 
 // Basic route for checking server status
@@ -2450,3 +2451,60 @@ function getUsernameById(gameId, socketId) {
   
   return null;
 } 
+
+// Helper function to get all player mapping information for a game
+function getPlayerMappings(gameId) {
+  const game = activeGames[gameId];
+  if (!game) return {};
+  
+  const mappings = {
+    socketIdToUsername: {},
+    playerIdToUsername: {},
+    usernameToIds: {},
+    playerMappings: {},  // Legacy format
+    players: []          // Full player objects (sanitized)
+  };
+  
+  // Map all players
+  game.players.forEach(player => {
+    if (player && player.username) {
+      // Store full player object (sanitized)
+      mappings.players.push({
+        id: player.id,
+        username: player.username,
+        displayName: player.displayName || player.username,
+        platform: player.platform || null,
+        isHost: player.isHost || false
+      });
+      
+      // Map socket ID to username
+      mappings.socketIdToUsername[player.id] = player.username;
+      
+      // Map player ID to username (if available)
+      if (player.playerId) {
+        mappings.playerIdToUsername[player.playerId] = player.username;
+      }
+      
+      // Map numeric ID to username (if available)
+      if (typeof player.id === 'number' || !isNaN(Number(player.id))) {
+        mappings.playerIdToUsername[player.id] = player.username;
+      }
+      
+      // Store in legacy format
+      mappings.playerMappings[player.username] = player.id;
+      
+      // Create reverse mapping
+      mappings.usernameToIds[player.username] = {
+        socketId: player.id,
+        playerId: player.playerId || null,
+        numericId: typeof player.id === 'number' ? player.id : null
+      };
+    }
+  });
+  
+  console.log(`[TRACK_SYNC] Generated comprehensive player mappings for game ${gameId}`);
+  return mappings;
+}
+
+
+

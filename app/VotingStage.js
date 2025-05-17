@@ -53,6 +53,18 @@ const VotingStage = ({
         }
       });
       
+      // Create a comprehensive socket ID to username mapping
+      const socketIdToUsername = {};
+      players.filter(player => player !== undefined).forEach(player => {
+        if (player.id && player.username) {
+          socketIdToUsername[player.id] = player.username;
+          // Also map string version of ID
+          socketIdToUsername[String(player.id)] = player.username;
+        }
+      });
+      
+      console.log("Socket ID to username comprehensive mapping:", socketIdToUsername);
+      
       // First pass: Map socket IDs to usernames
       Object.keys(playerPoints || {}).forEach(pointKey => {
         // If this is a socket ID or other non-username identifier
@@ -61,6 +73,13 @@ const VotingStage = ({
           // Map the points to the username
           updatedPoints[player.username] = playerPoints[pointKey];
           console.log(`Mapped ID ${pointKey} points to username ${player.username}`);
+          madeChanges = true;
+        }
+        
+        // Also check our comprehensive socketIdToUsername mapping
+        if (socketIdToUsername[pointKey] && !updatedPoints[socketIdToUsername[pointKey]]) {
+          updatedPoints[socketIdToUsername[pointKey]] = playerPoints[pointKey];
+          console.log(`Used socketIdToUsername to map ${pointKey} to ${socketIdToUsername[pointKey]}`);
           madeChanges = true;
         }
       });
@@ -83,10 +102,16 @@ const VotingStage = ({
       setShowVoteResult(false);
       setShowLeaderboard(false);
       setLastProcessedRound(currentRound);
+      
+      // Explicitly reset allVotesCast when round changes to prevent premature transitions
+      if (allVotesCast) {
+        console.log(`Resetting allVotesCast for new round ${currentRound}`);
+        setAllVotesCast(false);
+      }
     }
-  }, [currentRound, lastProcessedRound, setSelectedPlayer, setShowVoteResult]);
+  }, [currentRound, lastProcessedRound, setSelectedPlayer, setShowVoteResult, allVotesCast]);
 
-  // Add socket listener for vote_reset events
+  // Listen for events that should reset vote locking
   useEffect(() => {
     if (socket && isMultiplayer) {
       // Listen for vote_reset events from server
@@ -113,14 +138,12 @@ const VotingStage = ({
       
       // Listen for round_started which may include votingReset flag
       const onRoundStarted = (data) => {
-        if (data?.votingReset) {
-          console.log("New round with voting reset flag received");
-          // Reset all voting UI states
-          setVoteLocked(false);
-          setSelectedPlayer(null);
-          setShowVoteResult(false);
-          setShowLeaderboard(false);
-        }
+        console.log("New round started, resetting voting state");
+        // Reset all voting UI states
+        setVoteLocked(false);
+        setSelectedPlayer(null);
+        setShowVoteResult(false);
+        setShowLeaderboard(false);
       };
       
       // Explicit event for next round
@@ -164,14 +187,14 @@ const VotingStage = ({
   // Add effect to automatically show result when all votes are cast
   useEffect(() => {
     if (isMultiplayer && allVotesCast && voteLocked && !showVoteResult) {
-      console.log("All votes cast, showing results!");
+      console.log(`All votes cast (${currentRound}), showing results!`);
       
       // Small delay before showing results to ensure smooth transition
       setTimeout(() => {
         setShowVoteResult(true);
       }, 500);
     }
-  }, [allVotesCast, voteLocked, showVoteResult, isMultiplayer]);
+  }, [allVotesCast, voteLocked, showVoteResult, isMultiplayer, currentRound]);
 
   // Add effect to update UI immediately when allVotesCast changes
   useEffect(() => {
@@ -180,83 +203,124 @@ const VotingStage = ({
     }
   }, [allVotesCast, voteLocked, isMultiplayer]);
 
+  // Add additional effect to ensure vote lock is cleared when round changes
+  useEffect(() => {
+    // Reset voteLocked on round change
+    if (currentRound !== lastProcessedRound) {
+      setVoteLocked(false);
+    }
+  }, [currentRound, lastProcessedRound]);
+
   // Listen for vote_result to update points
   useEffect(() => {
     if (socket && isMultiplayer) {
       const onVoteResult = (data) => {
         if (data && data.scores) {
-          console.log("Received vote result with scores:", data.scores);
+          console.log(`[ROUND ${currentRound}] Vote result received from server:`, data);
           
-          // Get a complete map of socket IDs to usernames
-          const socketIdToUsername = {};
+          // Create a new points object based on server data
+          let updatedPoints = {};
           
-          // Map players to their socket IDs
-          players.filter(player => player !== undefined).forEach(player => {
-            if (player && player.username && player.id) {
-              // Add to mapping 
-              socketIdToUsername[player.id] = player.username;
-              
-              // Also add string version if it's a number
-              if (typeof player.id === 'number') {
-                socketIdToUsername[String(player.id)] = player.username;
-              }
-            }
-          });
-          
-          console.log("Socket ID to username mapping:", socketIdToUsername);
-          
-          // Create new points object with both socket IDs and usernames
-          const updatedPoints = { ...data.scores };
-          
-          // Add username-keyed entries for each socket ID we know about
-          Object.keys(data.scores).forEach(socketId => {
-            const username = socketIdToUsername[socketId];
-            if (username) {
-              // Add the same score for the username
-              updatedPoints[username] = data.scores[socketId];
-              console.log(`Adding username key ${username} with score ${data.scores[socketId]}`);
-            }
-          });
-          
-          // Add fallback mappings based on position
-          if (Object.keys(updatedPoints).filter(key => !key.includes('-') && key.length < 20).length === 0) {
-            console.log("No username mappings found, using position-based fallback");
+          // First priority: Use comprehensive username mappings if provided
+          if (data.scoresWithUsernames) {
+            console.log(`[ROUND ${currentRound}] Using scoresWithUsernames provided by server`);
+            updatedPoints = { ...data.scoresWithUsernames };
             
-            // First player (if we have one)
-            if (players.length > 0 && players[0]?.username) {
-              const firstSocketId = Object.keys(data.scores)[0];
-              if (firstSocketId) {
-                updatedPoints[players[0].username] = data.scores[firstSocketId];
-                console.log(`Position fallback: ${firstSocketId} -> ${players[0].username}`);
-              }
+            // Log detailed mapping information from server
+            if (data.socketIdToUsername) {
+              console.log(`[ROUND ${currentRound}] Server provided comprehensive socketIdToUsername mapping:`, data.socketIdToUsername);
             }
             
-            // Second player (if we have one)
-            if (players.length > 1 && players[1]?.username) {
-              const secondSocketId = Object.keys(data.scores)[1];
-              if (secondSocketId) {
-                updatedPoints[players[1].username] = data.scores[secondSocketId];
-                console.log(`Position fallback: ${secondSocketId} -> ${players[1].username}`);
-              }
+            if (data.playerIdToUsername) {
+              console.log(`[ROUND ${currentRound}] Server provided comprehensive playerIdToUsername mapping:`, data.playerIdToUsername);
+            }
+            
+            if (data.usernameToIds) {
+              console.log(`[ROUND ${currentRound}] Server provided comprehensive usernameToIds mapping:`, data.usernameToIds);
             }
           }
+          // Second priority: Use traditional playerMappings
+          else if (data.playerMappings) {
+            console.log(`[ROUND ${currentRound}] Using playerMappings provided by server`);
+            
+            // First copy original scores
+            updatedPoints = { ...data.scores };
+            
+            // Map socket IDs to usernames
+            Object.entries(data.playerMappings).forEach(([username, socketId]) => {
+              if (data.scores[socketId] !== undefined) {
+                // Add score mapped to username
+                updatedPoints[username] = data.scores[socketId];
+                console.log(`[ROUND ${currentRound}] Mapped ${socketId} to ${username} with score ${data.scores[socketId]}`);
+              }
+            });
+          }
+          // Final fallback: Use client-side mapping logic
+          else {
+            console.log(`[ROUND ${currentRound}] No server mappings provided, using client-side mapping`);
+            
+            // Create comprehensive socket ID to username mapping
+            const socketIdToUsername = {};
+            
+            // Map players to their socket IDs
+            players.filter(player => player !== undefined).forEach(player => {
+              if (player && player.username && player.id) {
+                // Add to mapping 
+                socketIdToUsername[player.id] = player.username;
+                
+                // Also add string version if it's a number
+                if (typeof player.id === 'number') {
+                  socketIdToUsername[String(player.id)] = player.username;
+                }
+              }
+            });
+            
+            console.log(`[ROUND ${currentRound}] Client-generated socket ID to username mapping:`, socketIdToUsername);
+            
+            // Combine server scores with our mappings
+            updatedPoints = { ...data.scores };
+            
+            // Add username-keyed entries for each socket ID we know about
+            Object.keys(data.scores).forEach(socketId => {
+              const username = socketIdToUsername[socketId];
+              if (username) {
+                // Add the same score for the username
+                updatedPoints[username] = data.scores[socketId];
+                console.log(`[ROUND ${currentRound}] Adding username key ${username} with score ${data.scores[socketId]}`);
+              }
+            });
+          }
           
-          console.log("Final points after vote result:", updatedPoints);
+          // Final validation step: Ensure all players have scores
+          players.filter(player => player !== undefined).forEach(player => {
+            if (player && player.username && updatedPoints[player.username] === undefined) {
+              // If we have no score for this player, set to 0
+              updatedPoints[player.username] = 0;
+              console.log(`[ROUND ${currentRound}] Adding missing player ${player.username} with default score 0`);
+            }
+          });
+          
+          console.log(`[ROUND ${currentRound}] Final points from server vote result:`, updatedPoints);
+          
+          // Set the player points using the server's data
           setPlayerPoints(updatedPoints);
         }
       };
       
+      // Register the vote_result event handler
       socket.on('vote_result', onVoteResult);
       
       return () => {
         socket.off('vote_result', onVoteResult);
       };
     }
-  }, [socket, isMultiplayer, players, setPlayerPoints]);
+  }, [socket, isMultiplayer, players, setPlayerPoints, playerPoints, currentRound]);
 
   // Handle vote submission
   const handleSubmitVote = () => {
     if (!selectedPlayer) return;
+    
+    // Lock the vote as soon as user submits
     setVoteLocked(true);
 
     // Find the player object from the username
@@ -264,6 +328,7 @@ const VotingStage = ({
     
     if (!selectedPlayerObj) {
       console.error(`Could not find player object for username: ${selectedPlayer}`);
+      // Even if we can't find the player, keep the vote locked
     }
 
     // Create the vote record
@@ -290,32 +355,18 @@ const VotingStage = ({
     
     // Update points for the current player if they made a correct guess
     if (isCorrectGuess) {
-      console.log(`${currentUsername} made a correct guess and earned a point!`);
+      console.log(`Round ${currentRound}: ${currentUsername} made a correct guess and earned a point!`);
+      console.log(`Current player ID: ${currentPlayer?.id}, socket ID: ${socket?.id}`);
+      console.log(`Correct player: ${currentSong?.assignedToPlayer?.username}, ID: ${currentSong?.assignedToPlayer?.id}`);
       
-      setPlayerPoints((prev) => {
-        const newPoints = { ...prev };
-        
-        // Always add points by username
-        newPoints[currentUsername] = (prev[currentUsername] || 0) + 1;
-        
-        // If this player also has a socket ID, add points by that as well
-        if (currentPlayer?.id) {
-          newPoints[currentPlayer.id] = newPoints[currentUsername];
-        }
-        
-        // If we have a socket instance, add points by socket ID too
-        if (socket?.id) {
-          newPoints[socket.id] = newPoints[currentUsername];
-        }
-        
-        console.log(`Points updated for ${currentUsername}:`, newPoints);
-        return newPoints;
-      });
+      // Note: We're removing client-side score incrementing as this should come from the server
+      // The server is the source of truth for scores and will broadcast updated scores via vote_result events
+      console.log(`Round ${currentRound}: Correct guess made - waiting for server to update score`);
     }
 
     // In multiplayer mode, send the vote to the server
     if (isMultiplayer) {
-      console.log(`Casting vote for ${selectedPlayer} in game ${gameId}`);
+      console.log(`Round ${currentRound}: Casting vote for ${selectedPlayer} in game ${gameId}`);
       try {
         // Send both player ID and username to ensure server can process vote
         if (typeof castVote === 'function') {
@@ -325,19 +376,30 @@ const VotingStage = ({
             votedForUsername: selectedPlayer,
             voterUsername: currentUsername,
             voterSocketId: socket?.id,
-            voterPlayerId: currentPlayer?.id
+            voterPlayerId: currentPlayer?.id,
+            currentRound: currentRound // Include round information
           };
           
-          console.log("Sending vote with player data:", votePayload);
+          // Log player relationships for debugging
+          console.log(`Round ${currentRound}: Vote relationships check:`);
+          console.log(`- I am ${currentUsername} (ID: ${currentPlayer?.id}, socket: ${socket?.id})`);
+          console.log(`- Voting for ${selectedPlayer} (ID: ${selectedPlayerObj?.id})`);
+          console.log(`- Correct player is ${currentSong?.assignedToPlayer?.username} (ID: ${currentSong?.assignedToPlayer?.id})`);
+          
+          console.log(`Round ${currentRound}: Sending vote with player data:`, votePayload);
           castVote(gameId, selectedPlayer, votePayload);
+          
+          // Important: Don't set allVotesCast here - wait for server to tell us
+          console.log(`Vote submitted for round ${currentRound}, waiting for other players...`);
         } else {
           console.error('castVote is not a function', typeof castVote);
           Alert.alert('Error', 'Vote submission function is not available.');
+          // Do NOT unlock the vote here - it should stay locked
         }
       } catch (error) {
         console.error('Error casting vote:', error);
         Alert.alert('Error', 'Failed to submit your vote. Please try again.');
-        setVoteLocked(false);
+        // Do NOT unlock the vote even on error - server may have received it
       }
     } else {
       // In single player mode, reveal result immediately
@@ -448,7 +510,8 @@ const VotingStage = ({
             </Pressable>
           );
         })}
-        {/* Overlay when vote is locked but results not shown */}
+        {/* Overlay when vote is locked but results not shown 
+            Show whenever the player has voted (voteLocked) and we're not showing results yet */}
         {voteLocked && !showVoteResult && (
           <View style={votingStyles.voteLockedOverlay}>
             <View style={votingStyles.lockedMessageContainer}>

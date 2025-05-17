@@ -62,6 +62,7 @@ export default function MultiplayerGame() {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [playerTracks, setPlayerTracks] = useState([]);
+  const [selectedRounds, setSelectedRounds] = useState(3); // Default to 3 rounds
 
   // UI state
   const [showServerInput, setShowServerInput] = useState(false);
@@ -368,7 +369,7 @@ export default function MultiplayerGame() {
       const gameData = {
         gameName,
         hostUsername: username,
-        maxRounds: 3,
+        maxRounds: selectedRounds,
         hostTracks: playerTracks,
         tracks: playerTracks,
         // Add profile information
@@ -387,7 +388,7 @@ export default function MultiplayerGame() {
       setError(`Failed to create game: ${err.message}`);
       setLoading(false);
     }
-  }, [username, gameName, createGame, fetchRecentTracks, userProfile]);
+  }, [username, gameName, createGame, fetchRecentTracks, userProfile, selectedRounds]);
 
   // Join an existing game
   const handleJoinGame = useCallback(async () => {
@@ -766,6 +767,29 @@ export default function MultiplayerGame() {
         placeholderTextColor="#888"
       />
       
+      <Text style={styles.inputLabel}>Number of Rounds</Text>
+      <View style={styles.roundsSelector}>
+        {[2, 3, 4, 5, 6, 7, 8].map((num) => (
+          <TouchableOpacity
+            key={num}
+            style={[
+              styles.roundButton,
+              selectedRounds === num && styles.roundButtonSelected
+            ]}
+            onPress={() => setSelectedRounds(num)}
+          >
+            <Text 
+              style={[
+                styles.roundButtonText,
+                selectedRounds === num && styles.roundButtonTextSelected
+              ]}
+            >
+              {num}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      
       <Pressable 
         style={[
           styles.primaryButton, 
@@ -848,6 +872,10 @@ export default function MultiplayerGame() {
             <Ionicons name="qr-code" size={20} color="#FFC857" />
             <Text style={styles.qrButtonText}>Show QR</Text>
           </Pressable>
+        </View>
+        <View style={styles.roundInfoContainer}>
+          <Text style={styles.gameInfoLabel}>Rounds: </Text>
+          <Text style={styles.gameInfoValue}>{gameState.maxRounds || selectedRounds}</Text>
         </View>
       </View>
       
@@ -1460,16 +1488,16 @@ const styles = StyleSheet.create({
   gameInfoContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    marginTop: 8,
   },
   gameInfoLabel: {
-    color: '#CCC',
-    fontSize: 16,
-    marginRight: 10,
+    color: '#FFC857',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
   gameInfoValue: {
-    color: '#FFC857',
-    fontSize: 18,
+    color: 'white',
+    fontSize: 14,
     fontWeight: 'bold',
   },
   modalCloseButton: {
@@ -1488,5 +1516,34 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginBottom: 20,
     textAlign: 'center',
+  },
+  roundsSelector: {
+    flexDirection: 'row',
+    justifyContent: 'space-evenly',
+    marginBottom: 20,
+  },
+  roundButton: {
+    backgroundColor: '#222',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#444',
+  },
+  roundButtonSelected: {
+    backgroundColor: '#8E44AD',
+  },
+  roundButtonText: {
+    color: '#CCC',
+    fontSize: 16,
+  },
+  roundButtonTextSelected: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  roundInfoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 8,
   },
 }); 
