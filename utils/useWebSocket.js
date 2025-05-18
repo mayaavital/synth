@@ -461,9 +461,8 @@ export const useWebSocket = () => {
     } else {
       console.warn('No tracks available when joining game');
     }
-    
     // If we're already connected, proceed normally
-    return emit(EVENTS.JOIN_GAME, { gameId, username, profilePicture, playerTracks });
+    return emit(EVENTS.JOIN_GAME, { gameId: gameId, username, profilePicture, playerTracks });
   }, [socket, isConnected, emit]);
   
   // Mark player as ready

@@ -134,39 +134,28 @@ io.on('connection', (socket) => {
   // Handle creating a game
   socket.on('create_game', (gameData) => {
 
-    /*
-    Luke: I changed the old "gameID" to "gameInviteCode" because the database might delete an old game's data if theres a duplicate code that
-    is in the database but not in the active game list.
-    */
-
     // Generate a simple game code instead of using timestamp
-    let gameInviteCode = generateSimpleGameCode();
+    let gameId = generateSimpleGameCode();
     
     // Make sure the game code is unique
-    while (activeGames[gameInviteCode]) {
-      gameInviteCode = generateSimpleGameCode();
+    while (activeGames[gameId]) {
+      gameId = generateSimpleGameCode();
     }
 
     const gameName = gameData.gameName || 'Untitled Game';
-    //TODO: change the id in this case to be the actual gameID and add a different
-    //  field for the invite code. We can talk more about this when were together.
+
     const hostUsername = gameData.hostUsername || 'Host';
     const hostTracks = gameData.tracks || []; // Accept tracks in creation payload
 
-    var gameRef = db.ref(DATABASE_BRANCHES.GAMES).child(GAME_TREE.GAMES);
+    var gameRef = db.ref(DATABASE_BRANCHES.GAMES).child(GAME_TREE.GAMES).child(gameId);
 
     console.log("Game Name: " + gameName);
 
-    var gamePush = gameRef.push({
+    gameRef.set({
       [GameDataBranches.METADATA.NAME] : gameName
     });
 
-    var gameId = gamePush.key;
-
     console.log("Game ID: " + gameId);
-
-    var inviteCodeRef = db.ref(DATABASE_BRANCHES.GAMES).child(GAME_TREE.INVITE_CODE).child(gameInviteCode);
-    inviteCodeRef.set(gameId);
     
     
     // Initialize username mappings for this game
@@ -179,9 +168,11 @@ io.on('connection', (socket) => {
     
     console.log(`Creating game ${gameId} with host ${hostUsername}, ${hostTracks.length} tracks provided by host`);
     
+
+
     // Create game room with the simple code (not prefixed with "game-")
     activeGames[gameId] = {
-      id: gameInviteCode,
+      id: gameId,
       name: gameName,
       host: socket.id,
       players: [{ 
@@ -250,26 +241,29 @@ io.on('connection', (socket) => {
     }
     
     // Emit game created event
-    socket.emit('game_created', { gameId, game: activeGames[gameId] });
+    socket.emit('game_created', { gameId, game: activeGames[gameId]});
   });
 
+
+  //TODO: This gameId should be the invite code, not the actual gameID
   // Handle joining a game
   socket.on('join_game', async (data) => {
     const { gameId, username, profilePicture, playerTracks } = data;
 
 
-    //The gameID is the invite code, so we need to translate it to the actual gameID
-    //This will look up the gameID from the invite code branch in firebase and return it
-    var translateRef = db.ref(DATABASE_BRANCHES.GAMES).child(GAME_TREE.INVITE_CODE).child(gameId);
-    const actualGameId = await translateRef.once('value');
+    // Check if the game exists 
+    if (!gameId) {
+      socket.emit('error', { message: 'Game not found' });
+      return;
+    }
     
-    if (!activeGames[actualGameId]) {
+    if (!activeGames[gameId]) {
       socket.emit('error', { message: 'Game not found' });
       return;
     }
     
     // Check if game is full
-    if (activeGames[actualGameId].players.length >= 7) {
+    if (activeGames[gameId].players.length >= 7) {
       socket.emit('error', { message: 'Game is full' });
       return;
     }
@@ -289,6 +283,9 @@ io.on('connection', (socket) => {
     if (previousSocketId && previousSocketId !== socket.id) {
       console.log(`[PLAYER_MAPPING] Updated socket ID mapping for ${username} from ${previousSocketId} to ${socket.id}`);
     }
+
+    const profileInfo = data.profileInfo || null;
+
     
     // Extract profile information if available
     const profilePic = profileInfo?.profilePicture || profilePicture || null;
@@ -314,12 +311,12 @@ io.on('connection', (socket) => {
     }
     
     // Check if a player with this username already exists in the game
-    const existingPlayerIndex = activeGames[actualGameId].players.findIndex(p => p.username === username);
+    const existingPlayerIndex = activeGames[gameId].players.findIndex(p => p.username === username);
     
     if (existingPlayerIndex !== -1) {
       // Player with this username already exists
       // Update their socket ID instead of adding a duplicate
-      const oldSocketId = activeGames[actualGameId].players[existingPlayerIndex].id;
+      const oldSocketId = activeGames[gameId].players[existingPlayerIndex].id;
       
       // Update the player's socket ID and profile information
       activeGames[gameId].players[existingPlayerIndex].id = socket.id;
@@ -363,12 +360,12 @@ io.on('connection', (socket) => {
       }
       
       // If this player was the host, update the host reference
-      if (activeGames[actualGameId].host === oldSocketId) {
-        activeGames[actualGameId].host = socket.id;
+      if (activeGames[gameId].host === oldSocketId) {
+        activeGames[gameId].host = socket.id;
       }
       
-      socket.join(actualGameId);
-      console.log(`Player reconnected: ${username} to game ${actualGameId} (replaced socket ID ${oldSocketId} with ${socket.id})`);
+      socket.join(gameId);
+      console.log(`Player reconnected: ${username} to game ${gameId} (replaced socket ID ${oldSocketId} with ${socket.id})`);
       
       // Notify everyone in the room about the updated game state
       io.to(gameId).emit('player_joined', {
@@ -385,7 +382,7 @@ io.on('connection', (socket) => {
       });
     } else {
       // Add new player to game
-      activeGames[actualGameId].players.push({
+      activeGames[gameId].players.push({
         id: socket.id,
         username,
         profilePicture: profilePic,
@@ -419,7 +416,7 @@ io.on('connection', (socket) => {
       console.log(`Player joined: ${username} to game ${gameId}`);
       
       // Initialize score for new player
-      activeGames[actualGameId].scores[socket.id] = 0;
+      activeGames[gameId].scores[socket.id] = 0;
       
       // Notify everyone in the room about the new player
       io.to(gameId).emit('player_joined', {
@@ -985,6 +982,12 @@ io.on('connection', (socket) => {
       playlist: game.consolidatedPlaylist,
       maxRounds: game.maxRounds
     });
+
+    var gameRef = db.ref(DATABASE_BRANCHES.GAMES).child(GAME_TREE.GAMES).child(gameId);
+    gameRef.update({
+      [GameDataBranches.GAME_DATA.GUESS_TRACKS] : game.consolidatedPlaylist,
+      [GameDataBranches.GAME_DATA.COMBINED_TRACKS] : game.playerTracks
+    });
     
     console.log(`[TRACK_SYNC] Playlist shared, game ready for play with ${game.maxRounds} rounds`);
     
@@ -1506,7 +1509,6 @@ io.on('connection', (socket) => {
 
       gameDataRef.update({
         [GameDataBranches.GAME_DATA.SCORES] : activeGames[gameId].scores,
-        [GameDataBranches.GAME_DATA.GUESS_TRACKS] : activeGames[gameId].roundSongs
       });
     
     // Notify all clients of the new round
