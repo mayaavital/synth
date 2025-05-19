@@ -3,6 +3,20 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 
+
+var admin = require("firebase-admin");
+var {GameDataBranches, UserDataBranches, DATABASE_BRANCHES, GAME_TREE} = require('./database-branches');
+
+var serviceAccount = require("./synth-database-firebase-adminsdk-fbsvc-b707949a55.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+  databaseURL: "https://synth-database-default-rtdb.firebaseio.com/"
+});
+
+// As an admin, the app has access to read and write all data, regardless of Security Rules
+var db = admin.database();
+
 // Initialize Express and HTTP server
 const app = express();
 app.use(cors({
@@ -64,6 +78,7 @@ io.on('connection', (socket) => {
 
   // Handle creating a game
   socket.on('create_game', (gameData) => {
+
     // Generate a simple game code instead of using timestamp
     let gameId = generateSimpleGameCode();
     
@@ -71,10 +86,22 @@ io.on('connection', (socket) => {
     while (activeGames[gameId]) {
       gameId = generateSimpleGameCode();
     }
-    
+
     const gameName = gameData.gameName || 'Untitled Game';
+
     const hostUsername = gameData.hostUsername || 'Host';
     const hostTracks = gameData.tracks || []; // Accept tracks in creation payload
+
+    var gameRef = db.ref(DATABASE_BRANCHES.GAMES).child(GAME_TREE.GAMES).child(gameId);
+
+    console.log("Game Name: " + gameName);
+
+    gameRef.set({
+      [GameDataBranches.METADATA.NAME] : gameName
+    });
+
+    console.log("Game ID: " + gameId);
+    
     
     // Initialize username mappings for this game
     gameUsernameMappings[gameId] = {};
@@ -158,12 +185,21 @@ io.on('connection', (socket) => {
     }
     
     // Emit game created event
-    socket.emit('game_created', { gameId, game: activeGames[gameId] });
+    socket.emit('game_created', { gameId, game: activeGames[gameId]});
   });
 
+
+  //TODO: This gameId should be the invite code, not the actual gameID
   // Handle joining a game
-  socket.on('join_game', (data) => {
-    const { gameId, username, profilePicture, playerTracks, profileInfo } = data;
+  socket.on('join_game', async (data) => {
+    const { gameId, username, profilePicture, playerTracks } = data;
+
+
+    // Check if the game exists 
+    if (!gameId) {
+      socket.emit('error', { message: 'Game not found' });
+      return;
+    }
     
     if (!activeGames[gameId]) {
       socket.emit('error', { message: 'Game not found' });
@@ -186,6 +222,13 @@ io.on('connection', (socket) => {
     // Store/update the socket ID mapping for this username
     gameUsernameMappings[gameId][username] = socket.id;
     console.log(`[PLAYER_MAPPING] Mapped username "${username}" to socket ID ${socket.id} in game ${gameId}`);
+    
+    if (previousSocketId && previousSocketId !== socket.id) {
+      console.log(`[PLAYER_MAPPING] Updated socket ID mapping for ${username} from ${previousSocketId} to ${socket.id}`);
+    }
+
+    const profileInfo = data.profileInfo || null;
+
     
     // Extract profile information if available
     const profilePic = profileInfo?.profilePicture || profilePicture || null;
@@ -280,7 +323,7 @@ io.on('connection', (socket) => {
         spotifyId,
         ready: false
       });
-      
+
       // Store the player's tracks if provided
       if (playerTracks && Array.isArray(playerTracks) && playerTracks.length > 0) {
         // Initialize playerTracks object if it doesn't exist
@@ -324,6 +367,11 @@ io.on('connection', (socket) => {
     }
   });
 
+
+  /*
+  This code should work as implemented, the only thing we need to change is the actual gameID being sent to the
+  websocket instead of the invite code.
+  */
   // Handle player ready status
   socket.on('player_ready', (data) => {
     const { gameId } = data;
@@ -401,6 +449,10 @@ io.on('connection', (socket) => {
     }
   });
 
+  /*
+  This code should work as implemented, the only thing we need to change is the actual gameID being sent to the
+  websocket instead of the invite code.
+  */
   // Handle game start
   socket.on('start_game', (data) => {
     const { gameId } = data;
@@ -870,6 +922,12 @@ io.on('connection', (socket) => {
       playlist: game.consolidatedPlaylist,
       maxRounds: game.maxRounds
     });
+
+    var gameRef = db.ref(DATABASE_BRANCHES.GAMES).child(GAME_TREE.GAMES).child(gameId);
+    gameRef.update({
+      [GameDataBranches.GAME_DATA.GUESS_TRACKS] : game.consolidatedPlaylist,
+      [GameDataBranches.GAME_DATA.COMBINED_TRACKS] : game.playerTracks
+    });
     
     console.log(`[TRACK_SYNC] Playlist shared, game ready for play with ${game.maxRounds} rounds`);
     
@@ -1069,7 +1127,12 @@ io.on('connection', (socket) => {
     }
   });
 
+  /*
+  This code should work as implemented, the only thing we need to change is the actual gameID being sent to the
+  websocket instead of the invite code.
+  */
   // Handle player vote
+
   socket.on('cast_vote', (data) => {
     const { gameId, votedForPlayerId, votedForUsername } = data;
     
@@ -1330,11 +1393,15 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Request handler for advancing to the next round
+  /*
+  This code should work as implemented, the only thing we need to change is the actual gameID being sent to the
+  websocket instead of the invite code.
+  */
+  // Handle advancing to next round
   socket.on('next_round', (data) => {
     const { gameId } = data;
     const game = activeGames[gameId];
-    
+
     if (!game) {
       console.error(`[TRACK_SYNC] Game ${gameId} not found for next_round request`);
       socket.emit('error', { message: 'Game not found' });
@@ -1442,6 +1509,22 @@ io.on('connection', (socket) => {
       owner: songOwner,
       roundTraceId: newRoundTraceId
     };
+
+
+         /*
+      Send our completed game data to the database
+      */
+      var gameRef = db.ref(DATABASE_BRANCHES.GAMES).child(GAME_TREE.GAMES).child(gameId);
+      var metaRef = gameRef.child(GameDataBranches.GAME_BRANCHES.METADATA);
+      metaRef.update({
+        [GameDataBranches.METADATA.PLAYERS] : [activeGames[gameId].players],
+      });
+
+      var gameDataRef = gameRef.child(GameDataBranches.GAME_BRANCHES.GAME_DATA);
+
+      gameDataRef.update({
+        [GameDataBranches.GAME_DATA.SCORES] : activeGames[gameId].scores,
+      });
     
     // Notify all clients of the new round
     io.to(gameId).emit('round_started', {
