@@ -96,7 +96,7 @@ io.on('connection', (socket) => {
 
     console.log("Game Name: " + gameName);
 
-    gameRef.set({
+    gameRef.child(GameDataBranches.METADATA).set({
       [GameDataBranches.METADATA.NAME] : gameName
     });
 
@@ -923,8 +923,8 @@ io.on('connection', (socket) => {
       maxRounds: game.maxRounds
     });
 
-    var gameRef = db.ref(DATABASE_BRANCHES.GAMES).child(GAME_TREE.GAMES).child(gameId);
-    gameRef.update({
+    var gameRef = db.ref(DATABASE_BRANCHES.GAMES).child(gameId);
+    gameRef.child(GameDataBranches.GAME_DATA).update({
       [GameDataBranches.GAME_DATA.GUESS_TRACKS] : game.consolidatedPlaylist,
       [GameDataBranches.GAME_DATA.COMBINED_TRACKS] : game.playerTracks
     });
@@ -1514,10 +1514,10 @@ io.on('connection', (socket) => {
          /*
       Send our completed game data to the database
       */
-      var gameRef = db.ref(DATABASE_BRANCHES.GAMES).child(GAME_TREE.GAMES).child(gameId);
+      var gameRef = db.ref(DATABASE_BRANCHES.GAMES).child(gameId);
       var metaRef = gameRef.child(GameDataBranches.GAME_BRANCHES.METADATA);
       metaRef.update({
-        [GameDataBranches.METADATA.PLAYERS] : [activeGames[gameId].players],
+        [GameDataBranches.METADATA.PLAYERS] : activeGames[gameId].players,
       });
 
       var gameDataRef = gameRef.child(GameDataBranches.GAME_BRANCHES.GAME_DATA);
@@ -2475,6 +2475,23 @@ app.get('/games', (req, res) => {
   
   res.json({ games: gamesList });
 });
+
+app.get('/prev_game', (req, res) => {
+
+  const gameID = req.query.gameId;
+
+  var gameRef = db.ref(DATABASE_BRANCHES.GAMES).child(gameID);
+  gameRef.once('value', (snapshot) => {
+    const gameData = snapshot.val();
+    if (!gameData) {
+      res.status(404).json({ error: 'Game not found' });
+    }
+
+    res.json({ game: gameData });
+  });
+
+})
+
 
 // Server port
 const PORT = process.env.PORT || 3000;

@@ -7,11 +7,6 @@ DATABASE_BRANCHES = {
   USER : 'user'
 }
 
- GAME_TREE = {
-    INVITE_CODE : 'invite_code',
-    GAMES : 'games',
-}
-
 
 class GameDataBranches {
 
