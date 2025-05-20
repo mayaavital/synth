@@ -36,7 +36,7 @@ class UserDataBranches {
   }
 }
 
-module.exports = {GameDataBranches, UserDataBranches, DATABASE_BRANCHES, GAME_TREE}
+module.exports = {GameDataBranches, UserDataBranches, DATABASE_BRANCHES}
 
 
 

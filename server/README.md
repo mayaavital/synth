@@ -32,6 +32,7 @@ This is the WebSocket server for the Synth multiplayer game using Socket.io. It 
 - The server runs on port 3000 by default
 - You can access the server status at http://localhost:3000
 - Active games can be listed at http://localhost:3000/games
+- Past games can be retieved by doing a GET request to http://localhost:3000/prev_game?gameId=(Game id here)
 
 ## For Local Network Use
 
