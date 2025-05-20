@@ -928,7 +928,8 @@ io.on('connection', (socket) => {
     var gameRef = db.ref().child(DATABASE_BRANCHES.GAME).child(gameId);
     gameRef.child(GameDataBranches.GAME_BRANCHES.GAME_DATA).update({
       [GameDataBranches.GAME_DATA.GUESS_TRACKS] : game.consolidatedPlaylist,
-      [GameDataBranches.GAME_DATA.COMBINED_TRACKS] : game.playerTracks
+      [GameDataBranches.GAME_DATA.COMBINED_TRACKS] : game.playerTracks,
+      maxRounds: game.maxRounds // Persist maxRounds in Firebase
     });
     
     console.log(`[TRACK_SYNC] Playlist shared, game ready for play with ${game.maxRounds} rounds`);
@@ -1389,6 +1390,15 @@ io.on('connection', (socket) => {
         ...getPlayerMappings(gameId),  // Add comprehensive mappings
         maxRounds: game.maxRounds // Include maxRounds in vote_result
       });
+      
+      // Persist roundSongs to Firebase at game end
+      if (isLastRound) {
+        var gameRef = db.ref().child(DATABASE_BRANCHES.GAME).child(gameId);
+        gameRef.child(GameDataBranches.GAME_BRANCHES.GAME_DATA).update({
+          roundSongs: game.roundSongs
+        });
+        console.log(`[TRACK_SYNC] Persisted roundSongs to Firebase for game ${gameId}`);
+      }
       
       // Reset votes for next round - extra reset to ensure votes are cleared
       game.votes = {};

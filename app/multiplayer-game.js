@@ -49,7 +49,7 @@ export default function MultiplayerGame() {
 
   // Game state
   const [connectionStep, setConnectionStep] = useState('initial'); // initial, connecting, host, join, lobby, game
-  const [serverUrl, setServerUrl] = useState('http://10.27.147.68:3000');
+  const [serverUrl, setServerUrl] = useState('http://10.32.170.64:3000');
   const [username, setUsername] = useState('');
   const [gameName, setGameName] = useState('');
   const [gameId, setGameId] = useState('');
@@ -921,7 +921,7 @@ export default function MultiplayerGame() {
 
   const renderLobbyScreen = () => {
     // Generate join info for the QR code - using URL format for better compatibility with QR scanners
-    const joinUrl = `synth://join?gameId=${gameId}&serverUrl=${encodeURIComponent(serverUrl || "http://10.27.147.68:3000")}&gameName=${encodeURIComponent(gameState.name || gameName)}`;
+    const joinUrl = `synth://join?gameId=${gameId}&serverUrl=${encodeURIComponent(serverUrl || "http://10.32.170.64:3000")}&gameName=${encodeURIComponent(gameState.name || gameName)}`;
     
     return (
     <View style={styles.contentContainer}>

@@ -9,6 +9,7 @@ import {
   SafeAreaView,
   TouchableOpacity,
   ActivityIndicator,
+  Linking,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useNavigation } from "expo-router";
@@ -44,7 +45,7 @@ export default function GameDetails() {
   useEffect(() => {
     const fetchGameDetails = async () => {
       try {
-        const response = await fetch(`http://10.27.147.68:3000/prev_game?gameId=${gameId}`);
+        const response = await fetch(`http://10.32.170.64:3000/prev_game?gameId=${gameId}`);
         if (!response.ok) {
           throw new Error("Failed to fetch game data");
         }
@@ -82,25 +83,65 @@ export default function GameDetails() {
     );
   }
 
+  // Debug log for game data
+  console.log("DEBUG gameData.game_data:", gameData.game_data);
 
-  // Get the songs that were actually played during the game
-  const playedSongs = [];
-  const guessTracks = gameData.game_data?.guess_tracks || [];
-  
-  // Take only the first N songs where N is the number of rounds played
-  const numRounds = Math.min(guessTracks.length, 3); // Assuming 3 rounds max
-  const roundSongs = guessTracks.slice(0, numRounds);
-  
-  roundSongs.forEach((guess, index) => {
-    if (guess.track) {
-      playedSongs.push({
-        ...guess.track,
-        roundNumber: index + 1,
-        playerId: guess.owner.id,
-        playerName: guess.owner.username
-      });
+  let playedSongs = [];
+  let roundsCount = 0;
+  const numPlayers = gameData.metadata.players.length;
+
+  // Prefer roundSongs if available
+  if (
+    gameData.game_data?.roundSongs &&
+    typeof gameData.game_data.roundSongs === 'object' &&
+    Object.keys(gameData.game_data.roundSongs).length > 0
+  ) {
+    const roundSongEntries = Object.entries(gameData.game_data.roundSongs)
+      .filter(([_, data]) => data && data.song) // filter out null/invalid
+      .sort((a, b) => Number(a[0]) - Number(b[0]));
+    playedSongs = roundSongEntries.map(([round, data]) => ({
+      ...(data.song || {}),
+      roundNumber: Number(round),
+      playerId: data.owner?.id || (data.song?.assignedToPlayer?.id ?? null),
+      playerName: data.owner?.username || (data.song?.assignedToPlayer?.username ?? "Unknown"),
+    }));
+    roundsCount = roundSongEntries.length;
+  } else if (gameData.game_data?.maxRounds) {
+    // Fallback to maxRounds and guess_tracks
+    const guessTracks = gameData.game_data.guess_tracks || [];
+    for (let round = 0; round < gameData.game_data.maxRounds; round++) {
+      const guessIndex = round * numPlayers;
+      if (guessTracks[guessIndex] && guessTracks[guessIndex].track) {
+        playedSongs.push({
+          ...guessTracks[guessIndex].track,
+          roundNumber: round + 1,
+          playerId: guessTracks[guessIndex].owner.id,
+          playerName: guessTracks[guessIndex].owner.username,
+        });
+      }
     }
-  });
+    roundsCount = gameData.game_data.maxRounds;
+  } else {
+    // Fallback to old logic
+    const guessTracks = gameData.game_data?.guess_tracks || [];
+    const roundMap = new Map();
+    guessTracks.forEach((guess, index) => {
+      if (guess.track) {
+        const roundNumber = Math.floor(index / numPlayers) + 1;
+        if (!roundMap.has(roundNumber)) {
+          roundMap.set(roundNumber, {
+            ...guess.track,
+            roundNumber,
+            playerId: guess.owner.id,
+            playerName: guess.owner.username
+          });
+        }
+      }
+    });
+    const sortedRounds = Array.from(roundMap.values()).sort((a, b) => a.roundNumber - b.roundNumber);
+    playedSongs = sortedRounds;
+    roundsCount = roundMap.size;
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -124,7 +165,7 @@ export default function GameDetails() {
             Players: {gameData.metadata.players.map(p => p.username).join(", ")}
           </Text>
           <Text style={styles.gameStatLine}>
-            Rounds played: {playedSongs.length}
+            Rounds played: {roundsCount}
           </Text>
         </View>
 
@@ -178,6 +219,16 @@ export default function GameDetails() {
                 </Text>
               </View>
               <View style={styles.reviewPlayerInfo}>
+                <TouchableOpacity 
+                  style={styles.spotifyButton}
+                  onPress={() => {
+                    if (song.externalUrl) {
+                      Linking.openURL(song.externalUrl);
+                    }
+                  }}
+                >
+                  <Ionicons name="add" size={20} color="white" />
+                </TouchableOpacity>
                 <View style={styles.reviewPlayerAvatarWrapper}>
                   <Image
                     source={{ 
@@ -403,5 +454,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#CCC",
     textAlign: "center",
+  },
+  spotifyButton: {
+    backgroundColor: "#1DB954", // Spotify green
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 0,
   },
 }); 
