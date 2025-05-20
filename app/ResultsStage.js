@@ -281,12 +281,12 @@ const ResultsStage = ({
           </View>
         )}
         <View style={resultsStyles.buttonsContainer}>
-          {/* <Pressable
+          <Pressable
             style={resultsStyles.returnButton}
-            onPress={handleReturnToLobby}
+            onPress={() => {router.push("/")}}
           >
-            <Text style={resultsStyles.returnButtonText}>Return to Lobby</Text>
-          </Pressable> */}
+            <Text style={resultsStyles.returnButtonText}>Back to Home</Text>
+          </Pressable>
           <Pressable
             style={resultsStyles.playAgainButton}
             onPress={() => {router.push("/multiplayer-game")}}
@@ -459,7 +459,7 @@ const resultsStyles = StyleSheet.create({
   },
   buttonsContainer: {
     flexDirection: "row",
-    justifyContent: "center",
+    justifyContent: "space-between",
     alignItems: "center",
     width: "100%",
     marginTop: 20,

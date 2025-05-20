@@ -1,3 +1,4 @@
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -7,102 +8,180 @@ import {
   TouchableOpacity,
   Pressable,
   Image,
+  ScrollView,
 } from "react-native";
-import { useState, useEffect } from "react";
 import { useNavigation } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function PreviousGames() {
     const navigation = useNavigation();
     const router = useRouter();
-    const [search, setSearch] = useState("");
+    const [searchQuery, setSearchQuery] = useState("");
     const [games, setGames] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    // Set header options
+    useEffect(() => {
+        navigation.setOptions({
+            header: (props) => (
+                <View style={styles.header}>
+                    <TouchableOpacity
+                        style={styles.menuButton}
+                        onPress={() => navigation.goBack()}
+                    >
+                        <Ionicons name="arrow-back" size={28} color="white" />
+                    </TouchableOpacity>
+                    <View style={styles.headerTitleContainer}>
+                        <Text style={styles.headerTitle}>Previous Games</Text>
+                    </View>
+                    <View style={[styles.placeholder, { width: 44 }]} />
+                </View>
+            ),
+        });
+    }, [navigation]);
 
     useEffect(() => {
         const fetchGames = async () => {
             try {
-                const storedGames = await AsyncStorage.getItem("playedGameIds");
-                if (storedGames) {
-                    const gamesArray = JSON.parse(storedGames);
-                    const updatedGames = await Promise.all(
-                        gamesArray.map(async (gameId) => {
-                            const response = await fetch(`http://10.29.71.225:3000/prev_game?gameId=${gameId}`);
-                            console.log("response", response);
+                // Debug: Log all AsyncStorage keys
+                const allKeys = await AsyncStorage.getAllKeys();
+                console.log("All AsyncStorage keys:", allKeys);
+
+                // Try both possible keys
+                const gameHistory = await AsyncStorage.getItem("gameHistory");
+                const playedGameIds = await AsyncStorage.getItem("playedGameIds");
+                console.log("gameHistory:", gameHistory);
+                console.log("playedGameIds:", playedGameIds);
+
+                // Use whichever key has data
+                const gameIds = gameHistory || playedGameIds;
+                if (!gameIds) {
+                    console.log("No game IDs found in AsyncStorage");
+                    setGames([]);
+                    return;
+                }
+
+                const gameIdsArray = JSON.parse(gameIds);
+                console.log("Parsed game IDs:", gameIdsArray);
+                
+                const uniqueGameIds = [...new Set(gameIdsArray)]; // Deduplicate game IDs
+                console.log("Unique game IDs:", uniqueGameIds);
+                
+                const gamesData = await Promise.all(
+                    uniqueGameIds.map(async (gameId) => {
+                        try {
+                            console.log("Fetching game:", gameId);
+                            const response = await fetch(
+                                `http://10.27.147.68:3000/prev_game?gameId=${gameId}`
+                            );
                             if (!response.ok) {
-                                console.log("Failed to fetch game data:", response.statusText);
-                                return null; // Skip this game if the fetch fails
+                                console.error(`Failed to fetch game ${gameId}:`, response.status);
+                                return null;
                             }
                             const data = await response.json();
-
-                            // Defensive: handle missing or error data
-                            if (!data.game || !data.game.metadata) return null;
-
+                            console.log("Game data received:", gameId, data);
+                            if (!data.game) {
+                                console.log("No game data in response for:", gameId);
+                                return null;
+                            }
                             return {
-                                id: data.game.id || gameId,
-                                name: data.game.metadata.game_name || "Untitled Game",
-                                creator: data.game.metadata.creator || "Unknown",
-                                date: data.game.metadata.date || "", // Add this if you have a date field
-                                image: data.image || "", // Or set a default image if needed
-                                raw: data, // Keep the raw data if you want to use more fields later
+                                ...data.game,
+                                gameId: gameId
                             };
-                        })
-                    );
-                    // Remove nulls (failed fetches)
-                    setGames(updatedGames.filter(Boolean));
-                }
-                console.log("storedGames", storedGames);
+                        } catch (error) {
+                            console.error(`Error fetching game ${gameId}:`, error);
+                            return null;
+                        }
+                    })
+                );
+
+                // Filter out null values and sort by date
+                const validGames = gamesData
+                    .filter((game) => game !== null)
+                    .sort((a, b) => {
+                        const dateA = new Date(a.metadata?.createdAt || 0);
+                        const dateB = new Date(b.metadata?.createdAt || 0);
+                        return dateB - dateA;
+                    });
+
+                console.log("Final valid games:", validGames);
+                setGames(validGames);
             } catch (error) {
-                console.log("Failed to load previous games:", error);
+                console.error("Error in fetchGames:", error);
+            } finally {
+                setLoading(false);
             }
         };
+
         fetchGames();
     }, []);
 
-    const filteredGames = games.filter((game) =>
-        game.name.toLowerCase().includes(search.toLowerCase())
+    // Deduplicate by createdAt if available, otherwise fallback to gameId
+    const uniqueGamesMap = {};
+    games.forEach(game => {
+        const key = game.metadata?.createdAt || game.gameId;
+        if (key && !uniqueGamesMap[key]) {
+            uniqueGamesMap[key] = game;
+        }
+    });
+    const uniqueGames = Object.values(uniqueGamesMap);
+
+    const filteredGames = uniqueGames.filter((game) =>
+        game.metadata?.game_name?.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
     return (
         <SafeAreaView style={styles.container}>
-            <View style={styles.header}>
-                <Pressable onPress={() => navigation.goBack()}>
-                    <Ionicons name="arrow-back" size={28} color="#222" />
-                </Pressable>
-                <Text style={styles.headerTitle}>Previous Games</Text>
-                <View style={{ width: 28 }} />
-            </View>
             <View style={styles.searchContainer}>
-                <Ionicons name="search" size={20} color="#888" style={{ marginRight: 8 }} />
+                <Ionicons name="search" size={20} color="#666" style={styles.searchIcon} />
                 <TextInput
                     style={styles.searchInput}
-                    placeholder="Search games"
-                    value={search}
-                    onChangeText={setSearch}
+                    placeholder="Search games..."
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    placeholderTextColor="#888"
                 />
             </View>
-            <View style={styles.listContainer}>
-                {filteredGames.length === 0 ? (
-                    <Text style={styles.emptyText}>No previous games found.</Text>
-                ) : (
-                    filteredGames.map((game) => (
-                        <TouchableOpacity
-                            key={game.id}
-                            style={styles.gameItem}
-                            onPress={() => router.push(`/game/${game.id}`)}
-                        >
-                            <Image source={{ uri: game.image }} style={styles.gameImage} />
-                            <View style={styles.gameInfo}>
-                                <Text style={styles.gameTitle}>{game.name}</Text>
-                                <Text style={styles.gameDate}>Creator: {game.creator}</Text>
-                                {/* Optionally show date: <Text style={styles.gameDate}>{game.date}</Text> */}
-                            </View>
-                            <Ionicons name="chevron-forward" size={20} color="#888" />
-                        </TouchableOpacity>
-                    ))
-                )}
-            </View>
+            {loading ? (
+                <Text style={styles.loadingText}>Loading games...</Text>
+            ) : filteredGames.length === 0 ? (
+                <Text style={styles.noGamesText}>
+                    {searchQuery ? "No games found" : "No previous games"}
+                </Text>
+            ) : (
+                <ScrollView contentContainerStyle={styles.gamesList}>
+                    {filteredGames.map((game) => {
+                        // Get the first song from guess_tracks as representative
+                        const firstSong = game.game_data?.guess_tracks?.[0]?.track;
+                        return (
+                            <Pressable
+                                key={game.gameId}
+                                style={styles.gameItem}
+                                onPress={() => router.push(`/game-details?gameId=${game.gameId}`)}
+                            >
+                                <Image
+                                    source={{
+                                        uri: firstSong?.imageUrl || "https://via.placeholder.com/60",
+                                    }}
+                                    style={styles.gameImage}
+                                />
+                                <View style={styles.gameInfo}>
+                                    <Text style={styles.gameName}>{game.metadata?.game_name || "Untitled Game"}</Text>
+                                    <Text style={styles.gameDetails}>
+                                        {game.metadata?.players?.map((p) => p.username).join(", ") || "No players"}
+                                    </Text>
+                                    <Text style={styles.gameDate}>
+                                        {new Date(game.metadata?.createdAt || Date.now()).toLocaleDateString()}
+                                    </Text>
+                                </View>
+                                <Ionicons name="chevron-forward" size={24} color="#666" />
+                            </Pressable>
+                        );
+                    })}
+                </ScrollView>
+            )}
         </SafeAreaView>
     );
 }
@@ -110,69 +189,113 @@ export default function PreviousGames() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: "#fff",
-        paddingHorizontal: 20,
+        backgroundColor: "#1E1E1E",
     },
     header: {
         flexDirection: "row",
-        alignItems: "center",
+        alignItems: "flex-end",
         justifyContent: "space-between",
-        paddingVertical: 18,
+        backgroundColor: "#8E44AD",
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        height: 100,
+        shadowColor: "#000000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.6,
+        shadowRadius: 7,
+        elevation: 5,
+    },
+    menuButton: {
+        width: 44,
+        height: 44,
+        justifyContent: "center",
+        alignItems: "center",
+        zIndex: 1,
+    },
+    headerTitleContainer: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        alignItems: "center",
+        justifyContent: "center",
+        paddingBottom: 15
     },
     headerTitle: {
-        fontSize: 22,
+        color: "#FFC857",
+        fontSize: 24,
         fontWeight: "bold",
-        color: "#222",
+        textAlign: "center",
+    },
+    placeholder: {
+        width: 44,
     },
     searchContainer: {
         flexDirection: "row",
         alignItems: "center",
-        backgroundColor: "#f2f2f2",
+        backgroundColor: "#2A2A2A",
+        margin: 15,
+        paddingHorizontal: 15,
+        paddingVertical: 10,
         borderRadius: 10,
-        paddingHorizontal: 12,
-        marginBottom: 18,
-        height: 44,
+        borderWidth: 1,
+        borderColor: "#444",
+    },
+    searchIcon: {
+        marginRight: 10,
+        color: "#666",
     },
     searchInput: {
         flex: 1,
         fontSize: 16,
-        color: "#222",
+        color: "white",
     },
-    listContainer: {
-        flex: 1,
+    loadingText: {
+        fontSize: 16,
+        textAlign: "center",
+        marginTop: 20,
+        color: "#CCC",
+    },
+    noGamesText: {
+        fontSize: 16,
+        textAlign: "center",
+        marginTop: 20,
+        color: "#CCC",
+    },
+    gamesList: {
+        padding: 15,
     },
     gameItem: {
         flexDirection: "row",
         alignItems: "center",
-        backgroundColor: "#f9f9f9",
-        borderRadius: 10,
-        padding: 12,
-        marginBottom: 14,
+        backgroundColor: "#2A2A2A",
+        borderRadius: 12,
+        padding: 15,
+        marginBottom: 10,
+        borderWidth: 1,
+        borderColor: "#444",
     },
     gameImage: {
-        width: 56,
-        height: 56,
+        width: 60,
+        height: 60,
         borderRadius: 8,
-        marginRight: 14,
-        backgroundColor: "#e0e0e0",
+        marginRight: 15,
     },
     gameInfo: {
         flex: 1,
     },
-    gameTitle: {
-        fontSize: 17,
-        fontWeight: "600",
-        color: "#222",
+    gameName: {
+        fontSize: 16,
+        fontWeight: "500",
+        color: "white",
+        marginBottom: 4,
+    },
+    gameDetails: {
+        fontSize: 14,
+        color: "#CCC",
+        marginBottom: 2,
     },
     gameDate: {
-        fontSize: 14,
-        color: "#888",
-        marginTop: 2,
-    },
-    emptyText: {
-        textAlign: "center",
-        color: "#aaa",
-        marginTop: 40,
-        fontSize: 16,
+        fontSize: 12,
+        color: "#999",
     },
 });

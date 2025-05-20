@@ -49,7 +49,7 @@ export default function MultiplayerGame() {
 
   // Game state
   const [connectionStep, setConnectionStep] = useState('initial'); // initial, connecting, host, join, lobby, game
-  const [serverUrl, setServerUrl] = useState('http://10.29.71.225:3000');
+  const [serverUrl, setServerUrl] = useState('http://10.27.147.68:3000');
   const [username, setUsername] = useState('');
   const [gameName, setGameName] = useState('');
   const [gameId, setGameId] = useState('');
@@ -747,7 +747,7 @@ export default function MultiplayerGame() {
               style={styles.input}
               value={serverUrl}
               onChangeText={setServerUrl}
-              placeholder="http://172.20.10.10:3000"
+              placeholder="http://10.27.147.68:3000"
               placeholderTextColor="#888"
               autoCapitalize="none"
               autoCorrect={false}
@@ -921,7 +921,7 @@ export default function MultiplayerGame() {
 
   const renderLobbyScreen = () => {
     // Generate join info for the QR code - using URL format for better compatibility with QR scanners
-    const joinUrl = `synth://join?gameId=${gameId}&serverUrl=${encodeURIComponent(serverUrl || "http://172.20.10.10:3000")}&gameName=${encodeURIComponent(gameState.name || gameName)}`;
+    const joinUrl = `synth://join?gameId=${gameId}&serverUrl=${encodeURIComponent(serverUrl || "http://10.27.147.68:3000")}&gameName=${encodeURIComponent(gameState.name || gameName)}`;
     
     return (
     <View style={styles.contentContainer}>
@@ -1130,6 +1130,7 @@ const styles = StyleSheet.create({
     right: 0,
     alignItems: "center",
     justifyContent: "center",
+    paddingBottom: 15
   },
   headerTitle: {
     color: "#FFC857",

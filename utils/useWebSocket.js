@@ -47,7 +47,7 @@ export const EVENTS = {
 // For development, you can use 'http://localhost:3000'
 // For production, you'll need to use the actual server IP
 // Use your specific IP address when you want to test with multiple devices
-const DEFAULT_SERVER_URL = 'http://172.20.10.10:3000'; 
+const DEFAULT_SERVER_URL = 'http://10.27.147.68:3000'; 
 const CONNECTION_TIMEOUT = 20000; // 10 seconds
 
 // Create a singleton socket instance that persists across component mounts
