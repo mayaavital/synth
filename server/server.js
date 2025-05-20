@@ -5,7 +5,7 @@ const cors = require('cors');
 
 
 var admin = require("firebase-admin");
-var {GameDataBranches, UserDataBranches, DATABASE_BRANCHES, GAME_TREE} = require('./database-branches');
+var {GameDataBranches, UserDataBranches, DATABASE_BRANCHES} = require('./database-branches');
 
 var serviceAccount = require("./synth-database-firebase-adminsdk-fbsvc-b707949a55.json");
 
@@ -92,11 +92,11 @@ io.on('connection', (socket) => {
     const hostUsername = gameData.hostUsername || 'Host';
     const hostTracks = gameData.tracks || []; // Accept tracks in creation payload
 
-    var gameRef = db.ref(DATABASE_BRANCHES.GAMES).child(GAME_TREE.GAMES).child(gameId);
+    var gameRef = db.ref().child(DATABASE_BRANCHES.GAME).child(gameId);
 
     console.log("Game Name: " + gameName);
 
-    gameRef.child(GameDataBranches.METADATA).set({
+    gameRef.child(GameDataBranches.GAME_BRANCHES.METADATA).set({
       [GameDataBranches.METADATA.NAME] : gameName
     });
 
@@ -223,9 +223,11 @@ io.on('connection', (socket) => {
     gameUsernameMappings[gameId][username] = socket.id;
     console.log(`[PLAYER_MAPPING] Mapped username "${username}" to socket ID ${socket.id} in game ${gameId}`);
     
+    /*
     if (previousSocketId && previousSocketId !== socket.id) {
       console.log(`[PLAYER_MAPPING] Updated socket ID mapping for ${username} from ${previousSocketId} to ${socket.id}`);
     }
+      */
 
     const profileInfo = data.profileInfo || null;
 
@@ -923,8 +925,8 @@ io.on('connection', (socket) => {
       maxRounds: game.maxRounds
     });
 
-    var gameRef = db.ref(DATABASE_BRANCHES.GAMES).child(gameId);
-    gameRef.child(GameDataBranches.GAME_DATA).update({
+    var gameRef = db.ref().child(DATABASE_BRANCHES.GAME).child(gameId);
+    gameRef.child(GameDataBranches.GAME_BRANCHES.GAME_DATA).update({
       [GameDataBranches.GAME_DATA.GUESS_TRACKS] : game.consolidatedPlaylist,
       [GameDataBranches.GAME_DATA.COMBINED_TRACKS] : game.playerTracks
     });
@@ -1514,7 +1516,7 @@ io.on('connection', (socket) => {
          /*
       Send our completed game data to the database
       */
-      var gameRef = db.ref(DATABASE_BRANCHES.GAMES).child(gameId);
+      var gameRef = db.ref().child(DATABASE_BRANCHES.GAME).child(gameId);
       var metaRef = gameRef.child(GameDataBranches.GAME_BRANCHES.METADATA);
       metaRef.update({
         [GameDataBranches.METADATA.PLAYERS] : activeGames[gameId].players,
@@ -2480,11 +2482,13 @@ app.get('/prev_game', (req, res) => {
 
   const gameID = req.query.gameId;
 
-  var gameRef = db.ref(DATABASE_BRANCHES.GAMES).child(gameID);
+  var gameRef = db.ref().child(DATABASE_BRANCHES.GAME).child(gameID);
   gameRef.once('value', (snapshot) => {
     const gameData = snapshot.val();
+    console.log(gameData);
     if (!gameData) {
       res.status(404).json({ error: 'Game not found' });
+      return;
     }
 
     res.json({ game: gameData });

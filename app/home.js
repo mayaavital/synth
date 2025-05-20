@@ -207,8 +207,8 @@ export default function home() {
                   tokenStatus === "valid"
                     ? styles.statusConnected
                     : tokenStatus === "expired"
-                    ? styles.statusWarning
-                    : styles.statusDisconnected,
+                      ? styles.statusWarning
+                      : styles.statusDisconnected,
                 ]}
               />
               <Text style={styles.spotifyStatusText}>
@@ -304,7 +304,7 @@ export default function home() {
             </Text>
           </View>
         </TouchableOpacity> */}
-        
+
         <TouchableOpacity
           style={styles.card}
           onPress={() => router.push("/multiplayer-game")}
@@ -320,10 +320,13 @@ export default function home() {
           </View>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.card}>
+        <TouchableOpacity style={styles.card}
+          onPress={() => {
+            router.push("/previous-games")
+          }}
+        >
           <View
             style={styles.iconContainer}
-            onPress={() => alert("sorry this feature isn't available yet!")}
           >
             <Ionicons name="play-back-circle-outline" size={32} color="white" />
           </View>

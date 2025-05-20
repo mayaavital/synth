@@ -49,7 +49,7 @@ export default function MultiplayerGame() {
 
   // Game state
   const [connectionStep, setConnectionStep] = useState('initial'); // initial, connecting, host, join, lobby, game
-  const [serverUrl, setServerUrl] = useState('http://10.31.81.148:3000');
+  const [serverUrl, setServerUrl] = useState('http://10.29.71.225:3000');
   const [username, setUsername] = useState('');
   const [gameName, setGameName] = useState('');
   const [gameId, setGameId] = useState('');
@@ -205,11 +205,75 @@ export default function MultiplayerGame() {
       setPlayers(data.game.players);
       setConnectionStep('lobby');
       setLoading(false);
+
+                const debugPrevGames = async () => {
+            let prevGames = await AsyncStorage.getItem("playedGameIds");
+            console.log("Previous games:" + prevGames);
+          }
+          debugPrevGames();
+
+                // Append the current gameId to a list of played game IDs in AsyncStorage
+          const appendGameIdToHistory = async () => {
+            try {
+              const key = "playedGameIds";
+              const gameID = data.gameId;
+              console.log("Appending gameId to history created: " + data.gameId);
+              const existing = await AsyncStorage.getItem(key);
+              let gameIds = [];
+              if (existing) {
+                gameIds = JSON.parse(existing);
+              }
+              if (!gameIds.includes(gameID)) {
+                gameIds.push(gameID);
+                await AsyncStorage.setItem(key, JSON.stringify(gameIds));
+                debugPrevGames();
+                console.log(`Appended gameId ${gameID} to playedGameIds`);
+              }
+            } catch (err) {
+              console.log("Appending gameId to history: " + data.game.gameId);
+              console.log("Error appending gameId to history:", err);
+            }
+          };
+          appendGameIdToHistory();
+
+
     });
 
     // Player joined event
     const playerJoinedCleanup = on(EVENTS.PLAYER_JOINED, (data) => {
       console.log('Player joined:', data);
+
+          const debugPrevGames = async () => {
+            let prevGames = await AsyncStorage.getItem("playedGameIds");
+            console.log("Previous games:" + prevGames);
+          }
+
+          // Append the current gameId to a list of played game IDs in AsyncStorage
+          const appendGameIdToHistory = async () => {
+            try {
+              const key = "playedGameIds";
+              const gameID = data.game.id;
+              console.log("Appending gameId to history: " + gameID);
+              const existing = await AsyncStorage.getItem(key);
+              let gameIds = [];
+              if (existing) {
+                gameIds = JSON.parse(existing);
+              }
+              if (!gameIds.includes(gameID)) {
+                gameIds.push(gameID);
+                await AsyncStorage.setItem(key, JSON.stringify(gameIds));
+                console.log(`Appended gameId ${gameID} to playedGameIds`);
+                debugPrevGames();
+              }
+            } catch (err) {
+              console.log("Appending gameId to history: " + data.game.gameId);
+              console.log("Error appending gameId to history:", err);
+            }
+          };
+          appendGameIdToHistory();
+
+
+
       // Update game state and players list
       setGameState(data.game);
       setPlayers(data.game.players);
@@ -233,6 +297,7 @@ export default function MultiplayerGame() {
     const gameStartedCleanup = on(EVENTS.GAME_STARTED, (data) => {
       console.log('Game started:', data);
       setGameState(data.game);
+
       
       // Navigate to the game screen
       router.push({
