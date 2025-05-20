@@ -1044,6 +1044,7 @@ io.on('connection', (socket) => {
       hasPreviewUrl: !!selectedTrack.track.previewUrl,
       previewUrl: selectedTrack.track.previewUrl,
       imageUrl: selectedTrack.track.imageUrl,
+      externalUrl: selectedTrack.track.externalUrl, // Ensure externalUrl is included
       assignedPlayer: selectedTrack.owner.username,
       trackId: selectedTrack.track.trackId || selectedTrack.track.songTitle,
       roundTraceId: `ROUND_${gameId}_${roundNumber}_${Date.now()}`
@@ -1500,6 +1501,7 @@ io.on('connection', (socket) => {
     // Add the song to the round data with the trace ID
     const roundSong = {
       ...selectedSong,
+      externalUrl: selectedSong.externalUrl, // Ensure externalUrl is included
       roundTraceId: newRoundTraceId,
       roundNumber: game.currentRound // Explicitly add round number to prevent confusion
     };
