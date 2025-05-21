@@ -2048,12 +2048,12 @@ export default function GamePlay() {
 
           <View style={styles.songPlaybackInfo}>
             <View style={{ maxHeight: "2em" }}>
-              <Text style={styles.playbackSongTitle}>
+              <Text style={styles.playbackSongTitle} numberOfLines={1}>
                 {currentSong.songTitle}
               </Text>
             </View>
             <View style={{ maxHeight: "2em" }}>
-              <Text style={styles.playbackArtistName}>
+              <Text style={styles.playbackArtistName} numberOfLines={1}>
                 {currentSong.songArtists.join(", ")}
               </Text>
             </View>
@@ -2404,7 +2404,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     textAlign: "center",
     maxHeight: "2em",
-    numberOfLines: 1,
   },
   playbackArtistName: {
     color: "#CCC",
@@ -2412,7 +2411,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: "center",
     maxHeight: "1.5em",
-    numberOfLines: 1,
   },
   waveformContainer: {
     height: 80,
