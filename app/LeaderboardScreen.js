@@ -20,127 +20,179 @@ const LeaderboardScreen = ({
   onTimeout,
 }) => {
   const [displayPoints, setDisplayPoints] = useState({});
-  
+
   // Update displayPoints whenever playerPoints or players change
   useEffect(() => {
     console.log("[TRACK_SYNC] Raw player points in leaderboard:", playerPoints);
-    
+
     // Check if playerPoints has a special scoresWithUsernames or playerMappings property
     if (playerPoints.scoresWithUsernames) {
-      console.log("[TRACK_SYNC] Using scoresWithUsernames directly:", playerPoints.scoresWithUsernames);
+      console.log(
+        "[TRACK_SYNC] Using scoresWithUsernames directly:",
+        playerPoints.scoresWithUsernames
+      );
       setDisplayPoints(playerPoints.scoresWithUsernames);
       return;
     }
-    
+
     if (playerPoints.playerMappings) {
       console.log("[TRACK_SYNC] Using playerMappings to map scores");
       const newDisplayPoints = {};
-      
+
       // Map socket IDs to usernames using the provided mapping
-      Object.entries(playerPoints.playerMappings).forEach(([username, socketId]) => {
-        if (playerPoints.scores && playerPoints.scores[socketId] !== undefined) {
-          newDisplayPoints[username] = playerPoints.scores[socketId];
-          console.log(`[TRACK_SYNC] Mapped ${socketId} to ${username} with score ${playerPoints.scores[socketId]}`);
+      Object.entries(playerPoints.playerMappings).forEach(
+        ([username, socketId]) => {
+          if (
+            playerPoints.scores &&
+            playerPoints.scores[socketId] !== undefined
+          ) {
+            newDisplayPoints[username] = playerPoints.scores[socketId];
+            console.log(
+              `[TRACK_SYNC] Mapped ${socketId} to ${username} with score ${playerPoints.scores[socketId]}`
+            );
+          }
         }
-      });
-      
-      console.log("[TRACK_SYNC] Final mapped display points:", newDisplayPoints);
+      );
+
+      console.log(
+        "[TRACK_SYNC] Final mapped display points:",
+        newDisplayPoints
+      );
       setDisplayPoints(newDisplayPoints);
       return;
     }
-    
+
     // Create a map from socket ID to player object
     const playerMap = {};
     const usernameMap = {};
     const playerIdKeys = new Set();
     const socketIdMap = {}; // Direct socket ID to username mapping
-    
+
     // Log raw player data for debugging
-    console.log("[TRACK_SYNC] Raw player data:", players.map(p => p && {id: p.id, username: p.username}));
-    
-    players.filter(player => player !== undefined).forEach(player => {
-      if (player.id) {
-        playerMap[player.id] = player;
-        playerIdKeys.add(player.id);
-        
-        // Also map by string representation of ID to catch numeric IDs
-        playerMap[String(player.id)] = player;
-        playerIdKeys.add(String(player.id));
-        
-        if (player.username) {
-          usernameMap[player.username] = player;
-          
-          // Check if this might be a socket ID (long string)
-          if (typeof player.id === 'string' && player.id.length > 10) {
-            socketIdMap[player.id] = player.username;
+    console.log(
+      "[TRACK_SYNC] Raw player data:",
+      players.map((p) => p && { id: p.id, username: p.username })
+    );
+
+    players
+      .filter((player) => player !== undefined)
+      .forEach((player) => {
+        if (player.id) {
+          playerMap[player.id] = player;
+          playerIdKeys.add(player.id);
+
+          // Also map by string representation of ID to catch numeric IDs
+          playerMap[String(player.id)] = player;
+          playerIdKeys.add(String(player.id));
+
+          if (player.username) {
+            usernameMap[player.username] = player;
+
+            // Check if this might be a socket ID (long string)
+            if (typeof player.id === "string" && player.id.length > 10) {
+              socketIdMap[player.id] = player.username;
+            }
           }
         }
-      }
-    });
-    
-    console.log("[TRACK_SYNC] Player ID mapping:", Object.keys(playerMap).join(", "));
-    console.log("[TRACK_SYNC] Username mapping:", Object.keys(usernameMap).join(", "));
+      });
+
+    console.log(
+      "[TRACK_SYNC] Player ID mapping:",
+      Object.keys(playerMap).join(", ")
+    );
+    console.log(
+      "[TRACK_SYNC] Username mapping:",
+      Object.keys(usernameMap).join(", ")
+    );
     console.log("[TRACK_SYNC] Socket ID mapping:", JSON.stringify(socketIdMap));
-    
+
     // Create display points mapping
     const newDisplayPoints = {};
-    
+
     // First approach: Direct mapping using player usernames
-    players.filter(p => p?.username).forEach(player => {
-      // Look for points by player's ID
-      if (player.id && playerPoints[player.id] !== undefined) {
-        newDisplayPoints[player.username] = playerPoints[player.id];
-        console.log(`[TRACK_SYNC] Found points for player by ID: ${player.username} = ${playerPoints[player.id]}`);
-      }
-      
-      // Also look for points by username directly
-      if (playerPoints[player.username] !== undefined) {
-        newDisplayPoints[player.username] = playerPoints[player.username];
-        console.log(`[TRACK_SYNC] Found points for player by username: ${player.username} = ${playerPoints[player.username]}`);
-      }
-    });
-    
+    players
+      .filter((p) => p?.username)
+      .forEach((player) => {
+        // Look for points by player's ID
+        if (player.id && playerPoints[player.id] !== undefined) {
+          newDisplayPoints[player.username] = playerPoints[player.id];
+          console.log(
+            `[TRACK_SYNC] Found points for player by ID: ${player.username} = ${
+              playerPoints[player.id]
+            }`
+          );
+        }
+
+        // Also look for points by username directly
+        if (playerPoints[player.username] !== undefined) {
+          newDisplayPoints[player.username] = playerPoints[player.username];
+          console.log(
+            `[TRACK_SYNC] Found points for player by username: ${
+              player.username
+            } = ${playerPoints[player.username]}`
+          );
+        }
+      });
+
     // If we have any unmapped scores, try additional approaches
-    if (Object.keys(newDisplayPoints).length < Object.keys(playerPoints).length) {
+    if (
+      Object.keys(newDisplayPoints).length < Object.keys(playerPoints).length
+    ) {
       console.log("[TRACK_SYNC] Attempting to map remaining scores...");
-      
+
       // Try to map any socket IDs
-      Object.keys(playerPoints).forEach(pointKey => {
+      Object.keys(playerPoints).forEach((pointKey) => {
         // Skip if we've already identified this key
         if (newDisplayPoints[pointKey] !== undefined) return;
-        
+
         // Check if this looks like a socket ID (long string)
-        if (typeof pointKey === 'string' && pointKey.length > 10) {
+        if (typeof pointKey === "string" && pointKey.length > 10) {
           // Look for a player with this ID
-          const playerWithId = players.find(p => p?.id === pointKey);
+          const playerWithId = players.find((p) => p?.id === pointKey);
           if (playerWithId?.username) {
             newDisplayPoints[playerWithId.username] = playerPoints[pointKey];
-            console.log(`[TRACK_SYNC] Mapped score from socket ID ${pointKey} to username ${playerWithId.username}`);
+            console.log(
+              `[TRACK_SYNC] Mapped score from socket ID ${pointKey} to username ${playerWithId.username}`
+            );
             return;
           }
-          
+
           // As a fallback, try to match with position in array
           // First player's socket ID -> first player's username
-          if (Object.keys(newDisplayPoints).length === 0 && players.length > 0 && players[0]?.username) {
+          if (
+            Object.keys(newDisplayPoints).length === 0 &&
+            players.length > 0 &&
+            players[0]?.username
+          ) {
             newDisplayPoints[players[0].username] = playerPoints[pointKey];
-            console.log(`[TRACK_SYNC] Position-based fallback mapping: ${pointKey} -> ${players[0].username}`);
+            console.log(
+              `[TRACK_SYNC] Position-based fallback mapping: ${pointKey} -> ${players[0].username}`
+            );
             return;
           }
-          
+
           // Second player's socket ID -> second player's username
-          if (Object.keys(newDisplayPoints).length === 1 && players.length > 1 && players[1]?.username) {
+          if (
+            Object.keys(newDisplayPoints).length === 1 &&
+            players.length > 1 &&
+            players[1]?.username
+          ) {
             newDisplayPoints[players[1].username] = playerPoints[pointKey];
-            console.log(`[TRACK_SYNC] Position-based fallback mapping: ${pointKey} -> ${players[1].username}`);
+            console.log(
+              `[TRACK_SYNC] Position-based fallback mapping: ${pointKey} -> ${players[1].username}`
+            );
             return;
           }
-          
+
           // If all else fails, just keep the socket ID as the key
           newDisplayPoints[pointKey] = playerPoints[pointKey];
-          console.log(`[TRACK_SYNC] Keeping socket ID as key: ${pointKey} = ${playerPoints[pointKey]}`);
+          console.log(
+            `[TRACK_SYNC] Keeping socket ID as key: ${pointKey} = ${playerPoints[pointKey]}`
+          );
         }
       });
     }
-    
+
     console.log("[TRACK_SYNC] Final display points:", newDisplayPoints);
     setDisplayPoints(newDisplayPoints);
   }, [playerPoints, players]);
@@ -151,36 +203,38 @@ const LeaderboardScreen = ({
     }, 5000);
     return () => clearTimeout(timer);
   }, [onTimeout]);
-  
+
   // Helper function to get points for a player
   const getPointsForPlayer = (player) => {
     if (!player) return 0;
-    
+
     // First check by username in display points
     if (player.username && displayPoints[player.username] !== undefined) {
       return displayPoints[player.username];
     }
-    
+
     // Then try direct lookup in raw player points
     if (player.username && playerPoints[player.username] !== undefined) {
       return playerPoints[player.username];
     }
-    
+
     // Check by player ID
     if (player.id && playerPoints[player.id] !== undefined) {
       return playerPoints[player.id];
     }
-    
+
     // Not found, return 0
     return 0;
   };
 
   // Sort players by points (descending)
-  const sortedPlayers = [...players].filter(player => player !== undefined).sort((a, b) => {
-    const aPoints = getPointsForPlayer(a);
-    const bPoints = getPointsForPlayer(b);
-    return bPoints - aPoints;
-  });
+  const sortedPlayers = [...players]
+    .filter((player) => player !== undefined)
+    .sort((a, b) => {
+      const aPoints = getPointsForPlayer(a);
+      const bPoints = getPointsForPlayer(b);
+      return bPoints - aPoints;
+    });
 
   // Helper function to get the appropriate display name for a player
   const getDisplayName = (player) => {
@@ -190,8 +244,16 @@ const LeaderboardScreen = ({
   // Helper function to get the appropriate profile image for a player
   const getProfileImage = (player) => {
     // If player has a Spotify profile picture, use that first
-    if (player.profilePicture) {
-      return { uri: player.profilePicture };
+    if (player?.profilePicture) {
+      // Handle both direct URL strings and nested profilePicture objects
+      const profilePic =
+        typeof player.profilePicture === "string"
+          ? player.profilePicture
+          : player.profilePicture?.profilePicture;
+
+      if (profilePic) {
+        return { uri: profilePic };
+      }
     }
     // Otherwise use the local avatar based on username
     return getProfilePhotoForUser(player.username);
@@ -210,7 +272,11 @@ const LeaderboardScreen = ({
         <View style={styles.profileCircleWrapper}>
           <View style={styles.profileCircle}>
             <Image
-              source={assignedUser ? getProfileImage(assignedUser) : getProfilePhotoForUser("Unknown")}
+              source={
+                assignedUser
+                  ? getProfileImage(assignedUser)
+                  : getProfilePhotoForUser("Unknown")
+              }
               style={styles.profileImage}
             />
           </View>
@@ -234,7 +300,9 @@ const LeaderboardScreen = ({
                   source={getProfileImage(player)}
                   style={styles.scorePlayerAvatar}
                 />
-                <Text style={styles.scorePlayerName}>{getDisplayName(player)}</Text>
+                <Text style={styles.scorePlayerName}>
+                  {getDisplayName(player)}
+                </Text>
               </View>
               <Text style={styles.scoreValue}>
                 {getPointsForPlayer(player)} points

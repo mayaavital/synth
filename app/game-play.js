@@ -1697,24 +1697,39 @@ export default function GamePlay() {
     }
   }, [playbackPosition, canVote, currentSong]);
 
-  // Helper function to get the profile photo based on username
-  const getProfilePhotoForUser = (username) => {
-    // Remove @ symbol if present
-    const name = username.replace("@", "");
-
-    // Map usernames to their profile photos
-    switch (name) {
-      case "luke_mcfall":
-        return require("../assets/photos/lukepfp.png");
-      case "cole_sprout":
-        return require("../assets/photos/colepfp.png");
-      case "maya_avital":
-        return require("../assets/photos/mayapfp.png");
-      case "marcus_lintott":
-        return require("../assets/photos/marcuspfp.png");
-      default:
-        return require("../assets/pfp.png"); // Default fallback
+  // Helper function to get the profile photo based on username or player object
+  const getProfilePhotoForUser = (playerOrUsername) => {
+    // If it's a player object with a Spotify profile picture, use that
+    if (playerOrUsername?.profilePicture) {
+      return { uri: playerOrUsername.profilePicture };
     }
+
+    // If it's a string (username), use the local avatar
+    const username =
+      typeof playerOrUsername === "string"
+        ? playerOrUsername
+        : playerOrUsername?.username;
+    if (username) {
+      // Remove @ symbol if present
+      const name = username.replace("@", "");
+
+      // Map usernames to their profile photos
+      switch (name) {
+        case "luke_mcfall":
+          return require("../assets/photos/lukepfp.png");
+        case "cole_sprout":
+          return require("../assets/photos/colepfp.png");
+        case "maya_avital":
+          return require("../assets/photos/mayapfp.png");
+        case "marcus_lintott":
+          return require("../assets/photos/marcuspfp.png");
+        default:
+          return require("../assets/pfp.png"); // Default fallback
+      }
+    }
+
+    // Fallback to default profile picture
+    return require("../assets/pfp.png");
   };
 
   // Add a useEffect hook to persist playedSongs in AsyncStorage
@@ -1952,6 +1967,7 @@ export default function GamePlay() {
     if (isMultiplayer && players.length > 0) {
       console.log("[TRACK_SYNC] Player structure debug:");
       console.log("First player object:", JSON.stringify(players[0]));
+      console.log("second player object:", JSON.stringify(players[1]));
       console.log(
         "Player IDs:",
         players.map((p) => `${p.id} (${typeof p.id})`).join(", ")
