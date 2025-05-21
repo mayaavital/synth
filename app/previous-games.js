@@ -74,7 +74,7 @@ export default function PreviousGames() {
                         try {
                             console.log("Fetching game:", gameId);
                             const response = await fetch(
-                                `http://10.32.170.64:3000/prev_game?gameId=${gameId}`
+                                `https://synth-69a11b47cbf3.herokuapp.com/prev_game?gameId=${gameId}`
                             );
                             if (!response.ok) {
                                 console.error(`Failed to fetch game ${gameId}:`, response.status);

@@ -49,7 +49,7 @@ export default function MultiplayerGame() {
 
   // Game state
   const [connectionStep, setConnectionStep] = useState('initial'); // initial, connecting, host, join, lobby, game
-  const [serverUrl, setServerUrl] = useState('http://10.32.170.64:3000');
+  const [serverUrl, setServerUrl] = useState('https://synth-69a11b47cbf3.herokuapp.com');
   const [username, setUsername] = useState('');
   const [gameName, setGameName] = useState('');
   const [gameId, setGameId] = useState('');
