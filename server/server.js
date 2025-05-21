@@ -97,7 +97,8 @@ io.on('connection', (socket) => {
     console.log("Game Name: " + gameName);
 
     gameRef.child(GameDataBranches.GAME_BRANCHES.METADATA).set({
-      [GameDataBranches.METADATA.NAME] : gameName
+      [GameDataBranches.METADATA.NAME] : gameName,
+      [GameDataBranches.METADATA.MAX_ROUNDS] : gameData.maxRounds,
     });
 
     console.log("Game ID: " + gameId);

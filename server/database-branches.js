@@ -18,6 +18,7 @@ class GameDataBranches {
     static METADATA = {
         NAME : 'game_name',
         NUM_PLAYERS : 'number_of_players',
+        MAX_ROUNDS : 'max_rounds',
         PLAYERS : 'players'
     }
 
