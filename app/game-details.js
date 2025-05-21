@@ -45,7 +45,7 @@ export default function GameDetails() {
   useEffect(() => {
     const fetchGameDetails = async () => {
       try {
-        const response = await fetch(`http://10.32.170.64:3000/prev_game?gameId=${gameId}`);
+        const response = await fetch(`https://synth-69a11b47cbf3.herokuapp.com/prev_game?gameId=${gameId}`);
         if (!response.ok) {
           throw new Error("Failed to fetch game data");
         }
