@@ -1,4 +1,4 @@
-package com.csprout3.synth
+package com.cs377u.synth
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build
