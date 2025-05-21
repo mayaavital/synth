@@ -87,9 +87,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.csprout3.synth'
+    namespace 'org.name.synth'
     defaultConfig {
-        applicationId 'com.csprout3.synth'
+        applicationId 'org.name.synth'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

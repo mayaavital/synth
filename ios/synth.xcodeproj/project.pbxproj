@@ -257,7 +257,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.csprout3.synth";
+				PRODUCT_BUNDLE_IDENTIFIER = org.name.synth;
 				PRODUCT_NAME = "synth";
 				SWIFT_OBJC_BRIDGING_HEADER = "synth/synth-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -286,7 +286,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.csprout3.synth";
+				PRODUCT_BUNDLE_IDENTIFIER = org.name.synth;
 				PRODUCT_NAME = "synth";
 				SWIFT_OBJC_BRIDGING_HEADER = "synth/synth-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
