@@ -1,0 +1,6 @@
+2025-05-10 19:22:27.265 xcodebuild[77545:1302063] Writing error result bundle to /var/folders/69/sf5y40f15ld_ttybjpzq09480000gn/T/ResultBundle_2025-10-05_19-22-0027.xcresult
+xcodebuild: error: Unable to find a destination matching the provided destination specifier:
+		{ id:BAE37B65-4B2D-4F62-88C6-4DA7DEEFF589 }
+
+	Ineligible destinations for the "synth" scheme:
+		{ platform:iOS, id:dvtdevice-DVTiPhonePlaceholder-iphoneos:placeholder, name:Any iOS Device, error:iOS 18.4 is not installed. To use with Xcode, first download and install the platform }

@@ -32,7 +32,7 @@ import VotingStage from "./VotingStage";
 import ResultsStage from "./ResultsStage";
 // Import useWebSocket for multiplayer functionality
 import { useWebSocket, EVENTS } from "../utils/useWebSocket";
-import LeaderboardScreen from './LeaderboardScreen';
+import LeaderboardScreen from "./LeaderboardScreen";
 
 const ALBUM_ID = "2noRn2Aes5aoNVsU6iWThc";
 const MIN_PLAY_DURATION = 8000; // 8 seconds
@@ -69,7 +69,7 @@ export default function GamePlay() {
     emit,
     nextRound: sendNextRound,
     castVote,
-    isConnected
+    isConnected,
   } = useWebSocket();
 
   // Track the last few trace IDs we've received to avoid infinite sync loops
@@ -173,30 +173,33 @@ export default function GamePlay() {
   const isMultiplayer = params.isMultiplayer === "true";
   const isHost = params.isHost === "true";
 
-  // Parse player usernames from params if available
-  let playerUsernames = [];
+  // Parse player data from params if available
+  let playerData = [];
   try {
     if (params.players) {
-      playerUsernames = JSON.parse(params.players);
+      playerData = JSON.parse(params.players);
     }
   } catch (e) {
     console.error("Error parsing player data:", e);
   }
 
-  // Create players array using player usernames if available
+  // Create players array using full player data if available
   const players =
-    playerUsernames.length > 0
-      ? playerUsernames.map((username, index) => ({
-        id: index + 1,
-        username,
-        platform: "spotify",
-      }))
+    playerData.length > 0
+      ? playerData.map((player, index) => ({
+          id: player.id || index + 1,
+          username: player.username,
+          platform: "spotify",
+          profilePicture: player.profilePicture,
+          displayName: player.displayName || player.username,
+          spotifyId: player.spotifyId,
+        }))
       : [
-        { id: 1, username: "@luke_mcfall", platform: "spotify" },
-        { id: 2, username: "@cole_sprout", platform: "spotify" },
-        { id: 3, username: "@maya_avital", platform: "spotify" },
-        { id: 4, username: "@marcus_lintott", platform: "spotify" },
-      ].slice(0, playerCount);
+          { id: 1, username: "@luke_mcfall", platform: "spotify" },
+          { id: 2, username: "@cole_sprout", platform: "spotify" },
+          { id: 3, username: "@maya_avital", platform: "spotify" },
+          { id: 4, username: "@marcus_lintott", platform: "spotify" },
+        ].slice(0, playerCount);
 
   // Set header options and debug token
   useEffect(() => {
@@ -239,53 +242,81 @@ export default function GamePlay() {
   }, [token, isInitialized, hasFetchedSongs]);
 
   // Add this function to share tracks with the server
-  const shareTracks = useCallback(async (tracksToShare) => {
-    if (!emit || !isMultiplayer || !gameId) {
-      console.log("[TRACK_SYNC] Not sharing tracks - not in multiplayer mode or missing emit function");
-      return;
-    }
-
-    console.log(`[TRACK_SYNC] Preparing to share ${tracksToShare.length} tracks with server`);
-
-    // Count how many have preview URLs already
-    const tracksWithPreview = tracksToShare.filter(t => !!t.previewUrl);
-    console.log(`[TRACK_SYNC] ${tracksWithPreview.length}/${tracksToShare.length} tracks already have preview URLs`);
-
-    let tracksToSend = tracksToShare;
-
-    // If few or no tracks have preview URLs, try enriching with Deezer
-    if (tracksWithPreview.length < 3) {
-      console.log("[TRACK_SYNC] Few tracks have preview URLs, attempting Deezer enrichment");
-
-      try {
-        // Use enrichTracksWithDeezerPreviews to get Deezer previews
-        const enrichedTracks = await enrichTracksWithDeezerPreviews(tracksToShare);
-        const enrichedWithPreview = enrichedTracks.filter(t => !!t.previewUrl);
-
-        console.log(`[TRACK_SYNC] After Deezer enrichment: ${enrichedWithPreview.length}/${enrichedTracks.length} tracks have preview URLs`);
-
-        // Only use enriched tracks if they have more preview URLs
-        if (enrichedWithPreview.length > tracksWithPreview.length) {
-          console.log("[TRACK_SYNC] Using Deezer-enriched tracks with more preview URLs");
-          tracksToSend = enrichedWithPreview;
-        }
-      } catch (error) {
-        console.error("[TRACK_SYNC] Error enriching tracks with Deezer:", error);
+  const shareTracks = useCallback(
+    async (tracksToShare) => {
+      if (!emit || !isMultiplayer || !gameId) {
+        console.log(
+          "[TRACK_SYNC] Not sharing tracks - not in multiplayer mode or missing emit function"
+        );
+        return;
       }
-    }
 
-    // Send tracks to server
-    console.log(`[TRACK_SYNC] Sharing ${tracksToSend.length} tracks with server`);
-    console.log(`[TRACK_SYNC] ${tracksToSend.filter(t => !!t.previewUrl).length} of these tracks have preview URLs`);
+      console.log(
+        `[TRACK_SYNC] Preparing to share ${tracksToShare.length} tracks with server`
+      );
 
-    // Attempt to send tracks to server
-    try {
-      emit('share_tracks', { gameId, tracks: tracksToSend });
-      console.log("[TRACK_SYNC] Successfully shared tracks with server");
-    } catch (error) {
-      console.error("[TRACK_SYNC] Error sharing tracks with server:", error);
-    }
-  }, [emit, gameId, isMultiplayer]);
+      // Count how many have preview URLs already
+      const tracksWithPreview = tracksToShare.filter((t) => !!t.previewUrl);
+      console.log(
+        `[TRACK_SYNC] ${tracksWithPreview.length}/${tracksToShare.length} tracks already have preview URLs`
+      );
+
+      let tracksToSend = tracksToShare;
+
+      // If few or no tracks have preview URLs, try enriching with Deezer
+      if (tracksWithPreview.length < 3) {
+        console.log(
+          "[TRACK_SYNC] Few tracks have preview URLs, attempting Deezer enrichment"
+        );
+
+        try {
+          // Use enrichTracksWithDeezerPreviews to get Deezer previews
+          const enrichedTracks = await enrichTracksWithDeezerPreviews(
+            tracksToShare
+          );
+          const enrichedWithPreview = enrichedTracks.filter(
+            (t) => !!t.previewUrl
+          );
+
+          console.log(
+            `[TRACK_SYNC] After Deezer enrichment: ${enrichedWithPreview.length}/${enrichedTracks.length} tracks have preview URLs`
+          );
+
+          // Only use enriched tracks if they have more preview URLs
+          if (enrichedWithPreview.length > tracksWithPreview.length) {
+            console.log(
+              "[TRACK_SYNC] Using Deezer-enriched tracks with more preview URLs"
+            );
+            tracksToSend = enrichedWithPreview;
+          }
+        } catch (error) {
+          console.error(
+            "[TRACK_SYNC] Error enriching tracks with Deezer:",
+            error
+          );
+        }
+      }
+
+      // Send tracks to server
+      console.log(
+        `[TRACK_SYNC] Sharing ${tracksToSend.length} tracks with server`
+      );
+      console.log(
+        `[TRACK_SYNC] ${
+          tracksToSend.filter((t) => !!t.previewUrl).length
+        } of these tracks have preview URLs`
+      );
+
+      // Attempt to send tracks to server
+      try {
+        emit("share_tracks", { gameId, tracks: tracksToSend });
+        console.log("[TRACK_SYNC] Successfully shared tracks with server");
+      } catch (error) {
+        console.error("[TRACK_SYNC] Error sharing tracks with server:", error);
+      }
+    },
+    [emit, gameId, isMultiplayer]
+  );
 
   // Update the track fetching useEffect to call shareTracks:
   useEffect(() => {
@@ -294,7 +325,9 @@ export default function GamePlay() {
 
     // If we have songs and we're in multiplayer, share them with the server
     if (allSongs.length > 0 && isMultiplayer && emit && !hasSharedTracks) {
-      console.log(`[TRACK_SYNC] First time with songs ready, sharing ${allSongs.length} tracks with server`);
+      console.log(
+        `[TRACK_SYNC] First time with songs ready, sharing ${allSongs.length} tracks with server`
+      );
       shareTracks(allSongs);
       setHasSharedTracks(true);
     }
@@ -412,25 +445,34 @@ export default function GamePlay() {
             console.log("=== TRACK PREVIEW URL DEBUG ===");
             tracks.forEach((track, index) => {
               console.log(
-                `Track ${index + 1}: ${track.songTitle} - Preview URL: ${track.previewUrl || "None"
+                `Track ${index + 1}: ${track.songTitle} - Preview URL: ${
+                  track.previewUrl || "None"
                 }`
               );
             });
 
             // NOTE: Spotify preview URLs are now deprecated
-            console.log("Spotify preview URLs are deprecated - we will rely on Deezer for audio playback");
+            console.log(
+              "Spotify preview URLs are deprecated - we will rely on Deezer for audio playback"
+            );
 
             // IMPORTANT CHANGE: Always try to enrich all tracks with Deezer
-            console.log("Enriching all tracks with Deezer preview URLs BEFORE filtering");
+            console.log(
+              "Enriching all tracks with Deezer preview URLs BEFORE filtering"
+            );
 
             try {
               // Try to enrich all tracks with Deezer preview URLs
               // Take more tracks to increase chances of finding ones with preview URLs
               const tracksToTry = tracks.slice(0, 20); // Increased from 15 to 20 tracks to process
-              console.log(`Attempting to enrich ${tracksToTry.length} tracks with Deezer`);
+              console.log(
+                `Attempting to enrich ${tracksToTry.length} tracks with Deezer`
+              );
 
               // Use enrichTracksWithDeezerPreviews to get Deezer previews
-              const deezerEnrichedTracks = await enrichTracksWithDeezerPreviews(tracksToTry);
+              const deezerEnrichedTracks = await enrichTracksWithDeezerPreviews(
+                tracksToTry
+              );
 
               // Filter tracks that now have preview URLs
               const validDeezerTracks = deezerEnrichedTracks.filter(
@@ -442,24 +484,31 @@ export default function GamePlay() {
               );
 
               if (validDeezerTracks.length >= 2) {
-                console.log("Using tracks with Deezer preview URLs as they're available");
+                console.log(
+                  "Using tracks with Deezer preview URLs as they're available"
+                );
                 tracks = validDeezerTracks;
-                console.log("Sample enriched track:", JSON.stringify({
-                  title: tracks[0].songTitle,
-                  preview: tracks[0].previewUrl?.substring(0, 30) + '...',
-                  source: 'Deezer'
-                }));
+                console.log(
+                  "Sample enriched track:",
+                  JSON.stringify({
+                    title: tracks[0].songTitle,
+                    preview: tracks[0].previewUrl?.substring(0, 30) + "...",
+                    source: "Deezer",
+                  })
+                );
               } else {
-                // If we don't have enough tracks with preview URLs, 
+                // If we don't have enough tracks with preview URLs,
                 // still use whatever we got from Deezer (even if just 1)
-                console.log("Not enough tracks with Deezer preview URLs, using what we have");
-                tracks = validDeezerTracks.length > 0 ? validDeezerTracks : deezerEnrichedTracks.slice(0, 10);
+                console.log(
+                  "Not enough tracks with Deezer preview URLs, using what we have"
+                );
+                tracks =
+                  validDeezerTracks.length > 0
+                    ? validDeezerTracks
+                    : deezerEnrichedTracks.slice(0, 10);
               }
             } catch (deezerError) {
-              console.error(
-                "Error enriching tracks with Deezer:",
-                deezerError
-              );
+              console.error("Error enriching tracks with Deezer:", deezerError);
 
               // Still use the tracks we have
               console.log("Using available tracks despite Deezer error");
@@ -467,11 +516,17 @@ export default function GamePlay() {
             }
 
             // This flag helps debug whether tracks are being enriched properly
-            const hasPreviewUrls = tracks.some(track => !!track.previewUrl);
-            console.log(`Tracks now have preview URLs: ${hasPreviewUrls ? 'YES' : 'NO'}`);
+            const hasPreviewUrls = tracks.some((track) => !!track.previewUrl);
+            console.log(
+              `Tracks now have preview URLs: ${hasPreviewUrls ? "YES" : "NO"}`
+            );
             if (hasPreviewUrls) {
-              const previewCount = tracks.filter(track => !!track.previewUrl).length;
-              console.log(`${previewCount}/${tracks.length} tracks have preview URLs`);
+              const previewCount = tracks.filter(
+                (track) => !!track.previewUrl
+              ).length;
+              console.log(
+                `${previewCount}/${tracks.length} tracks have preview URLs`
+              );
             }
 
             // Add additional data fields as needed
@@ -485,7 +540,7 @@ export default function GamePlay() {
                 duration: track.duration,
                 albumArt: track.imageUrl ? "Available" : "Unavailable",
                 previewUrl: track.previewUrl ? "Available" : "Unavailable",
-                source: track.previewUrl ? "Deezer" : "Spotify"
+                source: track.previewUrl ? "Deezer" : "Spotify",
               },
             }));
 
@@ -549,7 +604,11 @@ export default function GamePlay() {
       }
 
       console.log(`Using ${tracks.length} tracks for the game`);
-      console.log(`Tracks with preview URLs: ${tracks.filter(t => !!t.previewUrl).length}/${tracks.length}`);
+      console.log(
+        `Tracks with preview URLs: ${
+          tracks.filter((t) => !!t.previewUrl).length
+        }/${tracks.length}`
+      );
 
       // Process the tracks for the game
       const processedSongs = tracks.slice(0, 15).map((track) => ({
@@ -565,13 +624,19 @@ export default function GamePlay() {
 
       // If we're in multiplayer, ensure we're sending tracks with preview URLs to the server
       if (isMultiplayer && emit) {
-        const tracksWithPreviews = processedSongs.filter(track => !!track.previewUrl);
+        const tracksWithPreviews = processedSongs.filter(
+          (track) => !!track.previewUrl
+        );
         if (tracksWithPreviews.length > 0) {
-          console.log(`[TRACK_SYNC] Sending ${tracksWithPreviews.length} tracks with preview URLs to server`);
+          console.log(
+            `[TRACK_SYNC] Sending ${tracksWithPreviews.length} tracks with preview URLs to server`
+          );
           // Only send tracks that have preview URLs to avoid server using mock tracks
           return tracksWithPreviews;
         } else {
-          console.warn('[TRACK_SYNC] No tracks with preview URLs to send to server!');
+          console.warn(
+            "[TRACK_SYNC] No tracks with preview URLs to send to server!"
+          );
           return processedSongs;
         }
       }
@@ -590,7 +655,8 @@ export default function GamePlay() {
       if (sound) {
         console.log("Cleaning up audio resources");
         try {
-          sound.unloadAsync()
+          sound
+            .unloadAsync()
             .catch((e) => console.log("Error unloading sound", e));
         } catch (err) {
           console.error("Error in audio cleanup:", err);
@@ -613,7 +679,10 @@ export default function GamePlay() {
       setPlaybackPosition(status.positionMillis);
     }
 
-    if (playbackDuration !== status.durationMillis && status.durationMillis > 0) {
+    if (
+      playbackDuration !== status.durationMillis &&
+      status.durationMillis > 0
+    ) {
       setPlaybackDuration(status.durationMillis);
     }
 
@@ -636,28 +705,35 @@ export default function GamePlay() {
 
   // Simplified function for loading and playing audio
   const loadAndPlaySong = async (song) => {
-    console.log('[TRACK_SYNC] loadAndPlaySong called for:', song?.songTitle || 'Unknown');
+    console.log(
+      "[TRACK_SYNC] loadAndPlaySong called for:",
+      song?.songTitle || "Unknown"
+    );
 
     if (!song) {
-      console.error('[TRACK_SYNC] Attempted to load null or undefined song');
+      console.error("[TRACK_SYNC] Attempted to load null or undefined song");
       return;
     }
 
     // Prevent update loops by checking if we're already playing this exact song with same ID
-    if (currentSong &&
+    if (
+      currentSong &&
       currentSong.songTitle === song.songTitle &&
-      currentSong.roundTraceId === song.roundTraceId) {
-      console.log('[TRACK_SYNC] Already playing this exact song, skipping redundant update');
+      currentSong.roundTraceId === song.roundTraceId
+    ) {
+      console.log(
+        "[TRACK_SYNC] Already playing this exact song, skipping redundant update"
+      );
       return;
     }
 
     // Ensure we have complete song data
     const enhancedSong = {
       ...song,
-      songTitle: song?.songTitle || 'Unknown Song',
-      songArtists: song?.songArtists || ['Unknown Artist'],
-      albumName: song?.albumName || 'Unknown Album',
-      imageUrl: song?.imageUrl || 'https://via.placeholder.com/300',
+      songTitle: song?.songTitle || "Unknown Song",
+      songArtists: song?.songArtists || ["Unknown Artist"],
+      albumName: song?.albumName || "Unknown Album",
+      imageUrl: song?.imageUrl || "https://via.placeholder.com/300",
       duration: song?.duration || 30000,
     };
 
@@ -666,7 +742,9 @@ export default function GamePlay() {
       // Try to find a player assignment
       const roundIndex = (currentRound - 1) % players.length;
       const assignedPlayer = players[roundIndex];
-      console.log(`[TRACK_SYNC] Auto-assigning song to player ${assignedPlayer.username} based on round`);
+      console.log(
+        `[TRACK_SYNC] Auto-assigning song to player ${assignedPlayer.username} based on round`
+      );
       enhancedSong.assignedToPlayer = assignedPlayer;
     }
 
@@ -686,25 +764,27 @@ export default function GamePlay() {
     // Only if this is a new/different song
     if (shouldNotifyServer) {
       try {
-        emit('song_playing', {
+        emit("song_playing", {
           gameId,
           roundNumber: currentRound,
           songTitle: enhancedSong.songTitle,
           songArtists: enhancedSong.songArtists,
           albumName: enhancedSong.albumName,
           imageUrl: enhancedSong.imageUrl,
-          roundTraceId: enhancedSong.roundTraceId || `${gameId}-${currentRound}-${Date.now()}`,
+          roundTraceId:
+            enhancedSong.roundTraceId ||
+            `${gameId}-${currentRound}-${Date.now()}`,
           previewUrl: enhancedSong.previewUrl,
-          assignedToPlayer: enhancedSong.assignedToPlayer
+          assignedToPlayer: enhancedSong.assignedToPlayer,
         });
       } catch (err) {
-        console.error('[TRACK_SYNC] Error notifying server:', err);
+        console.error("[TRACK_SYNC] Error notifying server:", err);
       }
     }
 
     // Non-hosts only need UI updates, not audio
     if (!isHost) {
-      console.log('[TRACK_SYNC] Non-host device: updating UI only');
+      console.log("[TRACK_SYNC] Non-host device: updating UI only");
       setIsPlaying(false);
       setPlaybackPosition(0);
       setPlaybackDuration(enhancedSong.duration || 30000);
@@ -718,7 +798,7 @@ export default function GamePlay() {
     try {
       // Check if song has a preview URL
       if (!enhancedSong.previewUrl) {
-        console.log('[TRACK_SYNC] Song has no preview URL, skipping audio');
+        console.log("[TRACK_SYNC] Song has no preview URL, skipping audio");
         setIsLoadingAudio(false);
         setIsPlaying(false);
         setCanVote(true);
@@ -731,7 +811,10 @@ export default function GamePlay() {
           await sound.stopAsync();
           await sound.unloadAsync();
         } catch (error) {
-          console.error("[TRACK_SYNC] Error cleaning up previous sound:", error);
+          console.error(
+            "[TRACK_SYNC] Error cleaning up previous sound:",
+            error
+          );
         }
       }
 
@@ -756,7 +839,7 @@ export default function GamePlay() {
             { shouldPlay: true },
             onPlaybackStatusUpdate
           ),
-          timeoutPromise
+          timeoutPromise,
         ]);
 
         // Clear timeout on success
@@ -767,15 +850,15 @@ export default function GamePlay() {
         setIsPlaying(true);
         setIsLoadingAudio(false);
         setCanVote(true);
-        console.log('[TRACK_SYNC] Successfully loaded audio');
+        console.log("[TRACK_SYNC] Successfully loaded audio");
       } catch (error) {
-        console.error('[TRACK_SYNC] Error loading audio:', error.message);
+        console.error("[TRACK_SYNC] Error loading audio:", error.message);
         clearTimeout(audioLoadTimeoutRef.current);
         setIsLoadingAudio(false);
         setCanVote(true);
       }
     } catch (error) {
-      console.error('[TRACK_SYNC] Unexpected error:', error);
+      console.error("[TRACK_SYNC] Unexpected error:", error);
       setIsLoadingAudio(false);
       setCanVote(true);
     }
@@ -794,7 +877,7 @@ export default function GamePlay() {
   // Toggle play/pause function with simplified error handling
   const togglePlayPause = async () => {
     if (!isHost) {
-      console.log('[TRACK_SYNC] Non-host device cannot control playback');
+      console.log("[TRACK_SYNC] Non-host device cannot control playback");
       Alert.alert(
         "Host Playback Only",
         "Audio playback is controlled by the host device.",
@@ -819,7 +902,9 @@ export default function GamePlay() {
           // Attempt to reset the sound
           await sound.stopAsync();
           setTimeout(() => {
-            sound.playAsync().catch(e => console.error("Recovery failed:", e));
+            sound
+              .playAsync()
+              .catch((e) => console.error("Recovery failed:", e));
           }, 500);
         } catch (e) {
           console.error("Error in recovery attempt:", e);
@@ -890,7 +975,8 @@ export default function GamePlay() {
 
     // Filter out songs that have already been played
     const availableSongs = songs.filter(
-      (song) => !playedSongs.some((played) => played.songTitle === song.songTitle)
+      (song) =>
+        !playedSongs.some((played) => played.songTitle === song.songTitle)
     );
 
     // If we've played all songs, reset tracking
@@ -907,9 +993,9 @@ export default function GamePlay() {
         assignedToPlayer: randomPlayer,
       };
 
-      setRoundSongs(prev => ({
+      setRoundSongs((prev) => ({
         ...prev,
-        [round]: songWithPlayer
+        [round]: songWithPlayer,
       }));
 
       loadAndPlaySong(songWithPlayer);
@@ -928,12 +1014,12 @@ export default function GamePlay() {
     };
 
     // Update state
-    setRoundSongs(prev => ({
+    setRoundSongs((prev) => ({
       ...prev,
       [round]: songWithAssignment,
     }));
 
-    setPlayedSongs(prev => [...prev, songWithAssignment]);
+    setPlayedSongs((prev) => [...prev, songWithAssignment]);
     loadAndPlaySong(songWithAssignment);
   };
 
@@ -941,51 +1027,74 @@ export default function GamePlay() {
   useEffect(() => {
     if (!isMultiplayer || !isConnected) return;
 
-    console.log("[TRACK_SYNC] Setting up WebSocket event listeners for multiplayer game");
+    console.log(
+      "[TRACK_SYNC] Setting up WebSocket event listeners for multiplayer game"
+    );
 
     // Handle playlist shared event
     const playlistSharedCleanup = on(EVENTS.PLAYLIST_SHARED, (data) => {
       if (data.gameId !== gameId) return;
 
-      console.log(`[TRACK_SYNC] Received consolidated playlist with ${data.playlist.length} tracks`);
+      console.log(
+        `[TRACK_SYNC] Received consolidated playlist with ${data.playlist.length} tracks`
+      );
 
       // Update maxRounds from server if provided
       if (data.maxRounds) {
-        console.log(`[TRACK_SYNC] Server configured for ${data.maxRounds} rounds`);
+        console.log(
+          `[TRACK_SYNC] Server configured for ${data.maxRounds} rounds`
+        );
         setMaxRounds(data.maxRounds);
       }
 
       // Count the number of mock tracks
-      const mockTracks = data.playlist.filter(item =>
-        item.track.songTitle === "Bohemian Rhapsody" ||
-        item.track.songTitle === "Don't Stop Believin'" ||
-        item.track.songTitle === "Billie Jean"
+      const mockTracks = data.playlist.filter(
+        (item) =>
+          item.track.songTitle === "Bohemian Rhapsody" ||
+          item.track.songTitle === "Don't Stop Believin'" ||
+          item.track.songTitle === "Billie Jean"
       );
 
       if (mockTracks.length > 0) {
-        console.warn(`[TRACK_SYNC] WARNING: Received ${mockTracks.length} mock tracks from server!`);
-        console.warn(`[TRACK_SYNC] This is happening because the server couldn't find any tracks with preview URLs`);
-        console.warn(`[TRACK_SYNC] Try enriching tracks with Deezer before sending to server`);
+        console.warn(
+          `[TRACK_SYNC] WARNING: Received ${mockTracks.length} mock tracks from server!`
+        );
+        console.warn(
+          `[TRACK_SYNC] This is happening because the server couldn't find any tracks with preview URLs`
+        );
+        console.warn(
+          `[TRACK_SYNC] Try enriching tracks with Deezer before sending to server`
+        );
       }
 
       // Log all tracks for debugging purposes
-      console.log('[TRACK_SYNC] Available tracks in playlist:');
+      console.log("[TRACK_SYNC] Available tracks in playlist:");
       data.playlist.forEach((item, index) => {
-        const isMock = item.track.isMockTrack ? '[MOCK]' : '[USER]';
-        console.log(`[TRACK_SYNC] ${index + 1}. ${isMock} "${item.track.songTitle}" by ${Array.isArray(item.track.songArtists) ? item.track.songArtists.join(', ') : item.track.songArtists}`);
-        console.log(`[TRACK_SYNC]    Owner: ${item.owner.username}, Preview URL: ${item.track.previewUrl ? 'Available' : 'Missing'}`);
+        const isMock = item.track.isMockTrack ? "[MOCK]" : "[USER]";
+        console.log(
+          `[TRACK_SYNC] ${index + 1}. ${isMock} "${item.track.songTitle}" by ${
+            Array.isArray(item.track.songArtists)
+              ? item.track.songArtists.join(", ")
+              : item.track.songArtists
+          }`
+        );
+        console.log(
+          `[TRACK_SYNC]    Owner: ${item.owner.username}, Preview URL: ${
+            item.track.previewUrl ? "Available" : "Missing"
+          }`
+        );
       });
 
       // Store the consolidated playlist
       setConsolidatedPlaylist(data.playlist);
 
       // Update allSongs with just the track data
-      const extractedSongs = data.playlist.map(item => ({
+      const extractedSongs = data.playlist.map((item) => ({
         ...item.track,
         assignedToPlayer: {
           username: item.owner.username,
-          id: item.owner.id
-        }
+          id: item.owner.id,
+        },
       }));
 
       setAllSongs(extractedSongs);
@@ -999,7 +1108,10 @@ export default function GamePlay() {
 
     // Handle round started event (server sends song to play)
     const roundStartedCleanup = on(EVENTS.ROUND_STARTED, (data) => {
-      console.log('[TRACK_SYNC] Round started event received', data.roundNumber);
+      console.log(
+        "[TRACK_SYNC] Round started event received",
+        data.roundNumber
+      );
 
       if (data.gameId !== gameId) {
         return;
@@ -1012,7 +1124,9 @@ export default function GamePlay() {
 
       // Check for maxRounds data
       if (data.maxRounds) {
-        console.log(`[TRACK_SYNC] Server indicated max rounds: ${data.maxRounds}`);
+        console.log(
+          `[TRACK_SYNC] Server indicated max rounds: ${data.maxRounds}`
+        );
         setMaxRounds(data.maxRounds);
       }
 
@@ -1020,7 +1134,9 @@ export default function GamePlay() {
       setGameStage("playing");
 
       // Reset vote tracking for new round
-      console.log(`[TRACK_SYNC] Resetting vote tracking for round ${data.roundNumber}`);
+      console.log(
+        `[TRACK_SYNC] Resetting vote tracking for round ${data.roundNumber}`
+      );
       setPendingVotes({});
       setAllVotesCast(false);
 
@@ -1029,33 +1145,45 @@ export default function GamePlay() {
         // Make sure we have all the required data with fallbacks
         const songData = {
           ...data.song,
-          songTitle: data.song.songTitle || 'Unknown Song',
-          songArtists: Array.isArray(data.song.songArtists) ?
-            data.song.songArtists :
-            (data.song.songArtists ? [data.song.songArtists] : ['Unknown Artist']),
-          albumName: data.song.albumName || 'Unknown Album',
-          imageUrl: data.song.imageUrl || 'https://via.placeholder.com/300',
+          songTitle: data.song.songTitle || "Unknown Song",
+          songArtists: Array.isArray(data.song.songArtists)
+            ? data.song.songArtists
+            : data.song.songArtists
+            ? [data.song.songArtists]
+            : ["Unknown Artist"],
+          albumName: data.song.albumName || "Unknown Album",
+          imageUrl: data.song.imageUrl || "https://via.placeholder.com/300",
           previewUrl: data.song.previewUrl,
-          roundTraceId: data.roundTraceId || data.song.roundTraceId || `game-${gameId}-round-${data.roundNumber}`,
-          assignedToPlayer: data.song.assignedToPlayer || data.assignedToPlayer || data.assignedPlayer
+          roundTraceId:
+            data.roundTraceId ||
+            data.song.roundTraceId ||
+            `game-${gameId}-round-${data.roundNumber}`,
+          assignedToPlayer:
+            data.song.assignedToPlayer ||
+            data.assignedToPlayer ||
+            data.assignedPlayer,
         };
 
         // Log the song data we're using
-        console.log('[TRACK_SYNC] Round started with song:', JSON.stringify({
-          title: songData.songTitle,
-          artists: Array.isArray(songData.songArtists) ?
-            songData.songArtists.join(', ') : songData.songArtists,
-          albumName: songData.albumName,
-          hasPreviewUrl: !!songData.previewUrl,
-          hasImage: !!songData.imageUrl,
-          assignedPlayer: songData.assignedToPlayer?.username || 'unknown'
-        }));
+        console.log(
+          "[TRACK_SYNC] Round started with song:",
+          JSON.stringify({
+            title: songData.songTitle,
+            artists: Array.isArray(songData.songArtists)
+              ? songData.songArtists.join(", ")
+              : songData.songArtists,
+            albumName: songData.albumName,
+            hasPreviewUrl: !!songData.previewUrl,
+            hasImage: !!songData.imageUrl,
+            assignedPlayer: songData.assignedToPlayer?.username || "unknown",
+          })
+        );
 
         // Update state and load song (which will respect the host-only settings)
         setCurrentSong(songData);
-        setRoundSongs(prev => ({
+        setRoundSongs((prev) => ({
           ...prev,
-          [data.roundNumber]: songData
+          [data.roundNumber]: songData,
         }));
 
         // Force can vote to be true
@@ -1064,7 +1192,7 @@ export default function GamePlay() {
 
         loadAndPlaySong(songData);
       } else {
-        console.error('[TRACK_SYNC] Round started without song data');
+        console.error("[TRACK_SYNC] Round started without song data");
       }
     });
 
@@ -1079,19 +1207,23 @@ export default function GamePlay() {
       const votedPlayerUsername = data.player?.username;
 
       console.log(`[TRACK_SYNC] Player voted event:`, data);
-      console.log(`[TRACK_SYNC] Player ${votedPlayerUsername} (ID: ${votedPlayerId}) voted for round ${data.round}`);
+      console.log(
+        `[TRACK_SYNC] Player ${votedPlayerUsername} (ID: ${votedPlayerId}) voted for round ${data.round}`
+      );
 
       // Ensure we're tracking for the current round
       if (data.round !== currentRound) {
-        console.log(`[TRACK_SYNC] Ignoring vote for round ${data.round}, we're on round ${currentRound}`);
+        console.log(
+          `[TRACK_SYNC] Ignoring vote for round ${data.round}, we're on round ${currentRound}`
+        );
         return;
       }
 
       // Track who has voted
-      setPendingVotes(prev => {
+      setPendingVotes((prev) => {
         const newPendingVotes = {
           ...prev,
-          [votedPlayerId]: true
+          [votedPlayerId]: true,
         };
 
         if (votedPlayerUsername) {
@@ -1100,18 +1232,23 @@ export default function GamePlay() {
         }
 
         // Check if this completes all votes
-        const votedCount = Object.keys(newPendingVotes).filter(key =>
-          // Filter out username entries to avoid double counting
-          !players.some(p => p?.username === key)
+        const votedCount = Object.keys(newPendingVotes).filter(
+          (key) =>
+            // Filter out username entries to avoid double counting
+            !players.some((p) => p?.username === key)
         ).length;
 
-        const totalPlayers = players.filter(p => p !== undefined).length;
+        const totalPlayers = players.filter((p) => p !== undefined).length;
 
         // Log vote progress
-        console.log(`[TRACK_SYNC] Vote progress: ${votedCount}/${totalPlayers} votes received for round ${currentRound}`);
+        console.log(
+          `[TRACK_SYNC] Vote progress: ${votedCount}/${totalPlayers} votes received for round ${currentRound}`
+        );
 
         if (votedCount >= totalPlayers) {
-          console.log(`[TRACK_SYNC] All votes received for round ${currentRound}!`);
+          console.log(
+            `[TRACK_SYNC] All votes received for round ${currentRound}!`
+          );
           setAllVotesCast(true);
         }
 
@@ -1123,7 +1260,7 @@ export default function GamePlay() {
     const voteResultCleanup = on(EVENTS.VOTE_RESULT, (data) => {
       if (data.gameId !== gameId) return;
 
-      console.log('[TRACK_SYNC] Vote result received:', data);
+      console.log("[TRACK_SYNC] Vote result received:", data);
 
       // Reset voting tracking state for the next round
       setPendingVotes({});
@@ -1133,7 +1270,7 @@ export default function GamePlay() {
       if (data.scores) {
         // Create a mapping of player IDs to usernames for more reliable score tracking
         const playerIdToUsername = {};
-        players.forEach(player => {
+        players.forEach((player) => {
           playerIdToUsername[player.id] = player.username;
         });
 
@@ -1147,16 +1284,19 @@ export default function GamePlay() {
 
           if (!playerUsername) {
             // Try to find the player by ID in players array
-            const player = players.find(p =>
-              String(p.id) === String(playerId) || // Try string comparison
-              p.id === Number(playerId) || // Try number conversion
-              p.username === playerId // Username might be in ID field
+            const player = players.find(
+              (p) =>
+                String(p.id) === String(playerId) || // Try string comparison
+                p.id === Number(playerId) || // Try number conversion
+                p.username === playerId // Username might be in ID field
             );
 
             if (player) {
               playerUsername = player.username;
             } else {
-              console.warn(`[TRACK_SYNC] Could not find player for ID: ${playerId}`);
+              console.warn(
+                `[TRACK_SYNC] Could not find player for ID: ${playerId}`
+              );
               playerUsername = playerId; // Use ID as fallback
             }
           }
@@ -1165,7 +1305,7 @@ export default function GamePlay() {
           updatedPoints[playerUsername] = score;
         });
 
-        console.log('[TRACK_SYNC] Updated player points:', updatedPoints);
+        console.log("[TRACK_SYNC] Updated player points:", updatedPoints);
         setPlayerPoints(updatedPoints);
       }
 
@@ -1178,16 +1318,20 @@ export default function GamePlay() {
       setShowVoteResult(true);
 
       // Check if this is the last round
-      const isLastRound = data.isLastRound || (currentRound >= maxRounds);
+      const isLastRound = data.isLastRound || currentRound >= maxRounds;
 
       // After a delay, transition to the leaderboard stage
       setTimeout(() => {
-        console.log('[TRACK_SYNC] Transitioning to leaderboard after vote results');
+        console.log(
+          "[TRACK_SYNC] Transitioning to leaderboard after vote results"
+        );
         setGameStage("leaderboard");
 
         // If this is the last round, transition to results after leaderboard
         if (isLastRound) {
-          console.log('[TRACK_SYNC] This was the final round, preparing for game end');
+          console.log(
+            "[TRACK_SYNC] This was the final round, preparing for game end"
+          );
         }
       }, 2500);
     });
@@ -1201,7 +1345,9 @@ export default function GamePlay() {
 
       // Update maxRounds if provided
       if (data.maxRounds) {
-        console.log(`[TRACK_SYNC] Server indicated max rounds: ${data.maxRounds}`);
+        console.log(
+          `[TRACK_SYNC] Server indicated max rounds: ${data.maxRounds}`
+        );
         setMaxRounds(data.maxRounds);
       }
 
@@ -1210,40 +1356,53 @@ export default function GamePlay() {
       const SYNC_THROTTLE_MS = 1000; // Reduced from 3000ms to 1000ms
 
       if (now - lastSyncTimestamp.current < SYNC_THROTTLE_MS) {
-        console.log('[TRACK_SYNC] Ignoring force sync due to throttling - too soon since last sync');
+        console.log(
+          "[TRACK_SYNC] Ignoring force sync due to throttling - too soon since last sync"
+        );
         return;
       }
 
       // If we already processed this exact trace ID recently, ignore it
       if (lastSyncTraceIds.current.includes(traceId)) {
-        console.log(`[TRACK_SYNC] Already processed sync with trace ID ${traceId}, ignoring duplicate`);
+        console.log(
+          `[TRACK_SYNC] Already processed sync with trace ID ${traceId}, ignoring duplicate`
+        );
         return;
       }
 
       // Skip if we're already playing this exact song title and it has the same trace ID
-      if (currentSong &&
+      if (
+        currentSong &&
         data.song &&
         currentSong.songTitle === data.song.songTitle &&
-        currentSong.roundTraceId === traceId) {
-        console.log('[TRACK_SYNC] Already playing this song with matching trace ID, ignoring force sync');
+        currentSong.roundTraceId === traceId
+      ) {
+        console.log(
+          "[TRACK_SYNC] Already playing this song with matching trace ID, ignoring force sync"
+        );
         return;
       }
 
-      console.log('[TRACK_SYNC] Force sync received for round', data.roundNumber, 'song:', data.song?.songTitle);
+      console.log(
+        "[TRACK_SYNC] Force sync received for round",
+        data.roundNumber,
+        "song:",
+        data.song?.songTitle
+      );
 
       // Update the timestamp of our last processed sync
       lastSyncTimestamp.current = now;
 
       // Track this trace ID to avoid processing duplicates
       lastSyncTraceIds.current.push(traceId);
-      // Keep only the most recent trace IDs 
+      // Keep only the most recent trace IDs
       if (lastSyncTraceIds.current.length > MAX_SYNC_HISTORY) {
         lastSyncTraceIds.current.shift();
       }
 
       // First, validate that we have song data
       if (!data.song) {
-        console.error('[TRACK_SYNC] Received force sync without song data');
+        console.error("[TRACK_SYNC] Received force sync without song data");
         return;
       }
 
@@ -1253,23 +1412,25 @@ export default function GamePlay() {
       // Normalize song data with complete fields
       const syncSong = {
         ...data.song,
-        songTitle: data.song.songTitle || 'Unknown Song',
-        songArtists: data.song.songArtists || ['Unknown Artist'],
-        albumName: data.song.albumName || 'Unknown Album',
-        imageUrl: data.song.imageUrl || 'https://via.placeholder.com/300',
+        songTitle: data.song.songTitle || "Unknown Song",
+        songArtists: data.song.songArtists || ["Unknown Artist"],
+        albumName: data.song.albumName || "Unknown Album",
+        imageUrl: data.song.imageUrl || "https://via.placeholder.com/300",
         roundTraceId: traceId,
-        assignedToPlayer: data.song.assignedToPlayer || data.assignedPlayer
+        assignedToPlayer: data.song.assignedToPlayer || data.assignedPlayer,
       };
 
       // Update all relevant state AT ONCE to avoid cascading updates
       // This helps prevent the maximum update depth exceeded error
-      console.log(`[TRACK_SYNC] Applying force sync for "${syncSong.songTitle}"`);
+      console.log(
+        `[TRACK_SYNC] Applying force sync for "${syncSong.songTitle}"`
+      );
 
       // Update state directly rather than calling loadAndPlaySong to avoid loops
       setCurrentSong(syncSong);
-      setRoundSongs(prev => ({
+      setRoundSongs((prev) => ({
         ...prev,
-        [data.roundNumber]: syncSong
+        [data.roundNumber]: syncSong,
       }));
 
       // Make sure we can vote
@@ -1279,18 +1440,24 @@ export default function GamePlay() {
       // Now load and play the audio for the sync song
       if (isHost) {
         if (!syncSong.previewUrl) {
-          console.log('[TRACK_SYNC] Force sync song has no preview URL, skipping audio');
+          console.log(
+            "[TRACK_SYNC] Force sync song has no preview URL, skipping audio"
+          );
           setIsLoadingAudio(false);
           setIsPlaying(false);
         } else {
           // Load audio separately rather than triggering another full loadAndPlaySong
-          console.log('[TRACK_SYNC] Loading audio for force synced song');
+          console.log("[TRACK_SYNC] Loading audio for force synced song");
           setIsLoadingAudio(true);
 
           // Clean up existing sound
           if (sound) {
-            sound.stopAsync().catch(e => console.error("Error stopping sound:", e));
-            sound.unloadAsync().catch(e => console.error("Error unloading sound:", e));
+            sound
+              .stopAsync()
+              .catch((e) => console.error("Error stopping sound:", e));
+            sound
+              .unloadAsync()
+              .catch((e) => console.error("Error unloading sound:", e));
           }
 
           // Load the audio directly
@@ -1298,14 +1465,19 @@ export default function GamePlay() {
             { uri: syncSong.previewUrl },
             { shouldPlay: true },
             onPlaybackStatusUpdate
-          ).then(({ sound: newSound }) => {
-            setSound(newSound);
-            setIsPlaying(true);
-            setIsLoadingAudio(false);
-          }).catch(error => {
-            console.error('[TRACK_SYNC] Error loading audio for synced song:', error);
-            setIsLoadingAudio(false);
-          });
+          )
+            .then(({ sound: newSound }) => {
+              setSound(newSound);
+              setIsPlaying(true);
+              setIsLoadingAudio(false);
+            })
+            .catch((error) => {
+              console.error(
+                "[TRACK_SYNC] Error loading audio for synced song:",
+                error
+              );
+              setIsLoadingAudio(false);
+            });
         }
       } else {
         // Non-host only needs UI updates
@@ -1320,7 +1492,7 @@ export default function GamePlay() {
       if (emit) {
         setTimeout(() => {
           try {
-            emit('song_playing', {
+            emit("song_playing", {
               gameId,
               roundNumber: data.roundNumber,
               songTitle: syncSong.songTitle,
@@ -1329,11 +1501,11 @@ export default function GamePlay() {
               imageUrl: syncSong.imageUrl,
               roundTraceId: traceId,
               previewUrl: syncSong.previewUrl,
-              assignedToPlayer: syncSong.assignedToPlayer
+              assignedToPlayer: syncSong.assignedToPlayer,
             });
-            console.log('[TRACK_SYNC] Confirmed synchronized song to server');
+            console.log("[TRACK_SYNC] Confirmed synchronized song to server");
           } catch (err) {
-            console.error('[TRACK_SYNC] Error confirming sync to server:', err);
+            console.error("[TRACK_SYNC] Error confirming sync to server:", err);
           }
         }, 500); // Small delay to avoid immediate re-sync
       }
@@ -1345,7 +1517,9 @@ export default function GamePlay() {
     const songReceivedCleanup = on(EVENTS.SONG_RECEIVED, (data) => {
       if (data.gameId !== gameId) return;
 
-      console.log(`[TRACK_SYNC] Client ${data.deviceRole} received song for round ${data.roundNumber}`);
+      console.log(
+        `[TRACK_SYNC] Client ${data.deviceRole} received song for round ${data.roundNumber}`
+      );
     });
 
     // Handle host playback status updates
@@ -1353,7 +1527,9 @@ export default function GamePlay() {
       if (data.gameId !== gameId || isHost) return; // Only non-host devices listen to this
 
       if (!data.canPlayAudio) {
-        console.log(`[TRACK_SYNC] Host cannot play audio for song: ${data.songTitle}`);
+        console.log(
+          `[TRACK_SYNC] Host cannot play audio for song: ${data.songTitle}`
+        );
       }
     });
 
@@ -1361,11 +1537,15 @@ export default function GamePlay() {
     const syncStatusCleanup = on(EVENTS.SYNC_STATUS, (data) => {
       if (data.gameId !== gameId) return;
 
-      console.log(`[TRACK_SYNC] Game sync status: ${data.status}, round ${data.roundNumber}`);
+      console.log(
+        `[TRACK_SYNC] Game sync status: ${data.status}, round ${data.roundNumber}`
+      );
 
       // If server reports any sync issues, update UI
-      if (data.status === 'out_of_sync') {
-        console.log(`[TRACK_SYNC] Game is out of sync! ${data.syncedClients}/${data.totalClients} clients in sync`);
+      if (data.status === "out_of_sync") {
+        console.log(
+          `[TRACK_SYNC] Game is out of sync! ${data.syncedClients}/${data.totalClients} clients in sync`
+        );
       }
     });
 
@@ -1377,18 +1557,22 @@ export default function GamePlay() {
 
       // Add more detailed debug logging for song data synchronization
       console.log(`[TRACK_SYNC] Song data received from other client:`, {
-        title: data.songTitle || 'Unknown',
-        artists: data.songArtists || 'Unknown',
-        album: data.albumName || 'Unknown',
+        title: data.songTitle || "Unknown",
+        artists: data.songArtists || "Unknown",
+        album: data.albumName || "Unknown",
         hasImage: !!data.imageUrl,
-        imageUrl: data.imageUrl ? data.imageUrl.substring(0, 30) + '...' : 'None',
-        roundTraceId: data.roundTraceId || 'None'
+        imageUrl: data.imageUrl
+          ? data.imageUrl.substring(0, 30) + "..."
+          : "None",
+        roundTraceId: data.roundTraceId || "None",
       });
 
       // If this is another client's data, check if our song data matches
       if (currentSong && data.songTitle !== currentSong.songTitle) {
         console.log(`[TRACK_SYNC] Song mismatch detected!`);
-        console.log(`[TRACK_SYNC] Our song: "${currentSong.songTitle}", Their song: "${data.songTitle}"`);
+        console.log(
+          `[TRACK_SYNC] Our song: "${currentSong.songTitle}", Their song: "${data.songTitle}"`
+        );
       } else if (currentSong) {
         console.log(`[TRACK_SYNC] Songs are synchronized between clients`);
       }
@@ -1617,22 +1801,26 @@ export default function GamePlay() {
   // Add a loading timeout to prevent getting stuck on loading screen
   useEffect(() => {
     if (isLoading) {
-      console.log("Loading timeout started - will auto-advance in 5 seconds if still loading");
+      console.log(
+        "Loading timeout started - will auto-advance in 5 seconds if still loading"
+      );
       const loadingTimeout = setTimeout(() => {
         if (isLoading) {
-          console.log("Loading timeout triggered - auto-advancing past loading screen");
+          console.log(
+            "Loading timeout triggered - auto-advancing past loading screen"
+          );
           setIsLoading(false);
           setGameStage("playing");
 
           // Check if we already have received songs from the server
           if (allSongs.length === 0 && consolidatedPlaylist.length > 0) {
             // Extract songs from the consolidated playlist
-            const extractedSongs = consolidatedPlaylist.map(item => ({
+            const extractedSongs = consolidatedPlaylist.map((item) => ({
               ...item.track,
               assignedToPlayer: {
                 username: item.owner.username,
-                id: item.owner.id
-              }
+                id: item.owner.id,
+              },
             }));
             setAllSongs(extractedSongs);
           }
@@ -1658,11 +1846,15 @@ export default function GamePlay() {
   // Add an additional timeout for the host specifically
   useEffect(() => {
     if (isHost && isLoading) {
-      console.log("[HOST] Special host loading check - will verify in 3 seconds");
+      console.log(
+        "[HOST] Special host loading check - will verify in 3 seconds"
+      );
       const hostLoadingTimeout = setTimeout(() => {
         console.log("[HOST] Checking if host is still loading...");
         if (isLoading) {
-          console.log("[HOST] Host device still loading - attempting to force progress");
+          console.log(
+            "[HOST] Host device still loading - attempting to force progress"
+          );
 
           // Force loading to complete
           setIsLoading(false);
@@ -1671,12 +1863,12 @@ export default function GamePlay() {
           // If we have no allSongs but have consolidatedPlaylist, use it
           if (allSongs.length === 0 && consolidatedPlaylist.length > 0) {
             console.log("[HOST] Using consolidated playlist for songs");
-            const extractedSongs = consolidatedPlaylist.map(item => ({
+            const extractedSongs = consolidatedPlaylist.map((item) => ({
               ...item.track,
               assignedToPlayer: {
                 username: item.owner.username,
-                id: item.owner.id
-              }
+                id: item.owner.id,
+              },
             }));
             setAllSongs(extractedSongs);
           } else if (allSongs.length === 0) {
@@ -1696,22 +1888,41 @@ export default function GamePlay() {
 
       return () => clearTimeout(hostLoadingTimeout);
     }
-  }, [isHost, isLoading, allSongs, consolidatedPlaylist, mockSongs, currentSong]);
+  }, [
+    isHost,
+    isLoading,
+    allSongs,
+    consolidatedPlaylist,
+    mockSongs,
+    currentSong,
+  ]);
 
   // At the top of the component where other refs are defined, add:
   const loadedSongRef = useRef(null);
 
   // Auto-play song when game becomes active and we have a current song
   useEffect(() => {
-    if (gameStage === "playing" && currentSong && !isPlaying && !isLoadingAudio) {
+    if (
+      gameStage === "playing" &&
+      currentSong &&
+      !isPlaying &&
+      !isLoadingAudio
+    ) {
       // Track if we've already tried to load this exact song to prevent loops
-      const songKey = `${currentSong.songTitle}-${currentSong.roundTraceId || ''}`;
+      const songKey = `${currentSong.songTitle}-${
+        currentSong.roundTraceId || ""
+      }`;
       if (loadedSongRef.current === songKey) {
-        console.log("[TRACK_SYNC] Already attempted to load this song, preventing loop");
+        console.log(
+          "[TRACK_SYNC] Already attempted to load this song, preventing loop"
+        );
         return;
       }
 
-      console.log("[TRACK_SYNC] Auto-playing current song:", currentSong.songTitle);
+      console.log(
+        "[TRACK_SYNC] Auto-playing current song:",
+        currentSong.songTitle
+      );
       loadedSongRef.current = songKey;
       loadAndPlaySong(currentSong);
     }
@@ -1739,20 +1950,29 @@ export default function GamePlay() {
   // Add debugging for player data structure
   useEffect(() => {
     if (isMultiplayer && players.length > 0) {
-      console.log('[TRACK_SYNC] Player structure debug:');
-      console.log('First player object:', JSON.stringify(players[0]));
-      console.log('Player IDs:', players.map(p => `${p.id} (${typeof p.id})`).join(', '));
-      console.log('Player usernames:', players.map(p => p.username).join(', '));
+      console.log("[TRACK_SYNC] Player structure debug:");
+      console.log("First player object:", JSON.stringify(players[0]));
+      console.log(
+        "Player IDs:",
+        players.map((p) => `${p.id} (${typeof p.id})`).join(", ")
+      );
+      console.log(
+        "Player usernames:",
+        players.map((p) => p.username).join(", ")
+      );
     }
   }, [isMultiplayer, players]);
 
   // After players are updated, log their structure for debugging
   useEffect(() => {
     if (players.length > 0 && isMultiplayer) {
-      console.log('[TRACK_SYNC] Player structure debug:');
-      console.log('First player object:', players[0]);
-      console.log('Player IDs:', players.map(p => p.id).join(', '));
-      console.log('Player usernames:', players.map(p => p.username).join(', '));
+      console.log("[TRACK_SYNC] Player structure debug:");
+      console.log("First player object:", players[0]);
+      console.log("Player IDs:", players.map((p) => p.id).join(", "));
+      console.log(
+        "Player usernames:",
+        players.map((p) => p.username).join(", ")
+      );
     }
   }, [players, isMultiplayer]);
 
@@ -1811,12 +2031,16 @@ export default function GamePlay() {
           </View>
 
           <View style={styles.songPlaybackInfo}>
-            <Text style={styles.playbackSongTitle}>
-              {currentSong.songTitle}
-            </Text>
-            <Text style={styles.playbackArtistName}>
-              {currentSong.songArtists.join(", ")}
-            </Text>
+            <View style={{ maxHeight: "2em" }}>
+              <Text style={styles.playbackSongTitle}>
+                {currentSong.songTitle}
+              </Text>
+            </View>
+            <View style={{ maxHeight: "2em" }}>
+              <Text style={styles.playbackArtistName}>
+                {currentSong.songArtists.join(", ")}
+              </Text>
+            </View>
           </View>
 
           <View style={styles.playbackControlsContainer}>
@@ -1930,7 +2154,8 @@ export default function GamePlay() {
                 } else {
                   Alert.alert(
                     "Not Ready Yet",
-                    `Please listen to at least ${MIN_PLAY_DURATION / 1000
+                    `Please listen to at least ${
+                      MIN_PLAY_DURATION / 1000
                     } seconds of the song before voting.`,
                     [{ text: "OK" }]
                   );
@@ -2162,12 +2387,16 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "bold",
     textAlign: "center",
+    maxHeight: "2em",
+    numberOfLines: 1,
   },
   playbackArtistName: {
     color: "#CCC",
     fontSize: 18,
     marginTop: 8,
     textAlign: "center",
+    maxHeight: "1.5em",
+    numberOfLines: 1,
   },
   waveformContainer: {
     height: 80,
