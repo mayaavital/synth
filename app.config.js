@@ -2,7 +2,7 @@ export default {
   expo: {
     name: "synth",
     slug: "synth",
-    version: "1.0.0",
+    version: "1.0.1",
     orientation: "portrait",
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
@@ -17,6 +17,7 @@ export default {
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.cs377u.synth",
+      buildNumber: "2",
       config: {
         googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY
       }
