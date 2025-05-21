@@ -17,10 +17,7 @@ export default {
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.csprout3.synth",
-      buildNumber: "2",
-      config: {
-        googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY
-      }
+      buildNumber: "2"
     },
     android: {
       adaptiveIcon: {
