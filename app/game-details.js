@@ -143,6 +143,31 @@ export default function GameDetails() {
     roundsCount = roundMap.size;
   }
 
+  // Helper to get externalUrl for a song from combined_tracks or guess_tracks
+  function getExternalUrlForSong(song, roundNumber) {
+    const guessTracks = gameData.game_data.guess_tracks || [];
+    const combinedTracks = gameData.game_data.combined_tracks || {};
+    // Try to find in guess_tracks
+    const guessTrack = guessTracks.find(gt =>
+      (gt.track?.songTitle === song.songTitle || gt.track?.songTitle === song.title) &&
+      gt.track?.externalUrl
+    );
+    if (guessTrack && guessTrack.track && guessTrack.track.externalUrl) {
+      return guessTrack.track.externalUrl;
+    }
+    // Try to find in combined_tracks (search all arrays for a matching songTitle)
+    for (const playerTracks of Object.values(combinedTracks)) {
+      const match = playerTracks.find(track =>
+        track.songTitle === song.songTitle || track.songTitle === song.title
+      );
+      if (match && match.externalUrl) {
+        return match.externalUrl;
+      }
+    }
+    // Fallback to song.externalUrl
+    return song.externalUrl;
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       {/* <View style={styles.header}>
@@ -172,26 +197,28 @@ export default function GameDetails() {
         <View style={styles.scoresContainer}>
           <Text style={styles.scoresTitle}>Final Scores</Text>
           <View style={styles.scoresList}>
-            {Object.entries(gameData.game_data?.scores || {}).map(([playerId, score], idx) => {
-              const player = gameData.metadata.players.find(p => p.id === playerId);
-              return (
-                <View
-                  key={playerId}
-                  style={[styles.scoreItem, idx === 0 && styles.topScorer]}
-                >
-                  <View style={styles.scorePlayerInfo}>
-                    <Image
-                      source={{ uri: player?.profilePicture || "https://via.placeholder.com/40" }}
-                      style={styles.scorePlayerAvatar}
-                    />
-                    <Text style={styles.scorePlayerName}>
-                      {player?.username || "Unknown Player"}
-                    </Text>
-                  </View>
-                  <Text style={styles.scoreValue}>{score} points</Text>
-                </View>
-              );
-            })}
+            {(() => {
+              const realUsernames = gameData.metadata.players.map(p => p.username);
+              return (Object.entries(gameData.game_data.scoresWithUsernames || gameData.game_data.scores || {}))
+                .filter(([username]) => realUsernames.includes(username))
+                .map(([username, score], idx) => {
+                  const player = gameData.metadata.players.find(p => p.username === username);
+                  return (
+                    <View key={username} style={[styles.scoreItem, idx === 0 && styles.topScorer]}>
+                      <View style={styles.scorePlayerInfo}>
+                        <Image
+                          source={{ uri: player?.profilePicture || "https://via.placeholder.com/40" }}
+                          style={styles.scorePlayerAvatar}
+                        />
+                        <Text style={styles.scorePlayerName}>
+                          {username}
+                        </Text>
+                      </View>
+                      <Text style={styles.scoreValue}>{score} points</Text>
+                    </View>
+                  );
+                });
+            })()}
           </View>
         </View>
 
@@ -222,21 +249,21 @@ export default function GameDetails() {
                 <TouchableOpacity 
                   style={styles.spotifyButton}
                   onPress={() => {
-                    if (song.externalUrl) {
-                      Linking.openURL(song.externalUrl);
+                    if (getExternalUrlForSong(song, song.roundNumber)) {
+                      Linking.openURL(getExternalUrlForSong(song, song.roundNumber));
                     }
                   }}
                 >
                   <Ionicons name="add" size={20} color="white" />
                 </TouchableOpacity>
                 <View style={styles.reviewPlayerAvatarWrapper}>
-                  <Image
+                  {/* <Image
                     source={{ 
                       uri: gameData.metadata.players.find(p => p.id === song.playerId)?.profilePicture 
                         || "https://via.placeholder.com/40" 
                     }}
                     style={styles.reviewPlayerAvatar}
-                  />
+                  /> */}
                 </View>
                 <Text style={styles.reviewPlayerName}>
                   {song.playerName}
