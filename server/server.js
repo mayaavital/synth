@@ -1589,12 +1589,6 @@ io.on("connection", (socket) => {
         const voterUsername =
           getUsernameById(gameId, voterId) ||
           game.players.find((p) => p.id === voterId)?.username;
-        if (voterUsername) {
-          game.votes[voterUsername] = {
-            id: targetPlayerId,
-            username: votedForUsername,
-          };
-        }
 
         // Get username of voted-for player
         const votedForUsernameResolved =
@@ -1613,8 +1607,9 @@ io.on("connection", (socket) => {
         );
 
         // Award point if either matching method succeeds (as long as player isn't voting for themselves)
-        if (directIdMatch || usernameMatch) {
-          game.scores[voterUsername] = (game.scores[voterUsername] || 0) + 1;
+        if ((directIdMatch || usernameMatch) && voterId !== correctPlayerId) {
+          // Store score using socket ID as key
+          game.scores[voterId] = (game.scores[voterId] || 0) + 1;
           console.log("game.scores", game.scores);
           // Add more detailed logging using username mappings
           console.log(
@@ -1624,10 +1619,7 @@ io.on("connection", (socket) => {
           );
         } else {
           // Log why no point was awarded for debugging
-          if (
-            voterId === correctPlayerId ||
-            voterUsername === correctPlayerUsername
-          ) {
+          if (voterId === correctPlayerId) {
             console.log(
               `[PLAYER_MAPPING] No point for "${voterUsername}": Cannot vote for yourself`
             );
@@ -1642,8 +1634,9 @@ io.on("connection", (socket) => {
       // Create a username-keyed copy of scores for easier client-side handling
       const scoresWithUsernames = {};
       game.players.forEach((player) => {
-        // Use username as key, fallback to 0 if missing
-        scoresWithUsernames[player.username] = game.scores[player.id] || 0;
+        // Use socket ID to get score, then map to username
+        const score = game.scores[player.id] || 0;
+        scoresWithUsernames[player.username] = score;
       });
 
       // Add a safety check: if we have missing players in the scores, add them with 0 points
