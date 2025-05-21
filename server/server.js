@@ -1282,10 +1282,11 @@ io.on('connection', (socket) => {
         let usernameMatch = false;
         
         // Get voter username for logging
-        const voterUsername = getUsernameById(gameId, voterId) || 
-                              game.players.find(p => p.id === voterId)?.username || 
-                              'Unknown';
-                              
+        const voterUsername = getUsernameById(gameId, voterId) || game.players.find(p => p.id === voterId)?.username;
+        if (voterUsername) {
+          game.votes[voterUsername] = { id: targetPlayerId, username: votedForUsername };
+        }
+        
         // Get username of voted-for player
         const votedForUsernameResolved = votedForUsername || 
                                       getUsernameById(gameId, votedForId) || 
@@ -1300,8 +1301,8 @@ io.on('connection', (socket) => {
         console.log(`[VOTE_DEBUG] Match results: directIdMatch=${directIdMatch}, usernameMatch=${usernameMatch}`);
         
         // Award point if either matching method succeeds (as long as player isn't voting for themselves)
-        if ((directIdMatch || usernameMatch) && voterId !== correctPlayerId) {
-          game.scores[voterId] = (game.scores[voterId] || 0) + 1;
+        if ((directIdMatch || usernameMatch)) {
+          game.scores[voterUsername] = (game.scores[voterUsername] || 0) + 1;
           console.log("game.scores", game.scores);
           // Add more detailed logging using username mappings
           console.log(`[PLAYER_MAPPING] Player "${voterUsername}" earned 1 point for correctly guessing "${correctPlayerUsername}" (match type: ${directIdMatch ? 'ID' : 'username'})`);
