@@ -16,7 +16,7 @@ export default {
     ],
     ios: {
       supportsTablet: true,
-      bundleIdentifier: "com.cs377u.synth",
+      bundleIdentifier: "com.csprout3.synth",
       buildNumber: "2",
       config: {
         googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY
@@ -27,7 +27,7 @@ export default {
         foregroundImage: "./assets/adaptive-icon.png",
         backgroundColor: "#ffffff"
       },
-      package: "com.cs377u.synth",
+      package: "com.csprout3.synth",
       config: {
         googleMaps: {
           apiKey: process.env.GOOGLE_MAPS_API_KEY

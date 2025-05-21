@@ -1,4 +1,4 @@
-package com.cs377u.synth
+package com.csprout3.synth
 
 import android.app.Application
 import android.content.res.Configuration

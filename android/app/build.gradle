@@ -87,9 +87,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.cs377u.synth'
+    namespace 'com.csprout3.synth'
     defaultConfig {
-        applicationId 'com.cs377u.synth'
+        applicationId 'com.csprout3.synth'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
