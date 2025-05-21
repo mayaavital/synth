@@ -1641,42 +1641,9 @@ io.on("connection", (socket) => {
 
       // Create a username-keyed copy of scores for easier client-side handling
       const scoresWithUsernames = {};
-
-      // Enhanced mapping: build the scoresWithUsernames more carefully
-      Object.entries(game.scores).forEach(([playerId, points]) => {
-        // First try to get the username directly from our mapping
-        const username = getUsernameById(gameId, playerId);
-
-        if (username) {
-          // Create/update an entry with the username as key
-          scoresWithUsernames[username] = points;
-
-          // Also keep the socketId version for backward compatibility
-          scoresWithUsernames[playerId] = points;
-
-          console.log(
-            `[TRACK_SYNC] Mapped player ${playerId} to username ${username} with ${points} points`
-          );
-        } else {
-          // Try to find player in the players list
-          const player = game.players.find(
-            (p) => p.id === playerId || String(p.id) === String(playerId)
-          );
-
-          if (player && player.username) {
-            scoresWithUsernames[player.username] = points;
-            scoresWithUsernames[playerId] = points;
-            console.log(
-              `[TRACK_SYNC] Found player ${playerId} in players list with username ${player.username}`
-            );
-          } else {
-            // Just keep the original if no username is found
-            scoresWithUsernames[playerId] = points;
-            console.log(
-              `[TRACK_SYNC] No username found for player ${playerId}, keeping original ID`
-            );
-          }
-        }
+      game.players.forEach((player) => {
+        // Use username as key, fallback to 0 if missing
+        scoresWithUsernames[player.username] = game.scores[player.id] || 0;
       });
 
       // Add a safety check: if we have missing players in the scores, add them with 0 points
@@ -1730,10 +1697,10 @@ io.on("connection", (socket) => {
         round: currentRound,
         votes: simplifiedVotes,
         scores: game.scores,
+        scoresWithUsernames, // Add this line
         correctPlayerId,
         correctPlayerUsername,
         isLastRound,
-        scoresWithUsernames,
         ...getPlayerMappings(gameId), // Add comprehensive mappings
         maxRounds: game.maxRounds, // Include maxRounds in vote_result
       });
