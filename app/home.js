@@ -13,6 +13,28 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { useSpotifyAuth } from "../utils";
+import * as Analytics from 'expo-firebase-analytics';
+// Import the functions you need from the SDKs you need
+// import { initializeApp } from "firebase/app";
+// import { getAnalytics, logEvent } from "firebase/analytics";
+// const analytics = getAnalytics(app);
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyCJfNmkM43CH16qnRffvm78lJGK_3wPH9Y",
+  authDomain: "synth-database.firebaseapp.com",
+  databaseURL: "https://synth-database-default-rtdb.firebaseio.com",
+  projectId: "synth-database",
+  storageBucket: "synth-database.firebasestorage.app",
+  messagingSenderId: "681571197393",
+  appId: "1:681571197393:web:21ebf6102f5239372740f0",
+  measurementId: "G-ND9VF6MRB4"
+};
+
+// Initialize Firebase
 
 export default function home() {
   const navigation = useNavigation();
@@ -321,7 +343,16 @@ export default function home() {
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.card}
-          onPress={() => {
+          onPress={async () => {
+            console.log("Logging event");
+
+            try{
+            // Example: Logging a custom event
+            await Analytics.logEvent('select_content', undefined); 
+          } catch (error) { 
+            console.error("Error logging event:", error);
+          }
+            console.log("Logging event");
             router.push("/previous-games")
           }}
         >
