@@ -24,12 +24,7 @@ export default {
         foregroundImage: "./assets/adaptive-icon.png",
         backgroundColor: "#ffffff"
       },
-      package: "com.csprout3.synth",
-      config: {
-        googleMaps: {
-          apiKey: process.env.GOOGLE_MAPS_API_KEY
-        }
-      }
+      package: "com.csprout3.synth"
     },
     web: {
       favicon: "./assets/favicon.png"
