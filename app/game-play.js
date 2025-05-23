@@ -10,12 +10,17 @@ import {
   Alert,
   Linking,
   ScrollView,
+  Platform,
 } from "react-native";
 import { useNavigation, useRouter, useLocalSearchParams } from "expo-router";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
-import Slider from "@react-native-community/slider";
+// Only import Slider for non-web platforms
+let Slider;
+if (Platform.OS !== 'web') {
+  Slider = require("@react-native-community/slider").default;
+}
 import { useSpotifyAuth } from "../utils";
 import {
   getMyRecentlyPlayedTracks,
@@ -168,6 +173,9 @@ export default function GamePlay() {
   // Add state for tracking votes
   const [pendingVotes, setPendingVotes] = useState({});
   const [allVotesCast, setAllVotesCast] = useState(false);
+
+  // Add state for tracking whether tracks have been shared
+  const [hasSharedTracks, setHasSharedTracks] = useState(false);
 
   // Get game details from params
   const gameName = params.gameName || "Game Name";
@@ -336,9 +344,6 @@ export default function GamePlay() {
       setHasSharedTracks(true);
     }
   }, [allSongs, isMultiplayer, emit, hasSharedTracks, shareTracks]);
-
-  // Add this state at the top with other states:
-  const [hasSharedTracks, setHasSharedTracks] = useState(false);
 
   // Fetch songs when component mounts - but only once
   useEffect(() => {
@@ -2095,18 +2100,49 @@ export default function GamePlay() {
                   <Text style={styles.timeText}>
                     {formatTime(playbackPosition)}
                   </Text>
-                  <Slider
-                    style={styles.progressBar}
-                    minimumValue={0}
-                    maximumValue={
-                      playbackDuration > 0 ? playbackDuration : 30000
-                    }
-                    value={playbackPosition}
-                    minimumTrackTintColor="#C143FF"
-                    maximumTrackTintColor="#444"
-                    thumbTintColor="#FFC857"
-                    disabled={true}
-                  />
+                  {Platform.OS === 'web' ? (
+                    <View style={styles.progressBar}>
+                      <View style={styles.progressTrack}>
+                        <View 
+                          style={[
+                            styles.progressFill,
+                            {
+                              width: `${
+                                playbackDuration > 0 
+                                  ? Math.min(100, (playbackPosition / playbackDuration) * 100)
+                                  : 0
+                              }%`
+                            }
+                          ]}
+                        />
+                        <View 
+                          style={[
+                            styles.progressThumb,
+                            {
+                              left: `${
+                                playbackDuration > 0 
+                                  ? Math.min(100, (playbackPosition / playbackDuration) * 100)
+                                  : 0
+                              }%`
+                            }
+                          ]}
+                        />
+                      </View>
+                    </View>
+                  ) : (
+                    <Slider
+                      style={styles.progressBar}
+                      minimumValue={0}
+                      maximumValue={
+                        playbackDuration > 0 ? playbackDuration : 30000
+                      }
+                      value={playbackPosition}
+                      minimumTrackTintColor="#C143FF"
+                      maximumTrackTintColor="#444"
+                      thumbTintColor="#FFC857"
+                      disabled={true}
+                    />
+                  )}
                   <Text style={styles.timeText}>
                     {formatTime(playbackDuration)}
                   </Text>
@@ -2953,5 +2989,24 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 16,
     marginBottom: 10,
+  },
+  progressTrack: {
+    height: 4,
+    backgroundColor: "#444",
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    backgroundColor: "#C143FF",
+  },
+  progressThumb: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "#FFC857",
+    position: "absolute",
+    top: -6, // Center vertically on the 4px track
+    marginLeft: -8, // Center horizontally on the position
   },
 });

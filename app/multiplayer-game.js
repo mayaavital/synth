@@ -422,6 +422,133 @@ export default function MultiplayerGame() {
     fetchSpotifyProfile();
   }, [spotifyToken, username]);
 
+  // Fetch player's recent tracks for multiplayer
+  const fetchRecentTracks = useCallback(async () => {
+    try {
+      setLoading(true);
+      console.log("Fetching recent tracks for multiplayer game...");
+
+      // Get valid token using our hook
+      let token = null;
+      try {
+        // First try to use the token from our hook
+        if (isSpotifyTokenValid()) {
+          token = spotifyToken;
+          console.log("Using token from Spotify hook");
+        } else {
+          // Try to get a fresh token
+          token = await getSpotifyToken();
+          console.log("Got fresh token from Spotify hook");
+        }
+      } catch (tokenError) {
+        console.error("Error getting Spotify token:", tokenError);
+      }
+
+      // If we have a token, use it
+      let tracksToProcess = [];
+
+      if (token) {
+        try {
+          console.log("Using token to fetch recently played tracks");
+          const tracks = await getMyRecentlyPlayedTracks(token);
+
+          if (tracks && tracks.length > 0) {
+            // Convert to the format expected by the multiplayer game
+            tracksToProcess = tracks.slice(0, 5).map((track) => ({
+              songTitle: track.songTitle,
+              songArtists: track.songArtists.map(
+                (artist) => artist.name || artist
+              ),
+              albumName: track.albumName,
+              imageUrl: track.imageUrl,
+              previewUrl: track.previewUrl,
+              uri: track.uri,
+              trackId: track.id,
+              externalUrl: track.externalUrl,
+              duration: track.duration,
+            }));
+
+            console.log(
+              `Found ${tracksToProcess.length} valid tracks for multiplayer`
+            );
+          }
+        } catch (apiError) {
+          console.error("Error calling Spotify API:", apiError);
+        }
+      } else {
+        console.log("No valid Spotify token available");
+      }
+
+      // If we didn't get any tracks from Spotify, use mock tracks
+      if (!tracksToProcess.length) {
+        console.log("Using mock tracks for multiplayer");
+        tracksToProcess = [];
+        for (let i = 1; i <= 5; i++) {
+          tracksToProcess.push({
+            songTitle: `Test Song ${i}`,
+            songArtists: ["Test Artist"],
+            albumName: "Test Album",
+            imageUrl: "https://via.placeholder.com/300",
+            previewUrl: null, // Set to null to force Deezer enrichment
+            uri: `spotify:track:mock${i}`,
+            trackId: `mock${i}`,
+            duration: 30000,
+          });
+        }
+      }
+
+      // IMPORTANT: Always enrich tracks with Deezer preview URLs
+      console.log(
+        "Enriching all tracks with Deezer preview URLs before sending to server"
+      );
+
+      try {
+        // Import the enrichTracksWithDeezerPreviews function
+        const {
+          enrichTracksWithDeezerPreviews,
+        } = require("../utils/deezerApi");
+
+        // Enrich all tracks with Deezer, even if they already have preview URLs
+        const enrichedTracks = await enrichTracksWithDeezerPreviews(
+          tracksToProcess
+        );
+
+        // Log the enrichment results
+        const tracksWithPreviewUrls = enrichedTracks.filter(
+          (track) => !!track.previewUrl
+        ).length;
+        console.log(
+          `After Deezer enrichment: ${tracksWithPreviewUrls}/${enrichedTracks.length} tracks have preview URLs`
+        );
+
+        return enrichedTracks;
+      } catch (deezerError) {
+        console.error("Error enriching tracks with Deezer:", deezerError);
+        // Continue with original tracks if enrichment fails
+        return tracksToProcess;
+      }
+    } catch (error) {
+      console.error("Error fetching recent tracks:", error);
+      setError(`Could not fetch your tracks: ${error.message}`);
+
+      // Return mock tracks on failure
+      return Array(5)
+        .fill()
+        .map((_, i) => ({
+          songTitle: `Backup Song ${i + 1}`,
+          songArtists: ["Backup Artist"],
+          albumName: "Backup Album",
+          imageUrl: "https://via.placeholder.com/300",
+          previewUrl: "https://p.scdn.co/mp3-preview/your-preview-url",
+          uri: `spotify:track:backup${i}`,
+          trackId: `backup${i}`,
+          duration: 30000,
+        }));
+    } finally {
+      setLoading(false);
+    }
+  }, [isSpotifyTokenValid, spotifyToken, getSpotifyToken]);
+
   // Create a new game
   const handleCreateGame = useCallback(async () => {
     if (!username.trim()) {
@@ -647,133 +774,6 @@ export default function MultiplayerGame() {
     }, 50);
   }, [isConnected, gameId, username, joinGame]);
 
-  // Fetch player's recent tracks for multiplayer
-  const fetchRecentTracks = useCallback(async () => {
-    try {
-      setLoading(true);
-      console.log("Fetching recent tracks for multiplayer game...");
-
-      // Get valid token using our hook
-      let token = null;
-      try {
-        // First try to use the token from our hook
-        if (isSpotifyTokenValid()) {
-          token = spotifyToken;
-          console.log("Using token from Spotify hook");
-        } else {
-          // Try to get a fresh token
-          token = await getSpotifyToken();
-          console.log("Got fresh token from Spotify hook");
-        }
-      } catch (tokenError) {
-        console.error("Error getting Spotify token:", tokenError);
-      }
-
-      // If we have a token, use it
-      let tracksToProcess = [];
-
-      if (token) {
-        try {
-          console.log("Using token to fetch recently played tracks");
-          const tracks = await getMyRecentlyPlayedTracks(token);
-
-          if (tracks && tracks.length > 0) {
-            // Convert to the format expected by the multiplayer game
-            tracksToProcess = tracks.slice(0, 5).map((track) => ({
-              songTitle: track.songTitle,
-              songArtists: track.songArtists.map(
-                (artist) => artist.name || artist
-              ),
-              albumName: track.albumName,
-              imageUrl: track.imageUrl,
-              previewUrl: track.previewUrl,
-              uri: track.uri,
-              trackId: track.id,
-              externalUrl: track.externalUrl,
-              duration: track.duration,
-            }));
-
-            console.log(
-              `Found ${tracksToProcess.length} valid tracks for multiplayer`
-            );
-          }
-        } catch (apiError) {
-          console.error("Error calling Spotify API:", apiError);
-        }
-      } else {
-        console.log("No valid Spotify token available");
-      }
-
-      // If we didn't get any tracks from Spotify, use mock tracks
-      if (!tracksToProcess.length) {
-        console.log("Using mock tracks for multiplayer");
-        tracksToProcess = [];
-        for (let i = 1; i <= 5; i++) {
-          tracksToProcess.push({
-            songTitle: `Test Song ${i}`,
-            songArtists: ["Test Artist"],
-            albumName: "Test Album",
-            imageUrl: "https://via.placeholder.com/300",
-            previewUrl: null, // Set to null to force Deezer enrichment
-            uri: `spotify:track:mock${i}`,
-            trackId: `mock${i}`,
-            duration: 30000,
-          });
-        }
-      }
-
-      // IMPORTANT: Always enrich tracks with Deezer preview URLs
-      console.log(
-        "Enriching all tracks with Deezer preview URLs before sending to server"
-      );
-
-      try {
-        // Import the enrichTracksWithDeezerPreviews function
-        const {
-          enrichTracksWithDeezerPreviews,
-        } = require("../utils/deezerApi");
-
-        // Enrich all tracks with Deezer, even if they already have preview URLs
-        const enrichedTracks = await enrichTracksWithDeezerPreviews(
-          tracksToProcess
-        );
-
-        // Log the enrichment results
-        const tracksWithPreviewUrls = enrichedTracks.filter(
-          (track) => !!track.previewUrl
-        ).length;
-        console.log(
-          `After Deezer enrichment: ${tracksWithPreviewUrls}/${enrichedTracks.length} tracks have preview URLs`
-        );
-
-        return enrichedTracks;
-      } catch (deezerError) {
-        console.error("Error enriching tracks with Deezer:", deezerError);
-        // Continue with original tracks if enrichment fails
-        return tracksToProcess;
-      }
-    } catch (error) {
-      console.error("Error fetching recent tracks:", error);
-      setError(`Could not fetch your tracks: ${error.message}`);
-
-      // Return mock tracks on failure
-      return Array(5)
-        .fill()
-        .map((_, i) => ({
-          songTitle: `Backup Song ${i + 1}`,
-          songArtists: ["Backup Artist"],
-          albumName: "Backup Album",
-          imageUrl: "https://via.placeholder.com/300",
-          previewUrl: "https://p.scdn.co/mp3-preview/your-preview-url",
-          uri: `spotify:track:backup${i}`,
-          trackId: `backup${i}`,
-          duration: 30000,
-        }));
-    } finally {
-      setLoading(false);
-    }
-  }, [isSpotifyTokenValid, spotifyToken, getSpotifyToken]);
-
   const renderInitialScreen = () => (
     <View style={styles.contentContainer}>
       <Image
@@ -792,13 +792,6 @@ export default function MultiplayerGame() {
         <Pressable style={styles.primaryButton} onPress={handleConnect}>
           <Text style={styles.primaryButtonText}>Connect to Server</Text>
         </Pressable>
-
-        {/* <Pressable 
-          style={styles.secondaryButton}
-          onPress={() => setShowServerInput(true)}
-        >
-          <Text style={styles.secondaryButtonText}>Configure Server</Text>
-        </Pressable> */}
       </View>
 
       {/* Server configuration modal */}
