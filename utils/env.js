@@ -47,7 +47,7 @@ console.log(
 // Spotify credentials and configuration
 // IMPORTANT: These variables should be passed in as environment variables in production
 // For local development, it's okay to hardcode them here, but never commit secrets
-const CLIENT_ID = "44bc87fe29004136b77183319f56338e";
+const CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
 
 // Get the app's URL prefix for the current environment
 const getAppUrlPrefix = () => {
@@ -57,9 +57,16 @@ const getAppUrlPrefix = () => {
 
 // Determine the redirect URI based on platform and environment
 const getRedirectUri = () => {
-  // For web development, use 127.0.0.1 instead of localhost (more reliable with Spotify)
+  // For web platform
   if (Platform.OS === "web") {
-    return "http://127.0.0.1:8081";
+    // Check if we're in production (Vercel)
+    if (process.env.NODE_ENV === "production") {
+      // Use environment variable for production web redirect URI
+      return process.env.SPOTIFY_REDIRECT_URI_WEB || "https://your-vercel-app.vercel.app";
+    } else {
+      // For local web development, use 127.0.0.1 instead of localhost
+      return "http://127.0.0.1:8081";
+    }
   }
   
   // For Expo Go, use expo-specific format with the correct IP and port
