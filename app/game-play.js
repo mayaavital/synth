@@ -33,12 +33,16 @@ import ResultsStage from "./ResultsStage";
 // Import useWebSocket for multiplayer functionality
 import { useWebSocket, EVENTS } from "../utils/useWebSocket";
 import LeaderboardScreen from "./LeaderboardScreen";
+// import * as Analytics from "expo-firebase-analytics";
+// import { initializeApp } from "firebase/app";
+import { getAnalytics, logEvent } from "firebase/analytics";
 
 const ALBUM_ID = "2noRn2Aes5aoNVsU6iWThc";
 const MIN_PLAY_DURATION = 8000; // 8 seconds
 const DEFAULT_ROUNDS = 3; // Default number of rounds if server doesn't provide a value
 const MAX_SYNC_HISTORY = 10; // Number of trace IDs to keep track of
 
+//const analytics = getAnalytics(app);
 // Format time helper function
 const formatTime = (milliseconds) => {
   if (!milliseconds) return "0:00";
@@ -2127,7 +2131,29 @@ export default function GamePlay() {
                       styles.externalLinkButton,
                       styles.spotifyLinkButton,
                     ]}
-                    onPress={() => Linking.openURL(currentSong.externalUrl)}
+                    onPress={async () => {
+                      // try {
+                      //   // Log the Spotify link click event with relevant parameters
+                      //   await logEvent(analytics, "spotify_link_click", {
+                      //     song_title: currentSong.songTitle,
+                      //     song_artists: Array.isArray(currentSong.songArtists)
+                      //       ? currentSong.songArtists.join(", ")
+                      //       : currentSong.songArtists,
+                      //     round_number: currentRound,
+                      //     game_id: gameId,
+                      //   });
+
+                      //   // Open the Spotify URL
+                      //   await Linking.openURL(currentSong.externalUrl);
+                      // } catch (error) {
+                      //   console.error(
+                      //     "Error logging Spotify link click:",
+                      //     error
+                      //   );
+                      // Still try to open the URL even if logging fails
+                      await Linking.openURL(currentSong.externalUrl);
+                      //}
+                    }}
                   >
                     <Image
                       source={require("../assets/white-spotify-logo.png")}

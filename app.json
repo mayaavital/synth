@@ -12,9 +12,7 @@
       "resizeMode": "contain",
       "backgroundColor": "#1E1E1E"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "packagerOpts": {
       "config": "metro.config.js",
       "sourceExts": ["js", "jsx", "ts", "tsx", "json"]
@@ -26,9 +24,7 @@
       "infoPlist": {
         "CFBundleURLTypes": [
           {
-            "CFBundleURLSchemes": [
-              "synth"
-            ]
+            "CFBundleURLSchemes": ["synth"]
           }
         ]
       },
@@ -41,11 +37,7 @@
       },
       "package": "com.csprout3.synth"
     },
-    "plugins": [
-      "expo-router",
-      "expo-font",
-      "@react-native-firebase/app"
-    ],
+    "plugins": ["expo-router", "expo-font", "@react-native-firebase/app"],
     "extra": {
       "router": {
         "origin": false

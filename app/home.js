@@ -13,7 +13,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { useSpotifyAuth } from "../utils";
-import * as Analytics from 'expo-firebase-analytics';
+//import * as Analytics from "expo-firebase-analytics";
 // Import the functions you need from the SDKs you need
 // import { initializeApp } from "firebase/app";
 // import { getAnalytics, logEvent } from "firebase/analytics";
@@ -31,7 +31,7 @@ const firebaseConfig = {
   storageBucket: "synth-database.firebasestorage.app",
   messagingSenderId: "681571197393",
   appId: "1:681571197393:web:21ebf6102f5239372740f0",
-  measurementId: "G-ND9VF6MRB4"
+  measurementId: "G-ND9VF6MRB4",
 };
 
 // Initialize Firebase
@@ -229,8 +229,8 @@ export default function home() {
                   tokenStatus === "valid"
                     ? styles.statusConnected
                     : tokenStatus === "expired"
-                      ? styles.statusWarning
-                      : styles.statusDisconnected,
+                    ? styles.statusWarning
+                    : styles.statusDisconnected,
                 ]}
               />
               <Text style={styles.spotifyStatusText}>
@@ -342,23 +342,22 @@ export default function home() {
           </View>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.card}
+        <TouchableOpacity
+          style={styles.card}
           onPress={async () => {
             console.log("Logging event");
 
-            try{
-            // Example: Logging a custom event
-            await Analytics.logEvent('select_content', undefined); 
-          } catch (error) { 
-            console.error("Error logging event:", error);
-          }
+            try {
+              // Example: Logging a custom event
+              await Analytics.logEvent("select_content", undefined);
+            } catch (error) {
+              console.error("Error logging event:", error);
+            }
             console.log("Logging event");
-            router.push("/previous-games")
+            router.push("/previous-games");
           }}
         >
-          <View
-            style={styles.iconContainer}
-          >
+          <View style={styles.iconContainer}>
             <Ionicons name="play-back-circle-outline" size={32} color="white" />
           </View>
           <View style={styles.textContainer}>
