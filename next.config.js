@@ -1,7 +1,18 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  transpilePackages: ["expo", "react-native-web"],
+  transpilePackages: [
+    "expo",
+    "react-native-web",
+    "expo-status-bar",
+    "expo-router",
+    "expo-linking",
+    "expo-constants",
+    "expo-modules-core",
+    "@react-native-async-storage/async-storage",
+    "react-native-safe-area-context",
+    "react-native-screens",
+  ],
   webpack: (config, { isServer }) => {
     // Handle the fs module issue
     if (!isServer) {
@@ -29,6 +40,19 @@ const nextConfig = {
     config.module.rules.push({
       test: /\.svg$/,
       use: ["@svgr/webpack"],
+    });
+
+    // Add TypeScript support
+    config.module.rules.push({
+      test: /\.(ts|tsx)$/,
+      use: [
+        {
+          loader: "babel-loader",
+          options: {
+            presets: ["@babel/preset-typescript"],
+          },
+        },
+      ],
     });
 
     // Ignore specific warnings

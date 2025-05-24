@@ -1,28 +1,30 @@
-module.exports = function(api) {
+module.exports = function (api) {
   api.cache(true);
   return {
-    presets: ['babel-preset-expo'],
+    presets: ["babel-preset-expo", "@babel/preset-typescript"],
     plugins: [
+      "react-native-reanimated/plugin",
       [
-        'module-resolver',
+        "module-resolver",
         {
-          root: ['./'],
+          root: ["./"],
           alias: {
             // Add aliases for your app imports
-            '@app': './app',
-            '@components': './components',
-            '@assets': './assets',
-            '@utils': './utils',
-          }
-        }
-      ]
+            "@app": "./app",
+            "@components": "./components",
+            "@assets": "./assets",
+            "@utils": "./utils",
+            "react-native$": "react-native-web",
+          },
+        },
+      ],
     ],
     // Add this to tell Metro bundler to ignore Node.js built-in modules
     overrides: [
       {
-        test: ['./server/**/*.js'],
-        ignore: ['**/*']
-      }
-    ]
+        test: ["./server/**/*.js"],
+        ignore: ["**/*"],
+      },
+    ],
   };
-}; 
+};
