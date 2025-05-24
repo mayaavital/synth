@@ -4,7 +4,7 @@
   "main": "expo-router/entry",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "NODE_ENV=production next build --debug",
     "start": "next start",
     "lint": "next lint",
     "android": "expo run:android",
@@ -50,6 +50,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
+    "@svgr/webpack": "^8.1.0",
     "babel-plugin-module-resolver": "^5.0.2"
   },
   "private": true,

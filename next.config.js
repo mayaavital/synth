@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  transpilePackages: ["expo"],
+  transpilePackages: ["expo", "react-native-web"],
   webpack: (config, { isServer }) => {
     // Handle the fs module issue
     if (!isServer) {
@@ -10,6 +10,11 @@ const nextConfig = {
         fs: false,
         path: false,
         os: false,
+        crypto: false,
+        stream: false,
+        http: false,
+        https: false,
+        zlib: false,
       };
     }
 
@@ -17,8 +22,29 @@ const nextConfig = {
     config.resolve.alias = {
       ...(config.resolve.alias || {}),
       "react-native$": "react-native-web",
+      "react-native-web": "react-native-web",
     };
+
+    // Add support for importing SVG files
+    config.module.rules.push({
+      test: /\.svg$/,
+      use: ["@svgr/webpack"],
+    });
+
+    // Ignore specific warnings
+    config.ignoreWarnings = [
+      { module: /node_modules\/expo-router/ },
+      {
+        message:
+          /Critical dependency: the request of a dependency is an expression/,
+      },
+    ];
+
     return config;
+  },
+  // Add experimental features
+  experimental: {
+    esmExternals: "loose",
   },
 };
 
