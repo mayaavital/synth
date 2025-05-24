@@ -12,6 +12,7 @@ const nextConfig = {
     "@react-native-async-storage/async-storage",
     "react-native-safe-area-context",
     "react-native-screens",
+    "react-native-reanimated",
   ],
   webpack: (config, { isServer }) => {
     // Handle the fs module issue

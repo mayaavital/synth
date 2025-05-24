@@ -37,7 +37,12 @@
       },
       "package": "com.csprout3.synth"
     },
-    "plugins": ["expo-router", "expo-font", "@react-native-firebase/app"],
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "@react-native-firebase/app",
+      "react-native-reanimated/plugin"
+    ],
     "extra": {
       "router": {
         "origin": false
