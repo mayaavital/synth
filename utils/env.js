@@ -47,7 +47,7 @@ console.log(
 // Spotify credentials and configuration
 // IMPORTANT: These variables should be passed in as environment variables in production
 // For local development, it's okay to hardcode them here, but never commit secrets
-const CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
+const CLIENT_ID = process.env.SPOTIFY_CLIENT_ID || "44bc87fe29004136b77183319f56338e";
 
 // Get the app's URL prefix for the current environment
 const getAppUrlPrefix = () => {

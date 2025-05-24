@@ -181,26 +181,46 @@ export default function home() {
           <TouchableOpacity
             style={styles.menuButton}
             onPress={() => {
+              console.log("Menu button pressed!"); // Debug log
+              console.log("Token status:", !!token); // Debug log
+              
               if (token) {
+                console.log("Showing sign out alert"); // Debug log
                 Alert.alert(
-                  "Spotify Connected",
-                  "Do you want to disconnect from Spotify?",
+                  "Sign Out",
+                  "Would you like to sign out of Spotify?",
                   [
                     { text: "Cancel", style: "cancel" },
                     {
-                      text: "Disconnect",
-                      onPress: handleLogout,
+                      text: "Sign Out",
+                      onPress: async () => {
+                        console.log("Sign out confirmed"); // Debug log
+                        await handleLogout();
+                        router.replace("/");
+                      },
                       style: "destructive",
                     },
                   ]
                 );
               } else {
+                console.log("Showing connect alert"); // Debug log
                 Alert.alert(
                   "Not Connected",
-                  "You are not connected to Spotify."
+                  "You are not connected to Spotify. Would you like to connect?",
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                      text: "Connect",
+                      onPress: () => {
+                        console.log("Connect confirmed"); // Debug log
+                        router.replace("/");
+                      },
+                    },
+                  ]
                 );
               }
             }}
+            activeOpacity={0.7}
           >
             <Ionicons name="menu" size={28} color="white" />
           </TouchableOpacity>
@@ -392,9 +412,15 @@ const styles = StyleSheet.create({
     shadowRadius: 7,
     elevation: 5,
   },
-  // menuButton: {
-  //   padding: 8,
-  // },
+  menuButton: {
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   logoText: {
     color: "#FFC857", // Golden yellow color
     fontSize: 28,

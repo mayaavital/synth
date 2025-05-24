@@ -44,7 +44,15 @@ NODE_ENV=production
    mv app.config.production.js app.config.js
    ```
 
-2. **Commit your changes:**
+2. **Remove Next.js conflicts (if any):**
+   ```bash
+   # Move conflicting files that cause Vercel to detect as Next.js
+   mv pages pages.backup
+   mv next.config.js next.config.js.backup
+   rm -rf .next
+   ```
+
+3. **Commit your changes:**
    ```bash
    git add .
    git commit -m "Add production configuration for Vercel"
@@ -56,12 +64,13 @@ NODE_ENV=production
 1. **Connect to Vercel:**
    - Go to [vercel.com](https://vercel.com)
    - Import your GitHub repository
-   - Select "Expo" as your framework preset
+   - **Important:** Do NOT select "Next.js" as framework
 
 2. **Configure Build Settings:**
-   - Build Command: `npx expo export -p web`
+   - Framework Preset: **Other** or **Create React App**
+   - Build Command: `npm install --legacy-peer-deps && npx expo export -p web`
    - Output Directory: `dist`
-   - Install Command: `npm install`
+   - Install Command: `npm install --legacy-peer-deps`
 
 3. **Add Environment Variables:**
    - Go to Project Settings → Environment Variables
@@ -103,8 +112,8 @@ SPOTIFY_REDIRECT_URI_WEB=https://your-actual-vercel-url.vercel.app
 Before deploying, test the web build locally:
 
 ```bash
-# Install dependencies
-npm install
+# Install dependencies with legacy peer deps
+npm install --legacy-peer-deps
 
 # Test web build
 npx expo export -p web
@@ -126,17 +135,26 @@ npx expo start --web
 
 ### Common Issues
 
-1. **Spotify Authentication Fails:**
+1. **Next.js Detection Error:**
+   - Remove `pages/` directory and `next.config.js` file
+   - Delete `.next/` directory
+   - Make sure framework is set to "Create React App" not "Next.js"
+
+2. **ESM Module Resolution Errors:**
+   - Use `--legacy-peer-deps` flag in install and build commands
+   - Ensure framework is NOT set to "Next.js"
+
+3. **Spotify Authentication Fails:**
    - Verify redirect URI matches exactly in Spotify dashboard
    - Check that environment variables are set correctly
    - Ensure HTTPS is used in production
 
-2. **Build Fails:**
+4. **Build Fails:**
    - Check that all dependencies are in package.json
    - Verify app.config.js syntax
    - Make sure all required environment variables are set
 
-3. **Firebase Analytics Not Working:**
+5. **Firebase Analytics Not Working:**
    - Verify all Firebase environment variables are set
    - Check Firebase project settings
    - Ensure domain is authorized in Firebase
