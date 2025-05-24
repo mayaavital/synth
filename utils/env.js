@@ -62,7 +62,7 @@ const getRedirectUri = () => {
     // Check if we're in production (Vercel)
     if (process.env.NODE_ENV === "production") {
       // Use environment variable for production web redirect URI
-      return process.env.SPOTIFY_REDIRECT_URI_WEB || "https://your-vercel-app.vercel.app";
+      return process.env.SPOTIFY_REDIRECT_URI_WEB || "synth-ten-hazel.vercel.app";
     } else {
       // For local web development, use 127.0.0.1 instead of localhost
       return "http://127.0.0.1:8081";
