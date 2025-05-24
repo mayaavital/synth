@@ -14,6 +14,7 @@ const nextConfig = {
     "react-native-screens",
     "react-native-reanimated",
     "expo-linear-gradient",
+    "react-native",
   ],
   webpack: (config, { isServer }) => {
     // Handle the fs module issue
@@ -44,14 +45,25 @@ const nextConfig = {
       use: ["@svgr/webpack"],
     });
 
-    // Add TypeScript support
+    // Add TypeScript support for all .ts and .tsx files
     config.module.rules.push({
       test: /\.(ts|tsx)$/,
+      exclude:
+        /node_modules\/(?!(react-native|@react-native|react-native-.*)\/).*/,
       use: [
         {
           loader: "babel-loader",
           options: {
             presets: ["@babel/preset-typescript"],
+            plugins: [
+              ["@babel/plugin-transform-flow-strip-types"],
+              ["@babel/plugin-proposal-class-properties", { loose: true }],
+              ["@babel/plugin-proposal-private-methods", { loose: true }],
+              [
+                "@babel/plugin-proposal-private-property-in-object",
+                { loose: true },
+              ],
+            ],
           },
         },
       ],
@@ -68,9 +80,9 @@ const nextConfig = {
 
     return config;
   },
-  // Add experimental features
+  // Remove experimental features that are causing warnings
   experimental: {
-    esmExternals: "loose",
+    esmExternals: false,
   },
 };
 
