@@ -15,6 +15,7 @@ module.exports = function (api) {
             "@assets": "./assets",
             "@utils": "./utils",
             "react-native$": "react-native-web",
+            "expo-linear-gradient": "expo-linear-gradient",
           },
         },
       ],

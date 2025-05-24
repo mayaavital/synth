@@ -13,6 +13,7 @@ const nextConfig = {
     "react-native-safe-area-context",
     "react-native-screens",
     "react-native-reanimated",
+    "expo-linear-gradient",
   ],
   webpack: (config, { isServer }) => {
     // Handle the fs module issue
