@@ -221,7 +221,7 @@ const styles = StyleSheet.create({
         paddingBottom: 15
     },
     headerTitle: {
-        color: "#FFC857",
+        color: "white",
         fontSize: 24,
         fontWeight: "bold",
         textAlign: "center",

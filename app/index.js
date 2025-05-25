@@ -16,6 +16,8 @@ import { useSpotifyAuth } from "../utils";
 import { useNavigation } from "expo-router";
 import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
+import SpotifyConnectButton from "../components/SpotifyConnectButton";
+import ResponsiveTitle from "../components/ResponsiveTitle";
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
@@ -70,7 +72,9 @@ export default function App() {
   // Conditional rendering
   let contentDisplayed = (
     <View style={styles.container} onLayout={onLayoutRootView}>
-      <Image source={require("../assets/Title.png")}></Image>
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center"}}>
+        <Image source={require("../assets/newTitle.png")}></Image>
+      </View>
 
       {isAuthenticating ? (
         <View style={styles.loadingContainer}>
@@ -79,30 +83,12 @@ export default function App() {
         </View>
       ) : (
         <View style={{ justifyContent: "center", alignItems: "center" }}>
-          <Pressable
-            style={styles.connectSpotify}
+          <SpotifyConnectButton
             onPress={handleSpotifyAuth}
             disabled={isAuthenticating}
-          >
-            <Text style={styles.text}>Login with Spotify</Text>
-            <Image
-              source={require("../assets/white-spotify-logo.png")}
-              style={styles.spotifyLogo}
-            />
-          </Pressable>
-
-          <Pressable
-            style={styles.connectApple}
-            marginTop={windowHeight * 0.01}
-            onPress={() => router.push("home")}
-            disabled={isAuthenticating}
-          >
-            <Text style={styles.text}>Login with Apple Music</Text>
-            <Image
-              source={require("../assets/apple-white.png")}
-              style={styles.spotifyLogo}
-            />
-          </Pressable>
+            loading={isAuthenticating}
+            style={{ width: windowWidth * 0.8, marginBottom: 20 }}
+          />
         </View>
       )}
 
@@ -153,35 +139,5 @@ const styles = StyleSheet.create({
   errorText: {
     color: "#FF6B6B",
     textAlign: "center",
-  },
-  connectSpotify: {
-    backgroundColor: "#44C568",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    borderRadius: (windowHeight * 0.1) / 2,
-    height: windowHeight * 0.08,
-    width: windowWidth * 0.7,
-    paddingHorizontal: windowWidth * 0.05,
-  },
-  connectApple: {
-    backgroundColor: "#EE6D7A",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    borderRadius: (windowHeight * 0.1) / 2,
-    height: windowHeight * 0.08,
-    width: windowWidth * 0.7,
-    paddingHorizontal: windowWidth * 0.05,
-  },
-  spotifyLogo: {
-    height: windowWidth * 0.1,
-    width: windowWidth * 0.1,
-    resizeMode: "contain",
-  },
-  text: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "500",
   },
 });

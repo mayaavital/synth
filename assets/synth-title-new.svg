@@ -1,0 +1,24 @@
+<svg width="400" height="200" viewBox="0 0 400 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Decorative stars/sparkles above the text -->
+  <g transform="translate(200, 40)">
+    <!-- Left star -->
+    <path d="M-80,0 L-60,-20 L-40,0 L-60,20 Z M-60,-40 L-60,40 M-100,0 L-20,0" 
+          fill="#333" stroke="none"/>
+    
+    <!-- Center star -->
+    <path d="M0,-10 L20,-30 L40,-10 L20,10 Z M20,-50 L20,30 M-20,-10 L60,-10" 
+          fill="#333" stroke="none"/>
+    
+    <!-- Right star -->
+    <path d="M80,0 L100,-20 L120,0 L100,20 Z M100,-40 L100,40 M60,0 L140,0" 
+          fill="#333" stroke="none"/>
+  </g>
+  
+  <!-- SYNTH text -->
+  <text x="200" y="140" 
+        font-family="Arial, sans-serif" 
+        font-size="60" 
+        font-weight="bold" 
+        text-anchor="middle" 
+        fill="#8E44AD">SYNTH</text>
+</svg> 

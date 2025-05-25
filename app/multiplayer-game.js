@@ -8,6 +8,7 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
+  Dimensions,
   FlatList,
   TextInput,
   Modal,
@@ -25,6 +26,9 @@ import {
   getSpotifyUserProfile,
 } from "../utils/apiOptions";
 import useSpotifyAuth from "../utils/useSpotifyAuth";
+
+const windowWidth = Dimensions.get("window").width;
+const windowHeight = Dimensions.get("window").height;
 
 export default function MultiplayerGame() {
   const navigation = useNavigation();
@@ -776,11 +780,13 @@ export default function MultiplayerGame() {
 
   const renderInitialScreen = () => (
     <View style={styles.contentContainer}>
-      <Image
-        source={require("../assets/SYNTH.png")}
-        style={styles.logo}
-        resizeMode="contain"
-      />
+      <View style={styles.logoContainer}>
+        <Image
+          source={require("../assets/newTitle.png")}
+          style={styles.logo}
+          resizeMode="contain"
+        />
+      </View>
 
       <Text style={styles.welcomeText}>Welcome to Synth Multiplayer!</Text>
 
@@ -1201,7 +1207,7 @@ const styles = StyleSheet.create({
     paddingBottom: 15,
   },
   headerTitle: {
-    color: "#FFC857",
+    color: "white",
     fontSize: 24,
     fontWeight: "bold",
     textAlign: "center",
@@ -1215,10 +1221,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  logoContainer: {
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 30,
+  },
   logo: {
-    width: 200,
-    height: 80,
-    marginBottom: 40,
+    width: Math.min(windowWidth * 0.85, 400), // Max width of 400px for larger screens
+    height: Math.min(windowHeight * 0.15, 150), // Reduced height ratio for better proportions
+    // Add slight scaling for very small screens
+    ...(windowWidth < 350 && {
+      width: windowWidth * 0.95,
+      height: windowHeight * 0.12,
+    }),
   },
   welcomeText: {
     color: "white",

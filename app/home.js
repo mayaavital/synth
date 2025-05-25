@@ -7,12 +7,14 @@ import {
   Image,
   Alert,
   ActivityIndicator,
+  Dimensions
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { useSpotifyAuth } from "../utils";
+import SpotifyConnectButton from "../components/SpotifyConnectButton";
 //import * as Analytics from "expo-firebase-analytics";
 // Import the functions you need from the SDKs you need
 // import { initializeApp } from "firebase/app";
@@ -20,6 +22,9 @@ import { useSpotifyAuth } from "../utils";
 // const analytics = getAnalytics(app);
 // TODO: Add SDKs for Firebase products that you want to use
 // https://firebase.google.com/docs/web/setup#available-libraries
+
+const windowWidth = Dimensions.get("window").width;
+const windowHeight = Dimensions.get("window").height;
 
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
@@ -291,25 +296,12 @@ export default function home() {
               )
             ) : (
               // Show connect button when no token
-              <TouchableOpacity
-                style={styles.spotifyConnectButton}
+              <SpotifyConnectButton
                 onPress={handleConnectSpotify}
                 disabled={isAuthenticating}
-              >
-                {isAuthenticating ? (
-                  <ActivityIndicator size="small" color="white" />
-                ) : (
-                  <>
-                    <Image
-                      source={require("../assets/white-spotify-logo.png")}
-                      style={styles.spotifyIcon}
-                    />
-                    <Text style={styles.spotifyConnectText}>
-                      Connect to Spotify
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
+                loading={isAuthenticating}
+                style={{ width: '90%' }}
+              />
             )}
           </>
         )}
@@ -428,8 +420,8 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
   logo: {
-    height: 35,
-    width: 110,
+    height: 80,
+    width: 200,
     resizeMode: "contain",
   },
   placeholder: {
@@ -475,18 +467,6 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 16,
   },
-  spotifyConnectButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#1DB954", // Spotify green
-    padding: 12,
-    borderRadius: 25,
-    paddingHorizontal: 20,
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-  },
   spotifyDisconnectButton: {
     backgroundColor: "#333",
     padding: 10,
@@ -518,15 +498,6 @@ const styles = StyleSheet.create({
     color: "#e74c3c",
     fontWeight: "bold",
   },
-  spotifyIcon: {
-    width: 24,
-    height: 24,
-    marginRight: 10,
-  },
-  spotifyConnectText: {
-    color: "white",
-    fontWeight: "bold",
-  },
   title: {
     color: "white",
     fontSize: 20,
@@ -542,10 +513,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     padding: 20,
-    shadowColor: "#C6B6DD", // light purple
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
+    borderWidth: 1,
+    borderColor: "#8E44AD",
+    shadowColor: "#8E44AD", // light purple
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 2,
   },
   iconContainer: {
     backgroundColor: "#8E44AD",
