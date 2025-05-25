@@ -43,8 +43,7 @@
     },
     "plugins": [
       "expo-router",
-      "expo-font",
-      "@react-native-firebase/app"
+      "expo-font"
     ],
     "extra": {
       "router": {

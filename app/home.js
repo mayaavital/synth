@@ -13,7 +13,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { useSpotifyAuth } from "../utils";
-import * as Analytics from 'expo-firebase-analytics';
+/*
+import { initializeApp } from 'firebase/app';
+import { getAnalytics, logEvent } from 'firebase/analytics';
+import analytics from '@react-native-firebase/analytics'
+*/
+//import firebase from '@react-native-firebase/app';
 // Import the functions you need from the SDKs you need
 // import { initializeApp } from "firebase/app";
 // import { getAnalytics, logEvent } from "firebase/analytics";
@@ -33,6 +38,11 @@ const firebaseConfig = {
   appId: "1:681571197393:web:21ebf6102f5239372740f0",
   measurementId: "G-ND9VF6MRB4"
 };
+
+//let app = firebase.initializeApp(firebaseConfig);
+
+//const app = initializeApp(firebaseConfig);
+// const analytics = getAnalytics(app); // Initialize Firebase Analytics
 
 // Initialize Firebase
 
@@ -346,12 +356,19 @@ export default function home() {
           onPress={async () => {
             console.log("Logging event");
 
+            // Log a custom event using Firebase Analytics
+
+/*
             try{
-            // Example: Logging a custom event
-            await Analytics.logEvent('select_content', undefined); 
+              await analytics().logEvent('product_view', {
+                id: '123456789',
+                color: 'red',
+                via: 'ProductCatalog',
+              });
           } catch (error) { 
             console.error("Error logging event:", error);
           }
+            */
             console.log("Logging event");
             router.push("/previous-games")
           }}
