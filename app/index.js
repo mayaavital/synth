@@ -8,6 +8,7 @@ import {
   Dimensions,
   SafeAreaView,
   ActivityIndicator,
+  Platform,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useState, useCallback } from "react";
@@ -24,6 +25,33 @@ SplashScreen.preventAutoHideAsync();
 
 const windowWidth = Dimensions.get("window").width;
 const windowHeight = Dimensions.get("window").height;
+
+// Add web-specific styles to handle mobile viewport issues
+if (Platform.OS === 'web') {
+  const style = document.createElement('style');
+  style.textContent = `
+    html, body, #root {
+      margin: 0;
+      padding: 0;
+      height: 100vh;
+      height: 100dvh; /* Use dynamic viewport height for mobile */
+      overflow: hidden;
+      background-color: #1E1E1E;
+    }
+    
+    /* Prevent mobile browser UI from affecting layout */
+    @media screen and (max-width: 768px) {
+      html {
+        height: -webkit-fill-available;
+      }
+      body {
+        min-height: 100vh;
+        min-height: -webkit-fill-available;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+}
 
 export default function App() {
   const router = useRouter();

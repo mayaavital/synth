@@ -7,7 +7,8 @@ import {
   Image,
   Alert,
   ActivityIndicator,
-  Dimensions
+  Dimensions,
+  Platform,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -25,6 +26,33 @@ import SpotifyConnectButton from "../components/SpotifyConnectButton";
 
 const windowWidth = Dimensions.get("window").width;
 const windowHeight = Dimensions.get("window").height;
+
+// Add web-specific styles to handle mobile viewport issues
+if (Platform.OS === 'web') {
+  const style = document.createElement('style');
+  style.textContent = `
+    html, body, #root {
+      margin: 0;
+      padding: 0;
+      height: 100vh;
+      height: 100dvh; /* Use dynamic viewport height for mobile */
+      overflow: hidden;
+      background-color: #8E44AD;
+    }
+    
+    /* Prevent mobile browser UI from affecting layout */
+    @media screen and (max-width: 768px) {
+      html {
+        height: -webkit-fill-available;
+      }
+      body {
+        min-height: 100vh;
+        min-height: -webkit-fill-available;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+}
 
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
@@ -241,153 +269,127 @@ export default function home() {
   }, [navigation, token]);
 
   return (
-    // <LinearGradient colors={["#040306", "#131624"]} style={{ flex: 1 }}>
-    <SafeAreaView style={{ backgroundColor: "#1E1E1E", flex: 1 }}>
-      {/* Spotify Connection Status */}
-      <View style={styles.spotifyStatus}>
-        {!isInitialized ? (
-          <ActivityIndicator size="small" color="#1DB954" />
-        ) : (
-          <>
-            <View style={styles.statusLine}>
-              <View
-                style={[
-                  styles.statusDot,
-                  tokenStatus === "valid"
-                    ? styles.statusConnected
-                    : tokenStatus === "expired"
-                    ? styles.statusWarning
-                    : styles.statusDisconnected,
-                ]}
-              />
-              <Text style={styles.spotifyStatusText}>
-                {getTokenStatusMessage()}
+    <SafeAreaView style={styles.safeAreaContainer}>
+      <View style={styles.container}>
+        {/* Spotify Connection Status */}
+        <View style={styles.spotifyStatus}>
+          {!isInitialized ? (
+            <ActivityIndicator size="small" color="#1DB954" />
+          ) : (
+            <>
+              <View style={styles.statusLine}>
+                <View
+                  style={[
+                    styles.statusDot,
+                    tokenStatus === "valid"
+                      ? styles.statusConnected
+                      : tokenStatus === "expired"
+                      ? styles.statusWarning
+                      : styles.statusDisconnected,
+                  ]}
+                />
+                <Text style={styles.spotifyStatusText}>
+                  {getTokenStatusMessage()}
+                </Text>
+              </View>
+
+              {token ? (
+                tokenStatus === "expired" ? (
+                  // Show refresh button for expired tokens
+                  <TouchableOpacity
+                    style={styles.spotifyRefreshButton}
+                    onPress={handleRefreshToken}
+                    disabled={isAuthenticating}
+                  >
+                    {isAuthenticating ? (
+                      <ActivityIndicator size="small" color="white" />
+                    ) : (
+                      <>
+                        <Ionicons
+                          name="refresh"
+                          size={20}
+                          color="white"
+                          style={styles.refreshIcon}
+                        />
+                        <Text style={styles.refreshText}>Refresh Connection</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                ) : (
+                  // Show disconnect button for valid tokens
+                  <TouchableOpacity
+                    style={styles.spotifyDisconnectButton}
+                    onPress={handleLogout}
+                  >
+                    <Text style={styles.disconnectText}>Disconnect</Text>
+                  </TouchableOpacity>
+                )
+              ) : (
+                // Show connect button when no token
+                <SpotifyConnectButton
+                  onPress={handleConnectSpotify}
+                  disabled={isAuthenticating}
+                  loading={isAuthenticating}
+                  style={{ width: '90%' }}
+                />
+              )}
+            </>
+          )}
+        </View>
+
+        {/* Game options */}
+        <View style={styles.cardContainer}>
+          <TouchableOpacity
+            style={styles.card}
+            onPress={() => router.push("/multiplayer-game")}
+          >
+            <View style={styles.iconContainer}>
+              <Ionicons name="wifi" size={32} color="white" />
+            </View>
+            <View style={styles.textContainer}>
+              <Text style={styles.cardTitle}>Multiplayer Mode</Text>
+              <Text style={styles.cardSubtitle}>
+                Play with friends on the same WiFi network in real-time.
               </Text>
             </View>
+          </TouchableOpacity>
 
-            {token ? (
-              tokenStatus === "expired" ? (
-                // Show refresh button for expired tokens
-                <TouchableOpacity
-                  style={styles.spotifyRefreshButton}
-                  onPress={handleRefreshToken}
-                  disabled={isAuthenticating}
-                >
-                  {isAuthenticating ? (
-                    <ActivityIndicator size="small" color="white" />
-                  ) : (
-                    <>
-                      <Ionicons
-                        name="refresh"
-                        size={20}
-                        color="white"
-                        style={styles.refreshIcon}
-                      />
-                      <Text style={styles.refreshText}>Refresh Connection</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              ) : (
-                // Show disconnect button for valid tokens
-                <TouchableOpacity
-                  style={styles.spotifyDisconnectButton}
-                  onPress={handleLogout}
-                >
-                  <Text style={styles.disconnectText}>Disconnect</Text>
-                </TouchableOpacity>
-              )
-            ) : (
-              // Show connect button when no token
-              <SpotifyConnectButton
-                onPress={handleConnectSpotify}
-                disabled={isAuthenticating}
-                loading={isAuthenticating}
-                style={{ width: '90%' }}
-              />
-            )}
-          </>
-        )}
-      </View>
+          <TouchableOpacity
+            style={styles.card}
+            onPress={async () => {
+              console.log("Logging event");
 
-      {/* Game options */}
-      <View style={styles.cardContainer}>
-        {/* <TouchableOpacity
-          style={styles.card}
-          onPress={() => router.push("/create-game")}
-        >
-          <View style={styles.iconContainer}>
-            <Ionicons name="add-circle" size={32} color="white" />
-          </View>
-          <View style={styles.textContainer}>
-            <Text style={styles.cardTitle}>Create a new game</Text>
-            <Text style={styles.cardSubtitle}>
-              Invite your friends, guess the listener, and create playlists.
-            </Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.card}
-          onPress={() => router.push("/join-game")}
-        >
-          <View style={styles.iconContainer}>
-            <Ionicons name="people" size={32} color="white" />
-          </View>
-          <View style={styles.textContainer}>
-            <Text style={styles.cardTitle}>Join a game</Text>
-            <Text style={styles.cardSubtitle}>
-              Join a game that your friend already created.
-            </Text>
-          </View>
-        </TouchableOpacity> */}
-
-        <TouchableOpacity
-          style={styles.card}
-          onPress={() => router.push("/multiplayer-game")}
-        >
-          <View style={styles.iconContainer}>
-            <Ionicons name="wifi" size={32} color="white" />
-          </View>
-          <View style={styles.textContainer}>
-            <Text style={styles.cardTitle}>Multiplayer Mode</Text>
-            <Text style={styles.cardSubtitle}>
-              Play with friends on the same WiFi network in real-time.
-            </Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.card}
-          onPress={async () => {
-            console.log("Logging event");
-
-            try {
-              // Example: Logging a custom event
-              await Analytics.logEvent("select_content", undefined);
-            } catch (error) {
-              console.error("Error logging event:", error);
-            }
-            console.log("Logging event");
-            router.push("/previous-games");
-          }}
-        >
-          <View style={styles.iconContainer}>
-            <Ionicons name="play-back-circle-outline" size={32} color="white" />
-          </View>
-          <View style={styles.textContainer}>
-            <Text style={styles.cardTitle}>Previous Games</Text>
-            <Text style={styles.cardSubtitle}>
-              See how you and your friends did on previous games.
-            </Text>
-          </View>
-        </TouchableOpacity>
+              try {
+                // Example: Logging a custom event
+                await Analytics.logEvent("select_content", undefined);
+              } catch (error) {
+                console.error("Error logging event:", error);
+              }
+              console.log("Logging event");
+              router.push("/previous-games");
+            }}
+          >
+            <View style={styles.iconContainer}>
+              <Ionicons name="play-back-circle-outline" size={32} color="white" />
+            </View>
+            <View style={styles.textContainer}>
+              <Text style={styles.cardTitle}>Previous Games</Text>
+              <Text style={styles.cardSubtitle}>
+                See how you and your friends did on previous games.
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </View>
       </View>
     </SafeAreaView>
-    // </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
+  safeAreaContainer: {
+    flex: 1,
+    backgroundColor: "#8E44AD", // Use header color to eliminate white gaps
+  },
   container: {
     flex: 1,
     backgroundColor: "#1E1E1E",
@@ -399,7 +401,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#8E44AD", // Purple background for header
     paddingVertical: 10,
     paddingHorizontal: 16,
-    height: 100,
+    height: Math.max(100, windowHeight * 0.12), // Dynamic height for different devices
+    paddingTop: Math.max(10, windowHeight * 0.06), // Extra padding for status bar area
     shadowColor: "#000000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.6,

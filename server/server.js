@@ -36,15 +36,16 @@ const io = new Server(server, {
   cors: {
     origin: "*", // Allow connections from any origin
     methods: ["GET", "POST", "OPTIONS"],
-    credentials: true,
+    credentials: false, // Don't require credentials for cross-origin
     allowedHeaders: ["Content-Type", "Authorization"],
   },
   maxHttpBufferSize: 1e8, // Increase buffer size for larger payloads (100 MB) - fixes serialization issues
-  transports: ["websocket", "polling"], // Support both WebSocket and long-polling
-  pingInterval: 10000, // Ping every 10 seconds
-  pingTimeout: 5000, // Consider connection closed if no response after 5 seconds
+  transports: ["polling", "websocket"], // Prioritize polling for better cross-origin compatibility
+  pingInterval: 25000, // Ping every 25 seconds (increased for production)
+  pingTimeout: 60000, // Consider connection closed if no response after 60 seconds (increased for production)
   cookie: false, // Don't use cookies for session tracking
-  connectTimeout: 15000, // Allow more time for initial connection (15 seconds)
+  connectTimeout: 20000, // Allow more time for initial connection (20 seconds)
+  allowEIO3: true, // Allow older engine.io versions for better compatibility
 });
 
 // Store active games

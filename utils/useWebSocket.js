@@ -148,19 +148,28 @@ export const useWebSocket = () => {
       // Create socket with error handling - improved configuration for stability
       console.log(`Connecting to WebSocket server at ${serverAddress}...`);
       
-      // Use better socket.io configuration for improved reliability
+      // Use better socket.io configuration for improved reliability and cross-origin compatibility
       const newSocket = io(serverAddress, {
         reconnectionAttempts: 5,
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
         randomizationFactor: 0.5,
         timeout: CONNECTION_TIMEOUT,
-        transports: ['websocket', 'polling'],  // Allow both WebSocket and polling
+        // For production (Vercel to Heroku), prioritize polling over websockets
+        transports: Platform.OS === 'web' ? ['polling', 'websocket'] : ['websocket', 'polling'],
         upgrade: true,  // Allow transport upgrade
         forceNew: true,
         autoConnect: true,
-        pingTimeout: 8000,
-        pingInterval: 10000
+        pingTimeout: 60000,  // Increased timeout for production
+        pingInterval: 25000, // Increased interval for production
+        // Add CORS and production-specific options
+        withCredentials: false,  // Don't send cookies for cross-origin
+        rememberUpgrade: false, // Don't remember transport upgrades across sessions
+        // Force polling for web platforms initially to avoid WebSocket issues
+        ...(Platform.OS === 'web' && {
+          forceBase64: false,
+          enablesXDR: false,
+        })
       });
       
       // Set connection timeout
@@ -213,6 +222,13 @@ export const useWebSocket = () => {
       
       newSocket.on('connect_error', (err) => {
         console.error('Connection error:', err);
+        console.error('Error details:', {
+          message: err.message,
+          description: err.description,
+          context: err.context,
+          type: err.type
+        });
+        
         const connectError = `Connection error: ${err.message}`;
         setError(connectError);
         globalError = connectError;
@@ -221,6 +237,19 @@ export const useWebSocket = () => {
         connectionErrorsRef.current += 1;
         connectionErrorCount = connectionErrorsRef.current;
         console.log(`Connection error count: ${connectionErrorsRef.current}`);
+        
+        // For production web builds, try forcing polling after websocket failures
+        if (Platform.OS === 'web' && connectionErrorsRef.current === 2) {
+          console.log('Attempting connection with polling-only transport...');
+          try {
+            if (newSocket && newSocket.io) {
+              newSocket.io.opts.transports = ['polling'];
+              newSocket.io.opts.upgrade = false;
+            }
+          } catch (transportError) {
+            console.error('Error switching to polling transport:', transportError);
+          }
+        }
         
         // If we have too many connection errors, stop trying
         if (connectionErrorsRef.current > 5) {
@@ -234,7 +263,7 @@ export const useWebSocket = () => {
           // Notify user about persistent connection issues
           Alert.alert(
             "Connection Problem",
-            "Unable to connect to the game server. Please check your network connection and restart the game.",
+            "Unable to connect to the game server. This might be due to cross-origin restrictions. Please try again or contact support.",
             [{ text: "OK" }]
           );
         }
