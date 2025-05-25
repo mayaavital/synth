@@ -304,3 +304,51 @@ export const getSpotifyUserProfile = async (token) => {
     return null;
   }
 };
+
+// Add this new function to get user's saved albums
+export const getMySavedAlbums = async (token, limit = 20) => {
+  try {
+    const url = `https://api.spotify.com/v1/me/albums?limit=${limit}`;
+    console.log("Fetching saved albums from:", url);
+    
+    const res = await fetcher(url, token);
+    console.log("Saved albums API response received");
+    
+    // The saved albums API returns a different format - albums are nested inside items
+    const items = res.data?.items;
+    console.log("Albums in response:", items?.length || 0);
+    
+    if (!items || items.length === 0) {
+      console.warn("No saved albums found");
+      return [];
+    }
+    
+    // Extract album info and return formatted data
+    const albums = items.map(item => {
+      const album = item.album;
+      return {
+        id: album.id,
+        name: album.name,
+        artists: album.artists?.map(artist => artist.name) || [],
+        imageUrl: album.images && album.images.length > 0 ? album.images[0].url : null,
+        releaseDate: album.release_date,
+        totalTracks: album.total_tracks,
+        externalUrl: album.external_urls?.spotify,
+        uri: album.uri,
+        albumType: album.album_type
+      };
+    });
+    
+    console.log("Formatted albums data:", albums.length, "albums");
+    return albums;
+  } catch (e) {
+    console.error("Error fetching saved albums:", e);
+    
+    // Don't show alert directly, let the caller handle the error
+    if (e.response?.status === 401) {
+      throw e; // Allow 401 errors to bubble up for token refresh handling
+    }
+    
+    return null;
+  }
+};

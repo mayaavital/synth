@@ -4,6 +4,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   SafeAreaView,
+  ScrollView,
   Image,
   Alert,
   ActivityIndicator,
@@ -16,6 +17,7 @@ import { useNavigation, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { useSpotifyAuth } from "../utils";
 import SpotifyConnectButton from "../components/SpotifyConnectButton";
+import AlbumCarousel from "../components/AlbumCarousel";
 //import * as Analytics from "expo-firebase-analytics";
 // Import the functions you need from the SDKs you need
 // import { initializeApp } from "firebase/app";
@@ -270,7 +272,11 @@ export default function home() {
 
   return (
     <SafeAreaView style={styles.safeAreaContainer}>
-      <View style={styles.container}>
+      <ScrollView 
+        style={styles.container}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Spotify Connection Status */}
         <View style={styles.spotifyStatus}>
           {!isInitialized ? (
@@ -380,7 +386,12 @@ export default function home() {
             </View>
           </TouchableOpacity>
         </View>
-      </View>
+
+        {/* Album Carousel */}
+        {token && tokenStatus === "valid" && (
+          <AlbumCarousel />
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -393,6 +404,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#1E1E1E",
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   header: {
     flexDirection: "row",
@@ -444,13 +458,13 @@ const styles = StyleSheet.create({
   spotifyStatus: {
     margin: 20,
     padding: 15,
-    backgroundColor: "#282828",
+    backgroundColor: "transparent",
     borderRadius: 10,
     alignItems: "center",
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
+    // shadowColor: "#000000",
+    // shadowOffset: { width: 0, height: 2 },
+    // shadowOpacity: 0.2,
+    // shadowRadius: 3,
   },
   statusLine: {
     flexDirection: "row",
@@ -522,17 +536,17 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   card: {
-    backgroundColor: "#000000",
-    borderRadius: 20,
+    backgroundColor: "#8E44AD",
+    borderRadius: 50,
     flexDirection: "row",
     alignItems: "center",
     padding: 20,
-    borderWidth: 1,
-    borderColor: "#8E44AD",
-    shadowColor: "#8E44AD", // light purple
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 1,
-    shadowRadius: 2,
+    // borderWidth: 1,
+    // borderColor: "#8E44AD",
+    // shadowColor: "#8E44AD", // light purple
+    // shadowOffset: { width: 0, height: 0 },
+    // shadowOpacity: 1,
+    // shadowRadius: 2,
   },
   iconContainer: {
     backgroundColor: "#8E44AD",
