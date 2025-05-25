@@ -2,6 +2,15 @@
 
 This is the WebSocket server for the Synth multiplayer game using Socket.io. It enables real-time game synchronization between multiple players on the same WiFi network.
 
+## CORS Configuration
+
+The server is configured to allow cross-origin requests from the following domains:
+- `https://synth-ten-hazel.vercel.app` (Production Vercel deployment)
+- `http://localhost:8081` and `http://localhost:8082` (Local development)
+- `http://localhost:3000` (Local development)
+
+This fixes CORS issues when the frontend is deployed to Vercel and needs to connect to the Heroku backend.
+
 ## Features
 
 - Real-time game state synchronization
