@@ -2351,9 +2351,9 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     justifyContent: "space-between",
     backgroundColor: "#8E44AD",
-    paddingVertical: 10,
+    paddingVertical: 5, // Reduced from 10
     paddingHorizontal: 16,
-    height: 100,
+    height: 80, // Reduced from 100
     shadowColor: "#000000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.6,
@@ -2379,7 +2379,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "bold",
     textAlign: "center",
-    bottom: 10,
+    bottom: 5, // Reduced from 10
   },
   placeholder: {
     width: 44,

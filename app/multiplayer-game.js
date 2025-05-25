@@ -806,9 +806,11 @@ export default function MultiplayerGame() {
         transparent={true}
         animationType="fade"
         onRequestClose={() => setShowServerInput(false)}
+        accessibilityViewIsModal={true}
+        statusBarTranslucent={true}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+        <View style={styles.modalOverlay} accessible={false}>
+          <View style={styles.modalContent} accessible={true} accessibilityRole="dialog" accessibilityLabel="Server Configuration">
             <Text style={styles.modalTitle}>Server Configuration</Text>
 
             <Text style={styles.inputLabel}>Server URL</Text>
@@ -820,6 +822,8 @@ export default function MultiplayerGame() {
               placeholderTextColor="#888"
               autoCapitalize="none"
               autoCorrect={false}
+              accessible={true}
+              accessibilityLabel="Server URL input"
             />
 
             <Text style={styles.modalHelpText}>
@@ -831,6 +835,9 @@ export default function MultiplayerGame() {
               <Pressable
                 style={styles.modalCancelButton}
                 onPress={() => setShowServerInput(false)}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel server configuration"
               >
                 <Text style={styles.modalCancelButtonText}>Cancel</Text>
               </Pressable>
@@ -841,6 +848,9 @@ export default function MultiplayerGame() {
                   setShowServerInput(false);
                   handleConnect();
                 }}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel="Save configuration and connect"
               >
                 <Text style={styles.modalSaveButtonText}>Save & Connect</Text>
               </Pressable>
@@ -1019,15 +1029,17 @@ export default function MultiplayerGame() {
           transparent={true}
           animationType="fade"
           onRequestClose={() => setShowQrCode(false)}
+          accessibilityViewIsModal={true}
+          statusBarTranslucent={true}
         >
-          <View style={styles.modalOverlay}>
-            <View style={styles.qrModalContent}>
+          <View style={styles.modalOverlay} accessible={false}>
+            <View style={styles.qrModalContent} accessible={true} accessibilityRole="dialog" accessibilityLabel="QR Code for joining game">
               <Text style={styles.modalTitle}>Join Game</Text>
               <Text style={styles.qrInstructions}>
                 Scan this code with another device to join
               </Text>
 
-              <View style={styles.qrCodeContainer}>
+              <View style={styles.qrCodeContainer} accessible={true} accessibilityLabel={`QR code for joining game ${gameId}`}>
                 <QRCode
                   value={joinUrl}
                   size={200}
@@ -1048,6 +1060,9 @@ export default function MultiplayerGame() {
               <Pressable
                 style={styles.modalCloseButton}
                 onPress={() => setShowQrCode(false)}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel="Close QR code modal"
               >
                 <Text style={styles.modalCloseButtonText}>Close</Text>
               </Pressable>
@@ -1182,9 +1197,9 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     justifyContent: "space-between",
     backgroundColor: "#8E44AD",
-    paddingVertical: 10,
+    paddingVertical: 5,
     paddingHorizontal: 16,
-    height: 100,
+    height: 80,
     shadowColor: "#000000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.6,
@@ -1204,7 +1219,7 @@ const styles = StyleSheet.create({
     right: 0,
     alignItems: "center",
     justifyContent: "center",
-    paddingBottom: 15,
+    paddingBottom: 10,
   },
   headerTitle: {
     color: "white",

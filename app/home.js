@@ -399,10 +399,10 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     justifyContent: "space-between",
     backgroundColor: "#8E44AD", // Purple background for header
-    paddingVertical: 10,
+    paddingVertical: 5, // Reduced from 10
     paddingHorizontal: 16,
-    height: Math.max(100, windowHeight * 0.12), // Dynamic height for different devices
-    paddingTop: Math.max(10, windowHeight * 0.06), // Extra padding for status bar area
+    height: Math.max(80, windowHeight * 0.08), // Reduced height: 80px minimum or 8% of screen height
+    paddingTop: Math.max(5, windowHeight * 0.03), // Reduced top padding: 5px minimum or 3% of screen height
     shadowColor: "#000000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.6,
@@ -422,7 +422,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: 10,
+    bottom: 5,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 80, // Give space for menu button and potential right content

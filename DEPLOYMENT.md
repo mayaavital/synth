@@ -185,3 +185,45 @@ REDIRECT_URI: https://your-vercel-app.vercel.app
 - Monitor deployments in Vercel dashboard
 - Check Spotify API usage in developer dashboard
 - Monitor Firebase analytics for user engagement 
+
+## Recent Fixes (Latest)
+
+### Issue Resolution - December 2024
+
+**Fixed Issues:**
+1. **CORS Policy Error**: Resolved CORS issues where Vercel frontend couldn't connect to Heroku backend
+   - Updated server CORS configuration to explicitly allow `https://synth-ten-hazel.vercel.app`
+   - Added proper preflight handling for cross-origin requests
+   - Configured Socket.io with proper CORS settings
+
+2. **Accessibility Warning**: Fixed `aria-hidden` accessibility warnings
+   - Updated React Native Modal components with proper accessibility attributes
+   - Added `accessibilityViewIsModal={true}` and `statusBarTranslucent={true}` to modals
+   - Added proper `accessibilityRole` and `accessibilityLabel` attributes to interactive elements
+   - Set `accessible={false}` on overlay backgrounds to prevent focus issues
+
+**Files Modified:**
+- `server/server.js` - CORS configuration updates
+- `app/multiplayer-game.js` - Modal accessibility improvements
+- `app/VotingStage.js` - Overlay accessibility improvements
+- `server/README.md` - CORS documentation
+
+**To Deploy:**
+1. Deploy the server changes to Heroku:
+   ```bash
+   cd server
+   git add .
+   git commit -m "Fix CORS policy for Vercel deployment and improve accessibility"
+   git push heroku main
+   ```
+
+2. Deploy the frontend changes to Vercel:
+   ```bash
+   git add .
+   git commit -m "Fix accessibility warnings in modals and overlays"
+   git push origin main
+   ```
+
+## Previous Deployment Instructions
+
+// ... existing code ... 
