@@ -230,7 +230,9 @@ export default function home() {
             <Ionicons name="menu" size={28} color="white" />
           </TouchableOpacity>
 
-          <Image source={require("../assets/SYNTH.png")} style={styles.logo} />
+          <View style={styles.headerLogoContainer}>
+            <Image source={require("../assets/SYNTH.png")} style={styles.logo} />
+          </View>
 
           <View style={styles.placeholder} />
         </View>
@@ -413,6 +415,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  headerLogoContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 80, // Give space for menu button and potential right content
+  },
   logoText: {
     color: "#FFC857", // Golden yellow color
     fontSize: 28,
@@ -420,12 +431,12 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
   logo: {
-    height: 80,
-    width: 200,
+    height: Math.min(windowHeight * 0.06, 60), // Responsive height
+    width: Math.min(windowWidth * 0.4, 200),   // Responsive width
     resizeMode: "contain",
   },
   placeholder: {
-    height: window.innerHeight * 0.05,
+    width: 40,
   },
   spotifyStatus: {
     margin: 20,
@@ -468,12 +479,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   spotifyDisconnectButton: {
-    backgroundColor: "#333",
+    backgroundColor: "#444",
     padding: 10,
     borderRadius: 25,
     paddingHorizontal: 20,
     borderWidth: 1,
-    borderColor: "#666",
+    borderColor: "#444",
     shadowColor: "#000000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,

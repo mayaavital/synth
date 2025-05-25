@@ -72,22 +72,26 @@ export default function App() {
   // Conditional rendering
   let contentDisplayed = (
     <View style={styles.container} onLayout={onLayoutRootView}>
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center"}}>
-        <Image source={require("../assets/newTitle.png")}></Image>
-      </View>
-
       {isAuthenticating ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#C6E1B8" />
           <Text style={styles.loadingText}>Connecting to Spotify...</Text>
         </View>
       ) : (
-        <View style={{ justifyContent: "center", alignItems: "center" }}>
+        <View style={styles.centerContent}>
+          <View style={styles.logoContainer}>
+            <Image 
+              source={require("../assets/newTitle.png")} 
+              style={styles.responsiveLogo}
+              resizeMode="contain"
+            />
+          </View>
+
           <SpotifyConnectButton
             onPress={handleSpotifyAuth}
             disabled={isAuthenticating}
             loading={isAuthenticating}
-            style={{ width: windowWidth * 0.8, marginBottom: 20 }}
+            style={{ width: windowWidth * 0.8 }}
           />
         </View>
       )}
@@ -119,7 +123,40 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#1E1E1E",
     alignItems: "center",
-    justifyContent: "space-around",
+    justifyContent: "center",
+  },
+  logoContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+    marginBottom: 40, // Space between logo and button
+  },
+  responsiveLogo: {
+    // For wide screens (desktop/tablet), limit max width but maintain responsiveness
+    width: windowWidth > 768 
+      ? Math.min(windowWidth * 0.6, 500)  // Desktop: 60% width or max 500px
+      : windowWidth * 0.85,                // Mobile: 85% width
+    
+    // Height constraints for different screen sizes
+    height: windowWidth > 768 
+      ? Math.min(windowHeight * 0.25, 200)  // Desktop: 25% height or max 200px
+      : Math.min(windowHeight * 0.18, 150), // Mobile: 18% height or max 150px
+    
+    // Additional constraints for very wide screens
+    maxWidth: 600,
+    maxHeight: 250,
+    
+    // Special handling for very small screens
+    ...(windowWidth < 350 && {
+      width: windowWidth * 0.9,
+      height: windowHeight * 0.15,
+    }),
+    
+    // Ensure proper scaling on very wide screens (ultra-wide monitors)
+    ...(windowWidth > 1200 && {
+      width: Math.min(windowWidth * 0.4, 600),
+      height: Math.min(windowHeight * 0.3, 250),
+    }),
   },
   loadingContainer: {
     alignItems: "center",
@@ -139,5 +176,9 @@ const styles = StyleSheet.create({
   errorText: {
     color: "#FF6B6B",
     textAlign: "center",
+  },
+  centerContent: {
+    alignItems: "center",
+    justifyContent: "center",
   },
 });
