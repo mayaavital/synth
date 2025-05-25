@@ -22,29 +22,79 @@ var db = admin.database();
 
 // Initialize Express and HTTP server
 const app = express();
+
+// Configure CORS to specifically allow the Vercel domain
+const allowedOrigins = [
+  "https://synth-ten-hazel.vercel.app", // Your Vercel domain
+  "http://localhost:8081", // Local development
+  "http://localhost:8082", // Local development alternate port
+  "http://localhost:3000", // Local development
+  "http://10.27.144.69:8082", // Local network development
+  "http://10.32.168.74:8081", // Local network development
+];
+
 app.use(
   cors({
-    origin: "*",
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+      
+      // Check if the origin is in our allowed origins
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      
+      // For development, also allow any localhost origin
+      if (origin && origin.includes('localhost')) {
+        return callback(null, true);
+      }
+      
+      console.log(`CORS blocked origin: ${origin}`);
+      return callback(new Error('Not allowed by CORS'));
+    },
     methods: ["GET", "POST", "OPTIONS"],
-    credentials: true,
+    credentials: false,
+    allowedHeaders: ["Content-Type", "Authorization", "Accept"],
+    optionsSuccessStatus: 200
   })
 );
+
+// Add explicit preflight handling
+app.options('*', cors());
+
 const server = http.createServer(app);
 
-// Initialize Socket.io with more detailed configuration
+// Initialize Socket.io with updated CORS configuration
 const io = new Server(server, {
   cors: {
-    origin: "*", // Allow connections from any origin
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps)
+      if (!origin) return callback(null, true);
+      
+      // Check if the origin is in our allowed origins
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      
+      // For development, also allow any localhost origin
+      if (origin && origin.includes('localhost')) {
+        return callback(null, true);
+      }
+      
+      console.log(`Socket.io CORS blocked origin: ${origin}`);
+      return callback(new Error('Not allowed by CORS'));
+    },
     methods: ["GET", "POST", "OPTIONS"],
-    credentials: true,
-    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: false,
+    allowedHeaders: ["Content-Type", "Authorization", "Accept"],
   },
-  maxHttpBufferSize: 1e8, // Increase buffer size for larger payloads (100 MB) - fixes serialization issues
-  transports: ["websocket", "polling"], // Support both WebSocket and long-polling
-  pingInterval: 10000, // Ping every 10 seconds
-  pingTimeout: 5000, // Consider connection closed if no response after 5 seconds
-  cookie: false, // Don't use cookies for session tracking
-  connectTimeout: 15000, // Allow more time for initial connection (15 seconds)
+  allowEIO3: true,
+  maxHttpBufferSize: 1e8,
+  transports: ["polling", "websocket"],
+  pingInterval: 25000,
+  pingTimeout: 60000,
+  cookie: false,
+  connectTimeout: 20000,
 });
 
 // Store active games

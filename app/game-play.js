@@ -10,12 +10,17 @@ import {
   Alert,
   Linking,
   ScrollView,
+  Platform,
 } from "react-native";
 import { useNavigation, useRouter, useLocalSearchParams } from "expo-router";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
-import Slider from "@react-native-community/slider";
+// Only import Slider for non-web platforms
+let Slider;
+if (Platform.OS !== 'web') {
+  Slider = require("@react-native-community/slider").default;
+}
 import { useSpotifyAuth } from "../utils";
 import {
   getMyRecentlyPlayedTracks,
@@ -33,12 +38,16 @@ import ResultsStage from "./ResultsStage";
 // Import useWebSocket for multiplayer functionality
 import { useWebSocket, EVENTS } from "../utils/useWebSocket";
 import LeaderboardScreen from "./LeaderboardScreen";
+// import * as Analytics from "expo-firebase-analytics";
+// import { initializeApp } from "firebase/app";
+import { getAnalytics, logEvent } from "firebase/analytics";
 
 const ALBUM_ID = "2noRn2Aes5aoNVsU6iWThc";
 const MIN_PLAY_DURATION = 8000; // 8 seconds
 const DEFAULT_ROUNDS = 3; // Default number of rounds if server doesn't provide a value
 const MAX_SYNC_HISTORY = 10; // Number of trace IDs to keep track of
 
+//const analytics = getAnalytics(app);
 // Format time helper function
 const formatTime = (milliseconds) => {
   if (!milliseconds) return "0:00";
@@ -164,6 +173,9 @@ export default function GamePlay() {
   // Add state for tracking votes
   const [pendingVotes, setPendingVotes] = useState({});
   const [allVotesCast, setAllVotesCast] = useState(false);
+
+  // Add state for tracking whether tracks have been shared
+  const [hasSharedTracks, setHasSharedTracks] = useState(false);
 
   // Get game details from params
   const gameName = params.gameName || "Game Name";
@@ -332,9 +344,6 @@ export default function GamePlay() {
       setHasSharedTracks(true);
     }
   }, [allSongs, isMultiplayer, emit, hasSharedTracks, shareTracks]);
-
-  // Add this state at the top with other states:
-  const [hasSharedTracks, setHasSharedTracks] = useState(false);
 
   // Fetch songs when component mounts - but only once
   useEffect(() => {
@@ -2091,18 +2100,49 @@ export default function GamePlay() {
                   <Text style={styles.timeText}>
                     {formatTime(playbackPosition)}
                   </Text>
-                  <Slider
-                    style={styles.progressBar}
-                    minimumValue={0}
-                    maximumValue={
-                      playbackDuration > 0 ? playbackDuration : 30000
-                    }
-                    value={playbackPosition}
-                    minimumTrackTintColor="#C143FF"
-                    maximumTrackTintColor="#444"
-                    thumbTintColor="#FFC857"
-                    disabled={true}
-                  />
+                  {Platform.OS === 'web' ? (
+                    <View style={styles.progressBar}>
+                      <View style={styles.progressTrack}>
+                        <View 
+                          style={[
+                            styles.progressFill,
+                            {
+                              width: `${
+                                playbackDuration > 0 
+                                  ? Math.min(100, (playbackPosition / playbackDuration) * 100)
+                                  : 0
+                              }%`
+                            }
+                          ]}
+                        />
+                        <View 
+                          style={[
+                            styles.progressThumb,
+                            {
+                              left: `${
+                                playbackDuration > 0 
+                                  ? Math.min(100, (playbackPosition / playbackDuration) * 100)
+                                  : 0
+                              }%`
+                            }
+                          ]}
+                        />
+                      </View>
+                    </View>
+                  ) : (
+                    <Slider
+                      style={styles.progressBar}
+                      minimumValue={0}
+                      maximumValue={
+                        playbackDuration > 0 ? playbackDuration : 30000
+                      }
+                      value={playbackPosition}
+                      minimumTrackTintColor="#C143FF"
+                      maximumTrackTintColor="#444"
+                      thumbTintColor="#FFC857"
+                      disabled={true}
+                    />
+                  )}
                   <Text style={styles.timeText}>
                     {formatTime(playbackDuration)}
                   </Text>
@@ -2127,7 +2167,29 @@ export default function GamePlay() {
                       styles.externalLinkButton,
                       styles.spotifyLinkButton,
                     ]}
-                    onPress={() => Linking.openURL(currentSong.externalUrl)}
+                    onPress={async () => {
+                      // try {
+                      //   // Log the Spotify link click event with relevant parameters
+                      //   await logEvent(analytics, "spotify_link_click", {
+                      //     song_title: currentSong.songTitle,
+                      //     song_artists: Array.isArray(currentSong.songArtists)
+                      //       ? currentSong.songArtists.join(", ")
+                      //       : currentSong.songArtists,
+                      //     round_number: currentRound,
+                      //     game_id: gameId,
+                      //   });
+
+                      //   // Open the Spotify URL
+                      //   await Linking.openURL(currentSong.externalUrl);
+                      // } catch (error) {
+                      //   console.error(
+                      //     "Error logging Spotify link click:",
+                      //     error
+                      //   );
+                      // Still try to open the URL even if logging fails
+                      await Linking.openURL(currentSong.externalUrl);
+                      //}
+                    }}
                   >
                     <Image
                       source={require("../assets/white-spotify-logo.png")}
@@ -2289,9 +2351,9 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     justifyContent: "space-between",
     backgroundColor: "#8E44AD",
-    paddingVertical: 10,
+    paddingVertical: 5, // Reduced from 10
     paddingHorizontal: 16,
-    height: 100,
+    height: 80, // Reduced from 100
     shadowColor: "#000000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.6,
@@ -2317,7 +2379,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "bold",
     textAlign: "center",
-    bottom: 10,
+    bottom: 5, // Reduced from 10
   },
   placeholder: {
     width: 44,
@@ -2927,5 +2989,24 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 16,
     marginBottom: 10,
+  },
+  progressTrack: {
+    height: 4,
+    backgroundColor: "#444",
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    backgroundColor: "#C143FF",
+  },
+  progressThumb: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "#FFC857",
+    position: "absolute",
+    top: -6, // Center vertically on the 4px track
+    marginLeft: -8, // Center horizontally on the position
   },
 });

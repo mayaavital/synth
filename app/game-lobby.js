@@ -342,9 +342,9 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     justifyContent: "space-between",
     backgroundColor: "#8E44AD", // Purple background for header
-    paddingVertical: 8,
+    paddingVertical: 5,
     paddingHorizontal: 16,
-    height: 100,
+    height: 80,
     shadowColor: "#000000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.6,

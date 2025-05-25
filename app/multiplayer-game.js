@@ -8,6 +8,7 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
+  Dimensions,
   FlatList,
   TextInput,
   Modal,
@@ -25,6 +26,9 @@ import {
   getSpotifyUserProfile,
 } from "../utils/apiOptions";
 import useSpotifyAuth from "../utils/useSpotifyAuth";
+
+const windowWidth = Dimensions.get("window").width;
+const windowHeight = Dimensions.get("window").height;
 
 export default function MultiplayerGame() {
   const navigation = useNavigation();
@@ -53,7 +57,7 @@ export default function MultiplayerGame() {
   // Game state
   const [connectionStep, setConnectionStep] = useState("initial"); // initial, connecting, host, join, lobby, game
   const [serverUrl, setServerUrl] = useState(
-    "https://synth-69a11b47cbf3.herokuapp.com"
+    __DEV__ ? "http://localhost:3000" : "https://synth-69a11b47cbf3.herokuapp.com"
   );
   const [username, setUsername] = useState("");
   const [gameName, setGameName] = useState("");
@@ -422,6 +426,133 @@ export default function MultiplayerGame() {
     fetchSpotifyProfile();
   }, [spotifyToken, username]);
 
+  // Fetch player's recent tracks for multiplayer
+  const fetchRecentTracks = useCallback(async () => {
+    try {
+      setLoading(true);
+      console.log("Fetching recent tracks for multiplayer game...");
+
+      // Get valid token using our hook
+      let token = null;
+      try {
+        // First try to use the token from our hook
+        if (isSpotifyTokenValid()) {
+          token = spotifyToken;
+          console.log("Using token from Spotify hook");
+        } else {
+          // Try to get a fresh token
+          token = await getSpotifyToken();
+          console.log("Got fresh token from Spotify hook");
+        }
+      } catch (tokenError) {
+        console.error("Error getting Spotify token:", tokenError);
+      }
+
+      // If we have a token, use it
+      let tracksToProcess = [];
+
+      if (token) {
+        try {
+          console.log("Using token to fetch recently played tracks");
+          const tracks = await getMyRecentlyPlayedTracks(token);
+
+          if (tracks && tracks.length > 0) {
+            // Convert to the format expected by the multiplayer game
+            tracksToProcess = tracks.slice(0, 5).map((track) => ({
+              songTitle: track.songTitle,
+              songArtists: track.songArtists.map(
+                (artist) => artist.name || artist
+              ),
+              albumName: track.albumName,
+              imageUrl: track.imageUrl,
+              previewUrl: track.previewUrl,
+              uri: track.uri,
+              trackId: track.id,
+              externalUrl: track.externalUrl,
+              duration: track.duration,
+            }));
+
+            console.log(
+              `Found ${tracksToProcess.length} valid tracks for multiplayer`
+            );
+          }
+        } catch (apiError) {
+          console.error("Error calling Spotify API:", apiError);
+        }
+      } else {
+        console.log("No valid Spotify token available");
+      }
+
+      // If we didn't get any tracks from Spotify, use mock tracks
+      if (!tracksToProcess.length) {
+        console.log("Using mock tracks for multiplayer");
+        tracksToProcess = [];
+        for (let i = 1; i <= 5; i++) {
+          tracksToProcess.push({
+            songTitle: `Test Song ${i}`,
+            songArtists: ["Test Artist"],
+            albumName: "Test Album",
+            imageUrl: "https://via.placeholder.com/300",
+            previewUrl: null, // Set to null to force Deezer enrichment
+            uri: `spotify:track:mock${i}`,
+            trackId: `mock${i}`,
+            duration: 30000,
+          });
+        }
+      }
+
+      // IMPORTANT: Always enrich tracks with Deezer preview URLs
+      console.log(
+        "Enriching all tracks with Deezer preview URLs before sending to server"
+      );
+
+      try {
+        // Import the enrichTracksWithDeezerPreviews function
+        const {
+          enrichTracksWithDeezerPreviews,
+        } = require("../utils/deezerApi");
+
+        // Enrich all tracks with Deezer, even if they already have preview URLs
+        const enrichedTracks = await enrichTracksWithDeezerPreviews(
+          tracksToProcess
+        );
+
+        // Log the enrichment results
+        const tracksWithPreviewUrls = enrichedTracks.filter(
+          (track) => !!track.previewUrl
+        ).length;
+        console.log(
+          `After Deezer enrichment: ${tracksWithPreviewUrls}/${enrichedTracks.length} tracks have preview URLs`
+        );
+
+        return enrichedTracks;
+      } catch (deezerError) {
+        console.error("Error enriching tracks with Deezer:", deezerError);
+        // Continue with original tracks if enrichment fails
+        return tracksToProcess;
+      }
+    } catch (error) {
+      console.error("Error fetching recent tracks:", error);
+      setError(`Could not fetch your tracks: ${error.message}`);
+
+      // Return mock tracks on failure
+      return Array(5)
+        .fill()
+        .map((_, i) => ({
+          songTitle: `Backup Song ${i + 1}`,
+          songArtists: ["Backup Artist"],
+          albumName: "Backup Album",
+          imageUrl: "https://via.placeholder.com/300",
+          previewUrl: "https://p.scdn.co/mp3-preview/your-preview-url",
+          uri: `spotify:track:backup${i}`,
+          trackId: `backup${i}`,
+          duration: 30000,
+        }));
+    } finally {
+      setLoading(false);
+    }
+  }, [isSpotifyTokenValid, spotifyToken, getSpotifyToken]);
+
   // Create a new game
   const handleCreateGame = useCallback(async () => {
     if (!username.trim()) {
@@ -647,140 +778,15 @@ export default function MultiplayerGame() {
     }, 50);
   }, [isConnected, gameId, username, joinGame]);
 
-  // Fetch player's recent tracks for multiplayer
-  const fetchRecentTracks = useCallback(async () => {
-    try {
-      setLoading(true);
-      console.log("Fetching recent tracks for multiplayer game...");
-
-      // Get valid token using our hook
-      let token = null;
-      try {
-        // First try to use the token from our hook
-        if (isSpotifyTokenValid()) {
-          token = spotifyToken;
-          console.log("Using token from Spotify hook");
-        } else {
-          // Try to get a fresh token
-          token = await getSpotifyToken();
-          console.log("Got fresh token from Spotify hook");
-        }
-      } catch (tokenError) {
-        console.error("Error getting Spotify token:", tokenError);
-      }
-
-      // If we have a token, use it
-      let tracksToProcess = [];
-
-      if (token) {
-        try {
-          console.log("Using token to fetch recently played tracks");
-          const tracks = await getMyRecentlyPlayedTracks(token);
-
-          if (tracks && tracks.length > 0) {
-            // Convert to the format expected by the multiplayer game
-            tracksToProcess = tracks.slice(0, 5).map((track) => ({
-              songTitle: track.songTitle,
-              songArtists: track.songArtists.map(
-                (artist) => artist.name || artist
-              ),
-              albumName: track.albumName,
-              imageUrl: track.imageUrl,
-              previewUrl: track.previewUrl,
-              uri: track.uri,
-              trackId: track.id,
-              externalUrl: track.externalUrl,
-              duration: track.duration,
-            }));
-
-            console.log(
-              `Found ${tracksToProcess.length} valid tracks for multiplayer`
-            );
-          }
-        } catch (apiError) {
-          console.error("Error calling Spotify API:", apiError);
-        }
-      } else {
-        console.log("No valid Spotify token available");
-      }
-
-      // If we didn't get any tracks from Spotify, use mock tracks
-      if (!tracksToProcess.length) {
-        console.log("Using mock tracks for multiplayer");
-        tracksToProcess = [];
-        for (let i = 1; i <= 5; i++) {
-          tracksToProcess.push({
-            songTitle: `Test Song ${i}`,
-            songArtists: ["Test Artist"],
-            albumName: "Test Album",
-            imageUrl: "https://via.placeholder.com/300",
-            previewUrl: null, // Set to null to force Deezer enrichment
-            uri: `spotify:track:mock${i}`,
-            trackId: `mock${i}`,
-            duration: 30000,
-          });
-        }
-      }
-
-      // IMPORTANT: Always enrich tracks with Deezer preview URLs
-      console.log(
-        "Enriching all tracks with Deezer preview URLs before sending to server"
-      );
-
-      try {
-        // Import the enrichTracksWithDeezerPreviews function
-        const {
-          enrichTracksWithDeezerPreviews,
-        } = require("../utils/deezerApi");
-
-        // Enrich all tracks with Deezer, even if they already have preview URLs
-        const enrichedTracks = await enrichTracksWithDeezerPreviews(
-          tracksToProcess
-        );
-
-        // Log the enrichment results
-        const tracksWithPreviewUrls = enrichedTracks.filter(
-          (track) => !!track.previewUrl
-        ).length;
-        console.log(
-          `After Deezer enrichment: ${tracksWithPreviewUrls}/${enrichedTracks.length} tracks have preview URLs`
-        );
-
-        return enrichedTracks;
-      } catch (deezerError) {
-        console.error("Error enriching tracks with Deezer:", deezerError);
-        // Continue with original tracks if enrichment fails
-        return tracksToProcess;
-      }
-    } catch (error) {
-      console.error("Error fetching recent tracks:", error);
-      setError(`Could not fetch your tracks: ${error.message}`);
-
-      // Return mock tracks on failure
-      return Array(5)
-        .fill()
-        .map((_, i) => ({
-          songTitle: `Backup Song ${i + 1}`,
-          songArtists: ["Backup Artist"],
-          albumName: "Backup Album",
-          imageUrl: "https://via.placeholder.com/300",
-          previewUrl: "https://p.scdn.co/mp3-preview/your-preview-url",
-          uri: `spotify:track:backup${i}`,
-          trackId: `backup${i}`,
-          duration: 30000,
-        }));
-    } finally {
-      setLoading(false);
-    }
-  }, [isSpotifyTokenValid, spotifyToken, getSpotifyToken]);
-
   const renderInitialScreen = () => (
     <View style={styles.contentContainer}>
-      <Image
-        source={require("../assets/SYNTH.png")}
-        style={styles.logo}
-        resizeMode="contain"
-      />
+      <View style={styles.logoContainer}>
+        <Image
+          source={require("../assets/newTitle.png")}
+          style={styles.logo}
+          resizeMode="contain"
+        />
+      </View>
 
       <Text style={styles.welcomeText}>Welcome to Synth Multiplayer!</Text>
 
@@ -792,13 +798,6 @@ export default function MultiplayerGame() {
         <Pressable style={styles.primaryButton} onPress={handleConnect}>
           <Text style={styles.primaryButtonText}>Connect to Server</Text>
         </Pressable>
-
-        {/* <Pressable 
-          style={styles.secondaryButton}
-          onPress={() => setShowServerInput(true)}
-        >
-          <Text style={styles.secondaryButtonText}>Configure Server</Text>
-        </Pressable> */}
       </View>
 
       {/* Server configuration modal */}
@@ -807,9 +806,11 @@ export default function MultiplayerGame() {
         transparent={true}
         animationType="fade"
         onRequestClose={() => setShowServerInput(false)}
+        accessibilityViewIsModal={true}
+        statusBarTranslucent={true}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+        <View style={styles.modalOverlay} accessible={false}>
+          <View style={styles.modalContent} accessible={true} accessibilityRole="dialog" accessibilityLabel="Server Configuration">
             <Text style={styles.modalTitle}>Server Configuration</Text>
 
             <Text style={styles.inputLabel}>Server URL</Text>
@@ -821,6 +822,8 @@ export default function MultiplayerGame() {
               placeholderTextColor="#888"
               autoCapitalize="none"
               autoCorrect={false}
+              accessible={true}
+              accessibilityLabel="Server URL input"
             />
 
             <Text style={styles.modalHelpText}>
@@ -832,6 +835,9 @@ export default function MultiplayerGame() {
               <Pressable
                 style={styles.modalCancelButton}
                 onPress={() => setShowServerInput(false)}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel server configuration"
               >
                 <Text style={styles.modalCancelButtonText}>Cancel</Text>
               </Pressable>
@@ -842,6 +848,9 @@ export default function MultiplayerGame() {
                   setShowServerInput(false);
                   handleConnect();
                 }}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel="Save configuration and connect"
               >
                 <Text style={styles.modalSaveButtonText}>Save & Connect</Text>
               </Pressable>
@@ -1020,15 +1029,17 @@ export default function MultiplayerGame() {
           transparent={true}
           animationType="fade"
           onRequestClose={() => setShowQrCode(false)}
+          accessibilityViewIsModal={true}
+          statusBarTranslucent={true}
         >
-          <View style={styles.modalOverlay}>
-            <View style={styles.qrModalContent}>
+          <View style={styles.modalOverlay} accessible={false}>
+            <View style={styles.qrModalContent} accessible={true} accessibilityRole="dialog" accessibilityLabel="QR Code for joining game">
               <Text style={styles.modalTitle}>Join Game</Text>
               <Text style={styles.qrInstructions}>
                 Scan this code with another device to join
               </Text>
 
-              <View style={styles.qrCodeContainer}>
+              <View style={styles.qrCodeContainer} accessible={true} accessibilityLabel={`QR code for joining game ${gameId}`}>
                 <QRCode
                   value={joinUrl}
                   size={200}
@@ -1049,6 +1060,9 @@ export default function MultiplayerGame() {
               <Pressable
                 style={styles.modalCloseButton}
                 onPress={() => setShowQrCode(false)}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel="Close QR code modal"
               >
                 <Text style={styles.modalCloseButtonText}>Close</Text>
               </Pressable>
@@ -1183,9 +1197,9 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     justifyContent: "space-between",
     backgroundColor: "#8E44AD",
-    paddingVertical: 10,
+    paddingVertical: 5,
     paddingHorizontal: 16,
-    height: 100,
+    height: 80,
     shadowColor: "#000000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.6,
@@ -1205,10 +1219,10 @@ const styles = StyleSheet.create({
     right: 0,
     alignItems: "center",
     justifyContent: "center",
-    paddingBottom: 15,
+    paddingBottom: 10,
   },
   headerTitle: {
-    color: "#FFC857",
+    color: "white",
     fontSize: 24,
     fontWeight: "bold",
     textAlign: "center",
@@ -1222,10 +1236,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  logoContainer: {
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 30,
+  },
   logo: {
-    width: 200,
-    height: 80,
-    marginBottom: 40,
+    width: Math.min(windowWidth * 0.85, 400), // Max width of 400px for larger screens
+    height: Math.min(windowHeight * 0.15, 150), // Reduced height ratio for better proportions
+    // Add slight scaling for very small screens
+    ...(windowWidth < 350 && {
+      width: windowWidth * 0.95,
+      height: windowHeight * 0.12,
+    }),
   },
   welcomeText: {
     color: "white",

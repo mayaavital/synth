@@ -630,7 +630,7 @@ const VotingStage = ({
         {/* Overlay when vote is locked but results not shown 
             Show whenever the player has voted (voteLocked) and we're not showing results yet */}
         {voteLocked && !showVoteResult && (
-          <View style={votingStyles.voteLockedOverlay}>
+          <View style={votingStyles.voteLockedOverlay} accessible={true} accessibilityLabel="Vote is locked, waiting for other players">
             <View style={votingStyles.lockedMessageContainer}>
               <Text style={votingStyles.lockIcon}>🔒</Text>
               <Text style={votingStyles.lockedMessage}>

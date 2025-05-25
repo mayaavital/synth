@@ -4,27 +4,57 @@ import {
   TouchableOpacity,
   StyleSheet,
   SafeAreaView,
+  ScrollView,
   Image,
   Alert,
   ActivityIndicator,
+  Dimensions,
+  Platform,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { useSpotifyAuth } from "../utils";
-/*
-import { initializeApp } from 'firebase/app';
-import { getAnalytics, logEvent } from 'firebase/analytics';
-import analytics from '@react-native-firebase/analytics'
-*/
-//import firebase from '@react-native-firebase/app';
+import SpotifyConnectButton from "../components/SpotifyConnectButton";
+import AlbumCarousel from "../components/AlbumCarousel";
+//import * as Analytics from "expo-firebase-analytics";
 // Import the functions you need from the SDKs you need
 // import { initializeApp } from "firebase/app";
 // import { getAnalytics, logEvent } from "firebase/analytics";
 // const analytics = getAnalytics(app);
 // TODO: Add SDKs for Firebase products that you want to use
 // https://firebase.google.com/docs/web/setup#available-libraries
+
+const windowWidth = Dimensions.get("window").width;
+const windowHeight = Dimensions.get("window").height;
+
+// Add web-specific styles to handle mobile viewport issues
+if (Platform.OS === 'web') {
+  const style = document.createElement('style');
+  style.textContent = `
+    html, body, #root {
+      margin: 0;
+      padding: 0;
+      height: 100vh;
+      height: 100dvh; /* Use dynamic viewport height for mobile */
+      overflow: hidden;
+      background-color: #8E44AD;
+    }
+    
+    /* Prevent mobile browser UI from affecting layout */
+    @media screen and (max-width: 768px) {
+      html {
+        height: -webkit-fill-available;
+      }
+      body {
+        min-height: 100vh;
+        min-height: -webkit-fill-available;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+}
 
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
@@ -36,7 +66,7 @@ const firebaseConfig = {
   storageBucket: "synth-database.firebasestorage.app",
   messagingSenderId: "681571197393",
   appId: "1:681571197393:web:21ebf6102f5239372740f0",
-  measurementId: "G-ND9VF6MRB4"
+  measurementId: "G-ND9VF6MRB4",
 };
 
 //let app = firebase.initializeApp(firebaseConfig);
@@ -191,31 +221,53 @@ export default function home() {
           <TouchableOpacity
             style={styles.menuButton}
             onPress={() => {
+              console.log("Menu button pressed!"); // Debug log
+              console.log("Token status:", !!token); // Debug log
+              
               if (token) {
+                console.log("Showing sign out alert"); // Debug log
                 Alert.alert(
-                  "Spotify Connected",
-                  "Do you want to disconnect from Spotify?",
+                  "Sign Out",
+                  "Would you like to sign out of Spotify?",
                   [
                     { text: "Cancel", style: "cancel" },
                     {
-                      text: "Disconnect",
-                      onPress: handleLogout,
+                      text: "Sign Out",
+                      onPress: async () => {
+                        console.log("Sign out confirmed"); // Debug log
+                        await handleLogout();
+                        router.replace("/");
+                      },
                       style: "destructive",
                     },
                   ]
                 );
               } else {
+                console.log("Showing connect alert"); // Debug log
                 Alert.alert(
                   "Not Connected",
-                  "You are not connected to Spotify."
+                  "You are not connected to Spotify. Would you like to connect?",
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                      text: "Connect",
+                      onPress: () => {
+                        console.log("Connect confirmed"); // Debug log
+                        router.replace("/");
+                      },
+                    },
+                  ]
                 );
               }
             }}
+            activeOpacity={0.7}
           >
             <Ionicons name="menu" size={28} color="white" />
           </TouchableOpacity>
 
-          <Image source={require("../assets/SYNTH.png")} style={styles.logo} />
+          <View style={styles.headerLogoContainer}>
+            <Image source={require("../assets/SYNTH.png")} style={styles.logo} />
+          </View>
 
           <View style={styles.placeholder} />
         </View>
@@ -224,195 +276,176 @@ export default function home() {
   }, [navigation, token]);
 
   return (
-    // <LinearGradient colors={["#040306", "#131624"]} style={{ flex: 1 }}>
-    <SafeAreaView style={{ backgroundColor: "#1E1E1E", flex: 1 }}>
-      {/* Spotify Connection Status */}
-      <View style={styles.spotifyStatus}>
-        {!isInitialized ? (
-          <ActivityIndicator size="small" color="#1DB954" />
-        ) : (
-          <>
-            <View style={styles.statusLine}>
-              <View
-                style={[
-                  styles.statusDot,
-                  tokenStatus === "valid"
-                    ? styles.statusConnected
-                    : tokenStatus === "expired"
+    <SafeAreaView style={styles.safeAreaContainer}>
+      <ScrollView 
+        style={styles.container}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Spotify Connection Status */}
+        <View style={styles.spotifyStatus}>
+          {!isInitialized ? (
+            <ActivityIndicator size="small" color="#1DB954" />
+          ) : (
+            <>
+              <View style={styles.statusLine}>
+                <View
+                  style={[
+                    styles.statusDot,
+                    tokenStatus === "valid"
+                      ? styles.statusConnected
+                      : tokenStatus === "expired"
                       ? styles.statusWarning
                       : styles.statusDisconnected,
-                ]}
-              />
-              <Text style={styles.spotifyStatusText}>
-                {getTokenStatusMessage()}
+                  ]}
+                />
+                <Text style={styles.spotifyStatusText}>
+                  {getTokenStatusMessage()}
+                </Text>
+              </View>
+
+              {token ? (
+                tokenStatus === "expired" ? (
+                  // Show refresh button for expired tokens
+                  <TouchableOpacity
+                    style={styles.spotifyRefreshButton}
+                    onPress={handleRefreshToken}
+                    disabled={isAuthenticating}
+                  >
+                    {isAuthenticating ? (
+                      <ActivityIndicator size="small" color="white" />
+                    ) : (
+                      <>
+                        <Ionicons
+                          name="refresh"
+                          size={20}
+                          color="white"
+                          style={styles.refreshIcon}
+                        />
+                        <Text style={styles.refreshText}>Refresh Connection</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                ) : (
+                  // Show disconnect button for valid tokens
+                  <TouchableOpacity
+                    style={styles.spotifyDisconnectButton}
+                    onPress={handleLogout}
+                  >
+                    <Text style={styles.disconnectText}>Disconnect</Text>
+                  </TouchableOpacity>
+                )
+              ) : (
+                // Show connect button when no token
+                <SpotifyConnectButton
+                  onPress={handleConnectSpotify}
+                  disabled={isAuthenticating}
+                  loading={isAuthenticating}
+                  style={{ width: '90%' }}
+                />
+              )}
+            </>
+          )}
+        </View>
+
+        {/* Game options */}
+        <View style={styles.cardContainer}>
+          <TouchableOpacity
+            style={styles.card}
+            onPress={() => router.push("/multiplayer-game")}
+          >
+            <View style={styles.iconContainer}>
+              <Ionicons name="wifi" size={32} color="white" />
+            </View>
+            <View style={styles.textContainer}>
+              <Text style={styles.cardTitle}>Multiplayer Mode</Text>
+              <Text style={styles.cardSubtitle}>
+                Play with friends on the same WiFi network in real-time.
               </Text>
             </View>
+          </TouchableOpacity>
 
-            {token ? (
-              tokenStatus === "expired" ? (
-                // Show refresh button for expired tokens
-                <TouchableOpacity
-                  style={styles.spotifyRefreshButton}
-                  onPress={handleRefreshToken}
-                  disabled={isAuthenticating}
-                >
-                  {isAuthenticating ? (
-                    <ActivityIndicator size="small" color="white" />
-                  ) : (
-                    <>
-                      <Ionicons
-                        name="refresh"
-                        size={20}
-                        color="white"
-                        style={styles.refreshIcon}
-                      />
-                      <Text style={styles.refreshText}>Refresh Connection</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              ) : (
-                // Show disconnect button for valid tokens
-                <TouchableOpacity
-                  style={styles.spotifyDisconnectButton}
-                  onPress={handleLogout}
-                >
-                  <Text style={styles.disconnectText}>Disconnect</Text>
-                </TouchableOpacity>
-              )
-            ) : (
-              // Show connect button when no token
-              <TouchableOpacity
-                style={styles.spotifyConnectButton}
-                onPress={handleConnectSpotify}
-                disabled={isAuthenticating}
-              >
-                {isAuthenticating ? (
-                  <ActivityIndicator size="small" color="white" />
-                ) : (
-                  <>
-                    <Image
-                      source={require("../assets/white-spotify-logo.png")}
-                      style={styles.spotifyIcon}
-                    />
-                    <Text style={styles.spotifyConnectText}>
-                      Connect to Spotify
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            )}
-          </>
-        )}
-      </View>
+          <TouchableOpacity
+            style={styles.card}
+            onPress={async () => {
+              console.log("Logging event");
 
-      {/* Game options */}
-      <View style={styles.cardContainer}>
-        {/* <TouchableOpacity
-          style={styles.card}
-          onPress={() => router.push("/create-game")}
-        >
-          <View style={styles.iconContainer}>
-            <Ionicons name="add-circle" size={32} color="white" />
-          </View>
-          <View style={styles.textContainer}>
-            <Text style={styles.cardTitle}>Create a new game</Text>
-            <Text style={styles.cardSubtitle}>
-              Invite your friends, guess the listener, and create playlists.
-            </Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.card}
-          onPress={() => router.push("/join-game")}
-        >
-          <View style={styles.iconContainer}>
-            <Ionicons name="people" size={32} color="white" />
-          </View>
-          <View style={styles.textContainer}>
-            <Text style={styles.cardTitle}>Join a game</Text>
-            <Text style={styles.cardSubtitle}>
-              Join a game that your friend already created.
-            </Text>
-          </View>
-        </TouchableOpacity> */}
-
-        <TouchableOpacity
-          style={styles.card}
-          onPress={() => router.push("/multiplayer-game")}
-        >
-          <View style={styles.iconContainer}>
-            <Ionicons name="wifi" size={32} color="white" />
-          </View>
-          <View style={styles.textContainer}>
-            <Text style={styles.cardTitle}>Multiplayer Mode</Text>
-            <Text style={styles.cardSubtitle}>
-              Play with friends on the same WiFi network in real-time.
-            </Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.card}
-          onPress={async () => {
-            console.log("Logging event");
-
-            // Log a custom event using Firebase Analytics
-
-/*
-            try{
-              await analytics().logEvent('product_view', {
-                id: '123456789',
-                color: 'red',
-                via: 'ProductCatalog',
-              });
-          } catch (error) { 
-            console.error("Error logging event:", error);
-          }
-            */
-            console.log("Logging event");
-            router.push("/previous-games")
-          }}
-        >
-          <View
-            style={styles.iconContainer}
+              try {
+                // Example: Logging a custom event
+                await Analytics.logEvent("select_content", undefined);
+              } catch (error) {
+                console.error("Error logging event:", error);
+              }
+              console.log("Logging event");
+              router.push("/previous-games");
+            }}
           >
-            <Ionicons name="play-back-circle-outline" size={32} color="white" />
-          </View>
-          <View style={styles.textContainer}>
-            <Text style={styles.cardTitle}>Previous Games</Text>
-            <Text style={styles.cardSubtitle}>
-              See how you and your friends did on previous games.
-            </Text>
-          </View>
-        </TouchableOpacity>
-      </View>
+            <View style={styles.iconContainer}>
+              <Ionicons name="play-back-circle-outline" size={32} color="white" />
+            </View>
+            <View style={styles.textContainer}>
+              <Text style={styles.cardTitle}>Previous Games</Text>
+              <Text style={styles.cardSubtitle}>
+                See how you and your friends did on previous games.
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        {/* Album Carousel */}
+        {token && tokenStatus === "valid" && (
+          <AlbumCarousel />
+        )}
+      </ScrollView>
     </SafeAreaView>
-    // </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
+  safeAreaContainer: {
+    flex: 1,
+    backgroundColor: "#8E44AD", // Use header color to eliminate white gaps
+  },
   container: {
     flex: 1,
     backgroundColor: "#1E1E1E",
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   header: {
     flexDirection: "row",
     alignItems: "flex-end",
     justifyContent: "space-between",
     backgroundColor: "#8E44AD", // Purple background for header
-    paddingVertical: 10,
+    paddingVertical: 5, // Reduced from 10
     paddingHorizontal: 16,
-    height: 100,
+    height: Math.max(80, windowHeight * 0.08), // Reduced height: 80px minimum or 8% of screen height
+    paddingTop: Math.max(5, windowHeight * 0.03), // Reduced top padding: 5px minimum or 3% of screen height
     shadowColor: "#000000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.6,
     shadowRadius: 7,
     elevation: 5,
   },
-  // menuButton: {
-  //   padding: 8,
-  // },
+  menuButton: {
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerLogoContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 80, // Give space for menu button and potential right content
+  },
   logoText: {
     color: "#FFC857", // Golden yellow color
     fontSize: 28,
@@ -420,23 +453,23 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
   logo: {
-    height: 35,
-    width: 110,
+    height: Math.min(windowHeight * 0.06, 60), // Responsive height
+    width: Math.min(windowWidth * 0.4, 200),   // Responsive width
     resizeMode: "contain",
   },
   placeholder: {
-    height: window.innerHeight * 0.05,
+    width: 40,
   },
   spotifyStatus: {
     margin: 20,
     padding: 15,
-    backgroundColor: "#282828",
+    backgroundColor: "transparent",
     borderRadius: 10,
     alignItems: "center",
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
+    // shadowColor: "#000000",
+    // shadowOffset: { width: 0, height: 2 },
+    // shadowOpacity: 0.2,
+    // shadowRadius: 3,
   },
   statusLine: {
     flexDirection: "row",
@@ -467,25 +500,13 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 16,
   },
-  spotifyConnectButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#1DB954", // Spotify green
-    padding: 12,
-    borderRadius: 25,
-    paddingHorizontal: 20,
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-  },
   spotifyDisconnectButton: {
-    backgroundColor: "#333",
+    backgroundColor: "#444",
     padding: 10,
     borderRadius: 25,
     paddingHorizontal: 20,
     borderWidth: 1,
-    borderColor: "#666",
+    borderColor: "#444",
     shadowColor: "#000000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
@@ -510,15 +531,6 @@ const styles = StyleSheet.create({
     color: "#e74c3c",
     fontWeight: "bold",
   },
-  spotifyIcon: {
-    width: 24,
-    height: 24,
-    marginRight: 10,
-  },
-  spotifyConnectText: {
-    color: "white",
-    fontWeight: "bold",
-  },
   title: {
     color: "white",
     fontSize: 20,
@@ -529,15 +541,17 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   card: {
-    backgroundColor: "#000000",
-    borderRadius: 20,
+    backgroundColor: "#8E44AD",
+    borderRadius: 50,
     flexDirection: "row",
     alignItems: "center",
     padding: 20,
-    shadowColor: "#C6B6DD", // light purple
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
+    // borderWidth: 1,
+    // borderColor: "#8E44AD",
+    // shadowColor: "#8E44AD", // light purple
+    // shadowOffset: { width: 0, height: 0 },
+    // shadowOpacity: 1,
+    // shadowRadius: 2,
   },
   iconContainer: {
     backgroundColor: "#8E44AD",

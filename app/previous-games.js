@@ -196,9 +196,9 @@ const styles = StyleSheet.create({
         alignItems: "flex-end",
         justifyContent: "space-between",
         backgroundColor: "#8E44AD",
-        paddingVertical: 10,
+        paddingVertical: 5,
         paddingHorizontal: 16,
-        height: 100,
+        height: 80,
         shadowColor: "#000000",
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.6,
@@ -218,10 +218,10 @@ const styles = StyleSheet.create({
         right: 0,
         alignItems: "center",
         justifyContent: "center",
-        paddingBottom: 15
+        paddingBottom: 10
     },
     headerTitle: {
-        color: "#FFC857",
+        color: "white",
         fontSize: 24,
         fontWeight: "bold",
         textAlign: "center",
