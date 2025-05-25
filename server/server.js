@@ -25,11 +25,12 @@ const app = express();
 
 // Configure CORS to specifically allow the Vercel domain
 const allowedOrigins = [
-  "*", // Keep wildcard for development
   "https://synth-ten-hazel.vercel.app", // Your Vercel domain
   "http://localhost:8081", // Local development
   "http://localhost:8082", // Local development alternate port
   "http://localhost:3000", // Local development
+  "http://10.27.144.69:8082", // Local network development
+  "http://10.32.168.74:8081", // Local network development
 ];
 
 app.use(
@@ -38,17 +39,23 @@ app.use(
       // Allow requests with no origin (like mobile apps or curl requests)
       if (!origin) return callback(null, true);
       
-      // Check if the origin is in our allowed origins or is a wildcard
-      if (allowedOrigins.includes("*") || allowedOrigins.includes(origin)) {
+      // Check if the origin is in our allowed origins
+      if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
       
+      // For development, also allow any localhost origin
+      if (origin && origin.includes('localhost')) {
+        return callback(null, true);
+      }
+      
+      console.log(`CORS blocked origin: ${origin}`);
       return callback(new Error('Not allowed by CORS'));
     },
     methods: ["GET", "POST", "OPTIONS"],
     credentials: false,
     allowedHeaders: ["Content-Type", "Authorization", "Accept"],
-    optionsSuccessStatus: 200 // Some legacy browsers choke on 204
+    optionsSuccessStatus: 200
   })
 );
 
@@ -64,11 +71,17 @@ const io = new Server(server, {
       // Allow requests with no origin (like mobile apps)
       if (!origin) return callback(null, true);
       
-      // Check if the origin is in our allowed origins or is a wildcard
-      if (allowedOrigins.includes("*") || allowedOrigins.includes(origin)) {
+      // Check if the origin is in our allowed origins
+      if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
       
+      // For development, also allow any localhost origin
+      if (origin && origin.includes('localhost')) {
+        return callback(null, true);
+      }
+      
+      console.log(`Socket.io CORS blocked origin: ${origin}`);
       return callback(new Error('Not allowed by CORS'));
     },
     methods: ["GET", "POST", "OPTIONS"],
