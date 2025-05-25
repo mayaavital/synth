@@ -26,7 +26,7 @@ const app = express();
 // Configure CORS to specifically allow the Vercel domain
 const allowedOrigins = [
   "https://synth-ten-hazel.vercel.app", // Your Vercel domain
-  "http://localhost:8081", // Local development
+  "http://127.0.0.1:8081", // Local development
   "http://localhost:8082", // Local development alternate port
   "http://localhost:3000", // Local development
   "http://10.27.144.69:8082", // Local network development
