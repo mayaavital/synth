@@ -2,14 +2,14 @@ import axios from 'axios';
 
 // Deezer API endpoints with CORS proxy for web compatibility
 // Alternative CORS proxies in case one fails:
-// 1. https://corsproxy.io/?
+// 1. https://api.allorigins.win/raw?url=
 // 2. https://cors-anywhere.herokuapp.com/ (requires request)
-// 3. https://api.allorigins.win/raw?url=
+// 3. https://corsproxy.io/?
 // 4. https://proxy.cors.sh/ (newer option)
 
-const CORS_PROXY = 'https://corsproxy.io/?';
+const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
 // Alternative proxies (uncomment to try if current one fails):
-// const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+// const CORS_PROXY = 'https://corsproxy.io/?';
 // const CORS_PROXY = 'https://proxy.cors.sh/';
 // const CORS_PROXY = ''; // Remove proxy entirely to test direct access
 
@@ -19,6 +19,8 @@ const DEEZER_API = {
   // JSONP endpoints (alternative to CORS proxy)
   SEARCH_JSONP: 'https://api.deezer.com/search',
   TRACK_JSONP: (trackId) => `https://api.deezer.com/track/${trackId}`,
+  // Direct endpoints for testing
+  SEARCH_DIRECT: 'https://api.deezer.com/search',
 };
 
 /**
@@ -75,60 +77,141 @@ const deezerJSONP = (url, params = {}) => {
 };
 
 /**
- * Search for tracks on Deezer by query
+ * Search for tracks using JSONP (fallback for CORS issues)
+ * @param {string} query - Search query
+ * @param {number} limit - Number of results to return
+ * @returns {Promise<Array>} - Array of track objects
+ */
+const searchDeezerTracksJSONP = async (query, limit = 10) => {
+  try {
+    console.log(`Searching Deezer via JSONP for: "${query}"`);
+    const jsonpResponse = await deezerJSONP(DEEZER_API.SEARCH_JSONP, {
+      q: query,
+      limit: limit
+    });
+    
+    if (jsonpResponse && jsonpResponse.data && jsonpResponse.data.length > 0) {
+      console.log(`Found ${jsonpResponse.data.length} tracks on Deezer via JSONP`);
+      return jsonpResponse.data.map(track => ({
+        id: track.id,
+        title: track.title,
+        artist: track.artist?.name || 'Unknown Artist',
+        album: track.album?.title || 'Unknown Album',
+        duration: track.duration,
+        preview: track.preview,
+        link: track.link,
+      }));
+    } else {
+      console.log('No tracks found on Deezer via JSONP');
+      return [];
+    }
+  } catch (error) {
+    console.error('JSONP search failed:', error.message);
+    return [];
+  }
+};
+
+/**
+ * Search for tracks on Deezer by query with multiple fallback strategies
  * @param {string} query - Search query (e.g. "artist name song title")
  * @param {number} limit - Number of results to return
  * @returns {Promise<Array>} - Array of track objects
  */
 export const searchDeezerTracks = async (query, limit = 10) => {
-  // First try with CORS proxy
+  console.log(`\n=== DEEZER SEARCH DEBUG ===`);
+  console.log(`Query: "${query}"`);
+  console.log(`Limit: ${limit}`);
+  
+  // Strategy 1: Try CORS proxy
   try {
-    console.log(`Searching Deezer for: "${query}"`);
-    console.log(`Using CORS proxy: ${CORS_PROXY}`);
+    console.log(`\n1. Trying CORS proxy: ${CORS_PROXY}`);
+    const proxyUrl = DEEZER_API.SEARCH;
+    console.log(`Full URL: ${proxyUrl}`);
     
-    const response = await axios.get(DEEZER_API.SEARCH, {
+    const response = await axios.get(proxyUrl, {
       params: {
         q: query,
         limit: limit
       },
-      timeout: 10000, // 10 second timeout
+      timeout: 15000,
+      headers: {
+        'Content-Type': 'application/json',
+      }
     });
 
-    if (response.data && response.data.data && response.data.data.length > 0) {
-      console.log(`Found ${response.data.data.length} tracks on Deezer via CORS proxy`);
-      return response.data.data;
+    console.log(`Response status: ${response.status}`);
+    console.log(`Response headers:`, response.headers);
+    console.log(`Response data type:`, typeof response.data);
+    console.log(`Response data:`, response.data);
+
+    // Check if we got valid data
+    if (response.data && response.data.data && Array.isArray(response.data.data) && response.data.data.length > 0) {
+      console.log(`✅ CORS proxy success: Found ${response.data.data.length} tracks`);
+      return response.data.data.map(track => ({
+        id: track.id,
+        title: track.title,
+        artist: track.artist?.name || 'Unknown Artist',
+        album: track.album?.title || 'Unknown Album',
+        duration: track.duration,
+        preview: track.preview,
+        link: track.link,
+      }));
     } else {
-      console.log('No tracks found on Deezer via CORS proxy');
-      return [];
+      console.log(`❌ CORS proxy: Invalid response format`);
+      throw new Error('Invalid response format from CORS proxy');
     }
-  } catch (error) {
-    console.error('CORS proxy failed, trying JSONP fallback:', error);
-    
-    // Provide specific error messaging for common issues
-    if (error.code === 'ERR_NETWORK') {
-      console.error('CORS/Network error detected. Falling back to JSONP...');
+  } catch (proxyError) {
+    console.log(`❌ CORS proxy failed:`, {
+      message: proxyError.message,
+      status: proxyError.response?.status,
+      statusText: proxyError.response?.statusText,
+      responseData: proxyError.response?.data
+    });
+  }
+  
+  // Strategy 2: Try JSONP fallback
+  try {
+    console.log(`\n2. Trying JSONP fallback...`);
+    const jsonpResult = await searchDeezerTracksJSONP(query, limit);
+    if (jsonpResult && jsonpResult.length > 0) {
+      console.log(`✅ JSONP success: Found ${jsonpResult.length} tracks`);
+      return jsonpResult;
+    } else {
+      console.log(`❌ JSONP: No results`);
     }
-    
-    // Try JSONP fallback
-    try {
-      console.log('Attempting Deezer search with JSONP fallback...');
-      const jsonpResponse = await deezerJSONP(DEEZER_API.SEARCH_JSONP, {
+  } catch (jsonpError) {
+    console.log(`❌ JSONP failed:`, jsonpError.message);
+  }
+  
+  // Strategy 3: Try direct API call (will likely fail due to CORS, but worth testing)
+  try {
+    console.log(`\n3. Trying direct API call (may fail due to CORS)...`);
+    const response = await axios.get(DEEZER_API.SEARCH_DIRECT, {
+      params: {
         q: query,
         limit: limit
-      });
-      
-      if (jsonpResponse && jsonpResponse.data && jsonpResponse.data.length > 0) {
-        console.log(`Found ${jsonpResponse.data.length} tracks on Deezer via JSONP`);
-        return jsonpResponse.data;
-      } else {
-        console.log('No tracks found on Deezer via JSONP');
-        return [];
-      }
-    } catch (jsonpError) {
-      console.error('JSONP fallback also failed:', jsonpError);
-      return [];
+      },
+      timeout: 10000,
+    });
+    
+    if (response.data && response.data.data && response.data.data.length > 0) {
+      console.log(`✅ Direct API success: Found ${response.data.data.length} tracks`);
+      return response.data.data.map(track => ({
+        id: track.id,
+        title: track.title,
+        artist: track.artist?.name || 'Unknown Artist',
+        album: track.album?.title || 'Unknown Album',
+        duration: track.duration,
+        preview: track.preview,
+        link: track.link,
+      }));
     }
+  } catch (directError) {
+    console.log(`❌ Direct API failed (expected):`, directError.message);
   }
+  
+  console.log(`\n❌ All strategies failed for query: "${query}"`);
+  return [];
 };
 
 /**
