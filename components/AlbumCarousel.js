@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getMyRecentlyPlayedTracks } from '../utils/apiOptions';
-import useSpotifyAuth from '../utils/useSpotifyAuth';
+import useSpotifyAuth from '../utils/SpotifyAuthContext';
 
 const { width: screenWidth } = Dimensions.get('window');
 const ALBUM_SIZE = 120;

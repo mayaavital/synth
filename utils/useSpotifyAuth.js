@@ -1,3 +1,7 @@
+// ⚠️ DEPRECATED: This file has been replaced by SpotifyAuthContext.js
+// Please use the new Context-based implementation instead
+// This file is kept for reference only and should not be imported
+
 import getEnv from "./env";
 import { useState, useEffect } from "react";
 import {
@@ -91,14 +95,26 @@ const useSpotifyAuth = () => {
   // Save token data to storage
   const saveTokenData = async (token, expiresAt, refresh = null) => {
     try {
+      console.log("🔐 SAVING TOKEN DATA TO ASYNCSTORAGE:");
+      console.log("- Token length:", token ? token.length : 0);
+      console.log("- Expires at:", new Date(expiresAt).toISOString());
+      console.log("- Has refresh token:", !!refresh);
+      
       await AsyncStorage.setItem(TOKEN_STORAGE_KEY, token);
       await AsyncStorage.setItem(TOKEN_EXPIRATION_KEY, expiresAt.toString());
       if (refresh) {
         await AsyncStorage.setItem(REFRESH_TOKEN_KEY, refresh);
       }
-      console.log("Token data saved to storage");
+      console.log("✅ Token data saved to storage successfully");
+      
+      // Verify the save by reading it back immediately
+      const verifyToken = await AsyncStorage.getItem(TOKEN_STORAGE_KEY);
+      const verifyExpiration = await AsyncStorage.getItem(TOKEN_EXPIRATION_KEY);
+      console.log("🔍 VERIFICATION - Token saved correctly:", !!verifyToken);
+      console.log("🔍 VERIFICATION - Expiration saved correctly:", !!verifyExpiration);
+      
     } catch (error) {
-      console.error("Error saving token data to storage:", error);
+      console.error("❌ Error saving token data to storage:", error);
     }
   };
 
@@ -148,11 +164,13 @@ const useSpotifyAuth = () => {
   // Clear all token data
   const clearTokenData = async () => {
     try {
+      console.log("🗑️ CLEARING ALL TOKEN DATA FROM ASYNCSTORAGE");
       await AsyncStorage.removeItem(TOKEN_STORAGE_KEY);
       await AsyncStorage.removeItem(TOKEN_EXPIRATION_KEY);
       await AsyncStorage.removeItem(REFRESH_TOKEN_KEY);
+      console.log("✅ All token data cleared successfully");
     } catch (error) {
-      console.error("Error clearing token data:", error);
+      console.error("❌ Error clearing token data:", error);
     }
   };
 
@@ -241,36 +259,78 @@ const useSpotifyAuth = () => {
 
   // Check if the token is valid
   const isTokenValid = () => {
-    if (!token || !tokenExpiration) return false;
-    // Add a 60-second buffer to account for network latency
-    return tokenExpiration > Date.now() + 60000;
+    console.log("🔍 CHECKING TOKEN VALIDITY:");
+    console.log("- Has token:", !!token);
+    console.log("- Token length:", token ? token.length : 0);
+    console.log("- Has tokenExpiration:", !!tokenExpiration);
+    console.log("- TokenExpiration value:", tokenExpiration);
+    console.log("- Current time:", Date.now());
+    console.log("- Expiration time:", tokenExpiration);
+    console.log("- Time until expiration:", tokenExpiration ? Math.round((tokenExpiration - Date.now()) / 1000) : 'N/A', "seconds");
+    
+    if (!token || !tokenExpiration) {
+      console.log("❌ Token invalid: missing token or expiration");
+      return false;
+    }
+    
+    // Reduce buffer to 30 seconds to be less aggressive
+    const isValid = tokenExpiration > Date.now() + 30000;
+    console.log("✅ Token valid:", isValid);
+    return isValid;
   };
 
   // Get a valid token (refreshes if expired)
   const getValidToken = async () => {
+    console.log("🎯 GET_VALID_TOKEN CALLED");
+    console.log("- Called from:", new Error().stack.split('\n')[2]); // Show where it was called from
+    
     if (isTokenValid()) {
+      console.log("✅ Current token is valid, returning it");
       return token;
     }
+
+    console.log("⚠️ Current token is invalid, checking refresh token");
+    console.log("- Has refresh token:", !!refreshToken);
+    console.log("- Refresh token length:", refreshToken ? refreshToken.length : 0);
 
     // Try to refresh the token if we have a refresh token
     if (refreshToken) {
       try {
-        console.log("Token expired, attempting to refresh...");
+        console.log("🔄 Token expired, attempting to refresh...");
         const newToken = await refreshAccessToken(refreshToken);
+        console.log("✅ Token refresh successful");
         return newToken;
       } catch (refreshError) {
-        console.error("Failed to refresh token:", refreshError);
+        console.error("❌ Failed to refresh token:", refreshError.message);
+        // Don't automatically logout on refresh failure - let the caller handle it
+        console.log("🚨 Token refresh failed, but NOT clearing token data automatically");
+        
+        // Check if it's a network error vs authorization error
+        if (refreshError.message?.includes('network') || refreshError.message?.includes('fetch')) {
+          console.log("Network error detected - token may still be valid for some operations");
+          return null; // Return null but don't clear tokens
+        }
+        
+        // Only clear tokens for actual auth errors
+        if (refreshError.message?.includes('invalid_grant') || refreshError.message?.includes('unauthorized')) {
+          console.log("Authorization error detected - clearing tokens");
+          await logout();
+        }
       }
     }
 
-    // If we get here, we need to re-authenticate
-    console.log("No valid token or refresh failed, clearing token data");
-    await logout();
+    // If we get here and have no refresh token, we need to re-authenticate
+    if (!refreshToken) {
+      console.log("🚨 No refresh token available, clearing token data");
+      await logout();
+    }
+    
     return null;
   };
 
   // Clear token data and log out
   const logout = async () => {
+    console.log("🚪 LOGOUT CALLED - clearing all token state and storage");
     setToken(null);
     setTokenExpiration(null);
     setRefreshToken(null);

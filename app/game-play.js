@@ -21,7 +21,7 @@ let Slider;
 if (Platform.OS !== 'web') {
   Slider = require("@react-native-community/slider").default;
 }
-import { useSpotifyAuth } from "../utils";
+import useSpotifyAuth from "../utils/SpotifyAuthContext";
 import {
   getMyRecentlyPlayedTracks,
   getAlbumTracks,

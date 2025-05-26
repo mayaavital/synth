@@ -15,7 +15,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { useSpotifyAuth } from "../utils";
+import useSpotifyAuth from "../utils/SpotifyAuthContext";
 import SpotifyConnectButton from "../components/SpotifyConnectButton";
 import AlbumCarousel from "../components/AlbumCarousel";
 //import * as Analytics from "expo-firebase-analytics";
@@ -93,6 +93,26 @@ export default function home() {
 
   // Check token validity and set status
   const checkTokenStatus = async () => {
+    console.log("=== HOME SCREEN TOKEN DEBUG ===");
+    console.log("token from hook:", !!token);
+    console.log("token length:", token ? token.length : 0);
+    console.log("isTokenValid():", isTokenValid());
+    
+    // Check AsyncStorage directly from home screen
+    try {
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      const storedToken = await AsyncStorage.getItem('spotify_access_token');
+      const storedExpiration = await AsyncStorage.getItem('spotify_token_expiration');
+      const storedRefreshToken = await AsyncStorage.getItem('spotify_refresh_token');
+      console.log("HOME - AsyncStorage token exists:", !!storedToken);
+      console.log("HOME - AsyncStorage token length:", storedToken ? storedToken.length : 0);
+      console.log("HOME - AsyncStorage expiration:", storedExpiration);
+      console.log("HOME - AsyncStorage refresh token exists:", !!storedRefreshToken);
+    } catch (error) {
+      console.error("Error checking AsyncStorage from home:", error);
+    }
+    console.log("=== END HOME SCREEN TOKEN DEBUG ===");
+    
     if (!token) {
       setTokenStatus("none");
       return;
