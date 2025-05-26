@@ -448,6 +448,20 @@ export default function MultiplayerGame() {
             console.log("Retrying with updated token from hook after refresh");
             token = spotifyToken;
           }
+          
+          // If still no token, wait a moment and try once more (timing issue)
+          if (!token) {
+            console.log("Waiting 500ms and checking token again...");
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            if (spotifyToken) {
+              console.log("Token now available after brief wait");
+              token = spotifyToken;
+            } else if (isSpotifyTokenValid()) {
+              token = spotifyToken;
+              console.log("Token validation now passes after brief wait");
+            }
+          }
         }
         
         // Final validation with better logging
@@ -494,6 +508,9 @@ export default function MultiplayerGame() {
             console.log(
               `Found ${tracksToProcess.length} valid tracks for multiplayer`
             );
+            console.log("✅ Using real Spotify tracks - no fallback needed!");
+          } else {
+            console.log("❌ Spotify API returned empty or invalid tracks");
           }
         } catch (apiError) {
           console.error("Error calling Spotify API:", apiError);
@@ -504,7 +521,7 @@ export default function MultiplayerGame() {
 
       // If we didn't get any tracks from Spotify, use mock tracks
       if (!tracksToProcess.length) {
-        console.log("Using mock tracks for multiplayer");
+        console.log("⚠️ Using mock tracks for multiplayer (Spotify tracks not available)");
         tracksToProcess = [];
         // Use real song names that exist in Deezer for testing
         const realSongs = [
