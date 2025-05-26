@@ -2496,6 +2496,7 @@ const styles = StyleSheet.create({
     padding: 6,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 0,
     backgroundColor: "transparent",
     shadowColor: "#8E44AD",
     shadowOffset: { width: 0, height: 0 },
@@ -2599,7 +2600,7 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     overflow: "hidden",
     borderWidth: 2,
-    borderColor: "#555",
+    borderColor: "transparent",
   },
   voteProgressFill: {
     position: "absolute",
@@ -2611,6 +2612,7 @@ const styles = StyleSheet.create({
   },
   voteProgressComplete: {
     backgroundColor: "transparent", // Purple for complete
+    borderWidth: 0,
   },
   voteButtonContent: {
     flexDirection: "row",

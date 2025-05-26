@@ -1333,19 +1333,25 @@ io.on("connection", (socket) => {
 
     // Create the round song object
     const roundSong = {
-      title: selectedTrack.track.songTitle,
-      artists: Array.isArray(selectedTrack.track.songArtists)
-        ? selectedTrack.track.songArtists.join(", ")
-        : selectedTrack.track.songArtists,
+      songTitle: selectedTrack.track.songTitle,
+      songArtists: Array.isArray(selectedTrack.track.songArtists)
+        ? selectedTrack.track.songArtists
+        : [selectedTrack.track.songArtists],
       albumName: selectedTrack.track.albumName,
       hasPreviewUrl: !!selectedTrack.track.previewUrl,
       previewUrl: selectedTrack.track.previewUrl,
       imageUrl: selectedTrack.track.imageUrl,
       externalUrl: selectedTrack.track.externalUrl, // Ensure externalUrl is included
-      assignedPlayer: selectedTrack.owner.username,
+      assignedToPlayer: {
+        username: selectedTrack.owner.username,
+        id: selectedTrack.owner.id,
+      },
       trackId: selectedTrack.track.trackId || selectedTrack.track.songTitle,
       roundTraceId: `ROUND_${gameId}_${roundNumber}_${Date.now()}`,
     };
+
+    // Set the trace ID for the game level tracking
+    game.currentRoundTraceId = roundSong.roundTraceId;
 
     // Save this track as the round song
     if (!game.roundSongs) {
@@ -1818,136 +1824,8 @@ io.on("connection", (socket) => {
     // This helps prevent desynchronization between rounds
     game.clientPlaying = {};
 
-    // Create a trace ID for the new round
-    const newRoundTraceId = `ROUND_${gameId}_${
-      game.currentRound
-    }_${Date.now()}`;
-    game.currentRoundTraceId = newRoundTraceId;
-
-    // Select the next song for this round
-    const availableSongs = game.consolidatedPlaylist || [];
-
-    if (!availableSongs || availableSongs.length === 0) {
-      console.error(`[TRACK_SYNC] No songs available for game ${gameId}`);
-      socket.emit("error", { message: "No songs available for this round" });
-      return;
-    }
-
-    // Check if we've already used all songs and need to recycle
-    const maxRounds = Math.min(game.maxRounds || 3, availableSongs.length);
-    const currentRoundIndex = (game.currentRound - 1) % availableSongs.length;
-
-    // Log if we're starting to recycle songs
-    if (game.currentRound > availableSongs.length) {
-      console.log(
-        `[TRACK_SYNC] Round ${game.currentRound} exceeds available songs (${availableSongs.length}), recycling tracks`
-      );
-    }
-
-    // Select a song from the pool based on round index
-    const selectedItem = availableSongs[currentRoundIndex];
-
-    if (!selectedItem || !selectedItem.track) {
-      console.error(
-        `[TRACK_SYNC] Invalid song selected for round ${game.currentRound}`
-      );
-      socket.emit("error", {
-        message: "Failed to select a song for this round",
-      });
-      return;
-    }
-
-    // Check if this song is a user-provided track or a mock track
-    const isMockTrack =
-      selectedItem.track.isMockTrack ||
-      selectedItem.track.songTitle === "Bohemian Rhapsody" ||
-      selectedItem.track.songTitle === "Don't Stop Believin'" ||
-      selectedItem.track.songTitle === "Billie Jean";
-
-    if (isMockTrack) {
-      console.log(
-        `[TRACK_SYNC] Using mock track: "${selectedItem.track.songTitle}" for round ${game.currentRound}`
-      );
-    } else {
-      console.log(
-        `[TRACK_SYNC] Using real user track: "${
-          selectedItem.track.songTitle
-        }" for round ${game.currentRound} (Track ${currentRoundIndex + 1}/${
-          availableSongs.length
-        })`
-      );
-    }
-
-    const selectedSong = selectedItem.track;
-    const songOwner = selectedItem.owner;
-
-    // Add the song to the round data with the trace ID
-    const roundSong = {
-      ...selectedSong,
-      externalUrl: selectedSong.externalUrl, // Ensure externalUrl is included
-      roundTraceId: newRoundTraceId,
-      roundNumber: game.currentRound, // Explicitly add round number to prevent confusion
-    };
-
-    console.log(
-      `[TRACK_SYNC] Selected song for round ${game.currentRound}: "${roundSong.songTitle}" (Trace ID: ${newRoundTraceId})`
-    );
-    console.log(`[TRACK_SYNC] Song owner: ${songOwner.username}`);
-    console.log(`[TRACK_SYNC] PreviewUrl available: ${!!roundSong.previewUrl}`);
-
-    // Store the song in the game's round data
-    if (!game.roundSongs) {
-      game.roundSongs = {};
-    }
-
-    game.roundSongs[game.currentRound] = {
-      song: {
-        ...roundSong,
-        assignedToPlayer: songOwner,
-      },
-      owner: songOwner,
-      roundTraceId: newRoundTraceId,
-    };
-
-    /*
-      Send our completed game data to the database
-      */
-    var gameRef = db.ref().child(DATABASE_BRANCHES.GAME).child(gameId);
-    var metaRef = gameRef.child(GameDataBranches.GAME_BRANCHES.METADATA);
-    metaRef.update({
-      [GameDataBranches.METADATA.PLAYERS]: activeGames[gameId].players,
-    });
-
-    var gameDataRef = gameRef.child(GameDataBranches.GAME_BRANCHES.GAME_DATA);
-
-    gameDataRef.update({
-      [GameDataBranches.GAME_DATA.SCORES]: activeGames[gameId].scores,
-    });
-
-    // Notify all clients of the new round
-    io.to(gameId).emit("round_started", {
-      gameId,
-      roundNumber: game.currentRound,
-      song: {
-        ...roundSong,
-        assignedToPlayer: songOwner,
-      },
-      roundTraceId: newRoundTraceId,
-      votingReset: true, // Flag to tell clients to reset their voting UI
-      // Add username mappings to ensure clients can match socket IDs to usernames
-      playerMappings: gameUsernameMappings[gameId] || {},
-      maxRounds: game.maxRounds, // Include maxRounds in every round_started event
-    });
-
-    console.log(
-      `[TRACK_SYNC] Round ${game.currentRound} started for game ${gameId} with trace ID ${newRoundTraceId}`
-    );
-
-    // IMPORTANT: Initial force sync at the start of a new round
-    // Schedule a slightly delayed force sync to ensure all clients are on the same page
-    setTimeout(() => {
-      forceSongSync(gameId);
-    }, 500);
+    // Use the proper selectRandomSongForRound function that prioritizes real tracks
+    selectRandomSongForRound(gameId, game.currentRound);
 
     return true;
   });
@@ -2059,6 +1937,10 @@ io.on("connection", (socket) => {
       roundNumber,
       song,
       roundTraceId: song.roundTraceId,
+      votingReset: true, // Flag to tell clients to reset their voting UI
+      // Add username mappings to ensure clients can match socket IDs to usernames
+      playerMappings: gameUsernameMappings[gameId] || {},
+      maxRounds: game.maxRounds, // Include maxRounds in every round_started event
     };
 
     // Reset any previous voting
@@ -2957,252 +2839,15 @@ io.on("connection", (socket) => {
       }
     }
 
-    // If we get here, try fallback to any song with a valid preview URL
-    if (game.consolidatedPlaylist && game.consolidatedPlaylist.length > 0) {
-      // Find a song with a preview URL
-      const validSongs = game.consolidatedPlaylist.filter(
-        (item) => !!item.track.previewUrl
-      );
-
-      if (validSongs.length > 0) {
-        // Use the first valid song
-        const fallbackSong = validSongs[0];
-
-        // Create a trace ID for this force sync
-        const syncTraceId = `FORCESYNC_FALLBACK_G${gameId}_R${game.currentRound}_${now}`;
-
-        // Construct the sync song data
-        const syncSong = {
-          songTitle: fallbackSong.track.songTitle,
-          songArtists: fallbackSong.track.songArtists,
-          albumName: fallbackSong.track.albumName || "Unknown Album",
-          imageUrl:
-            fallbackSong.track.imageUrl || "https://via.placeholder.com/300",
-          previewUrl: fallbackSong.track.previewUrl,
-          roundTraceId: syncTraceId,
-          roundNumber: game.currentRound, // Explicitly include the round number
-          assignedToPlayer: fallbackSong.owner,
-        };
-
-        console.log(
-          `[TRACK_SYNC] Forcing fallback song sync with "${syncSong.songTitle}" (Trace ID: ${syncTraceId})`
-        );
-        console.log(
-          `[TRACK_SYNC] Preview URL present: ${!!syncSong.previewUrl}`
-        );
-
-        // Send the force sync command to all clients
-        io.to(gameId).emit("force_song_sync", {
-          gameId,
-          roundNumber: game.currentRound,
-          song: syncSong,
-          roundTraceId: syncTraceId,
-          syncTimestamp: syncTimestamp,
-          scores: game.scores, // Include current scores to ensure consistency
-          votingReset: true, // Flag to reset voting UI state
-          // Add username mappings to ensure clients can match socket IDs to usernames
-          playerMappings: gameUsernameMappings[gameId] || {},
-          maxRounds: game.maxRounds, // Include maxRounds in force sync
-        });
-
-        console.log(
-          `[TRACK_SYNC] Force sync sent to all clients in game ${gameId} at ${syncTimestamp}`
-        );
-
-        // Schedule another sync check after a short delay to ensure everyone got the message
-        setTimeout(() => {
-          checkSongConsistency(gameId);
-        }, 2000);
-
-        return;
-      }
-    }
-
-    // If all else fails, use an emergency mock track
+    // If we reach here, we couldn't find a suitable song to sync
     console.error(
-      `[TRACK_SYNC] CRITICAL: No valid song found for force sync in game ${gameId}`
-    );
-
-    // Create an emergency track
-    const emergencyTrack = {
-      songTitle: "Emergency Fallback Song",
-      songArtists: ["System"],
-      albumName: "Emergency",
-      imageUrl: "https://via.placeholder.com/300",
-      previewUrl:
-        "https://p.scdn.co/mp3-preview/1f3bd078c7ad27b427fa210f6efd957fc5eecea0", // Bohemian Rhapsody as fallback
-      roundTraceId: `EMERGENCY_G${gameId}_R${game.currentRound}_${now}`,
-      roundNumber: game.currentRound, // Explicitly include the round number
-      isMockTrack: true,
-    };
-
-    // Send the emergency track to all clients
-    io.to(gameId).emit("force_song_sync", {
-      gameId,
-      roundNumber: game.currentRound,
-      song: emergencyTrack,
-      roundTraceId: emergencyTrack.roundTraceId,
-      syncTimestamp: syncTimestamp,
-      scores: game.scores, // Include current scores to ensure consistency
-      votingReset: true, // Flag to reset voting UI state
-      // Add username mappings to ensure clients can match socket IDs to usernames
-      playerMappings: gameUsernameMappings[gameId] || {},
-      maxRounds: game.maxRounds, // Include maxRounds in force sync
-    });
-
-    console.log(
-      `[TRACK_SYNC] Emergency song sync sent to all clients in game ${gameId} at ${syncTimestamp}`
+      `[TRACK_SYNC] Could not find a suitable song for force sync in game ${gameId}`
     );
   }
 });
 
-// Basic route for checking server status
-app.get("/", (req, res) => {
-  res.send("Synth WebSocket Server is running!");
+// Start the server
+const PORT = process.env.PORT || 3001;
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
-
-// Get active games
-app.get("/games", (req, res) => {
-  const gamesList = Object.values(activeGames).map((game) => ({
-    id: game.id,
-    name: game.name,
-    playerCount: game.players.length,
-    status: game.status,
-  }));
-
-  res.json({ games: gamesList });
-});
-
-app.get("/prev_game", (req, res) => {
-  const gameID = req.query.gameId;
-
-  var gameRef = db.ref().child(DATABASE_BRANCHES.GAME).child(gameID);
-  gameRef.once("value", (snapshot) => {
-    const gameData = snapshot.val();
-    console.log(gameData);
-    if (!gameData) {
-      res.status(404).json({ error: "Game not found" });
-      return;
-    }
-
-    res.json({ game: gameData });
-  });
-});
-
-// Server port
-const PORT = process.env.PORT || 3000;
-
-// Start server only when run directly (not when imported as a module)
-if (require.main === module) {
-  server.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on port ${PORT}`);
-    console.log(`WebSocket server is ready for connections`);
-    console.log(`Server accessible at http://172.20.10.10:${PORT}`);
-  });
-}
-
-// Export the function and other necessary components
-module.exports = {
-  generateSimpleGameCode,
-  app,
-  server,
-  io,
-  activeGames,
-  gameUsernameMappings,
-  getPlayerIdByUsername,
-  getUsernameById,
-};
-
-// Add helper functions for username/socketID mapping
-
-// Get a player's socket ID by username
-function getPlayerIdByUsername(gameId, username) {
-  // Check if we have a direct mapping first
-  if (gameUsernameMappings[gameId] && gameUsernameMappings[gameId][username]) {
-    return gameUsernameMappings[gameId][username];
-  }
-
-  // Fall back to player list if no direct mapping
-  if (activeGames[gameId]) {
-    const player = activeGames[gameId].players.find(
-      (p) => p.username === username
-    );
-    return player ? player.id : null;
-  }
-
-  return null;
-}
-
-// Get a username by socket ID
-function getUsernameById(gameId, socketId) {
-  // Check direct mapping first (reverse lookup)
-  if (gameUsernameMappings[gameId]) {
-    for (const [username, id] of Object.entries(gameUsernameMappings[gameId])) {
-      if (id === socketId) return username;
-    }
-  }
-
-  // Fall back to player list
-  if (activeGames[gameId]) {
-    const player = activeGames[gameId].players.find((p) => p.id === socketId);
-    return player ? player.username : null;
-  }
-
-  return null;
-}
-
-// Helper function to get all player mapping information for a game
-function getPlayerMappings(gameId) {
-  const game = activeGames[gameId];
-  if (!game) return {};
-
-  const mappings = {
-    socketIdToUsername: {},
-    playerIdToUsername: {},
-    usernameToIds: {},
-    playerMappings: {}, // Legacy format
-    players: [], // Full player objects (sanitized)
-  };
-
-  // Map all players
-  game.players.forEach((player) => {
-    if (player && player.username) {
-      // Store full player object (sanitized)
-      mappings.players.push({
-        id: player.id,
-        username: player.username,
-        displayName: player.displayName || player.username,
-        platform: player.platform || null,
-        isHost: player.isHost || false,
-      });
-
-      // Map socket ID to username
-      mappings.socketIdToUsername[player.id] = player.username;
-
-      // Map player ID to username (if available)
-      if (player.playerId) {
-        mappings.playerIdToUsername[player.playerId] = player.username;
-      }
-
-      // Map numeric ID to username (if available)
-      if (typeof player.id === "number" || !isNaN(Number(player.id))) {
-        mappings.playerIdToUsername[player.id] = player.username;
-      }
-
-      // Store in legacy format
-      mappings.playerMappings[player.username] = player.id;
-
-      // Create reverse mapping
-      mappings.usernameToIds[player.username] = {
-        socketId: player.id,
-        playerId: player.playerId || null,
-        numericId: typeof player.id === "number" ? player.id : null,
-      };
-    }
-  });
-
-  console.log(
-    `[TRACK_SYNC] Generated comprehensive player mappings for game ${gameId}`
-  );
-  return mappings;
-}
