@@ -441,26 +441,11 @@ export default function MultiplayerGame() {
           // Try to get a fresh token
           console.log("Token invalid, attempting to refresh...");
           token = await getSpotifyToken();
-          console.log("Got fresh token from Spotify hook");
           
-          // Additional check: if getSpotifyToken returned null but hook might have updated
-          if (!token && spotifyToken) {
-            console.log("Retrying with updated token from hook after refresh");
-            token = spotifyToken;
-          }
-          
-          // If still no token, wait a moment and try once more (timing issue)
-          if (!token) {
-            console.log("Waiting 500ms and checking token again...");
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
-            if (spotifyToken) {
-              console.log("Token now available after brief wait");
-              token = spotifyToken;
-            } else if (isSpotifyTokenValid()) {
-              token = spotifyToken;
-              console.log("Token validation now passes after brief wait");
-            }
+          if (token) {
+            console.log("Got fresh token from Spotify hook");
+          } else {
+            console.log("No valid token or refresh failed, clearing token data");
           }
         }
         
@@ -469,16 +454,12 @@ export default function MultiplayerGame() {
           hasToken: !!token,
           tokenLength: token ? token.length : 0,
           hookToken: !!spotifyToken,
-          isValid: token ? isSpotifyTokenValid() : false
+          isValid: token ? true : false // Use token directly instead of checking hook state
         });
         
       } catch (tokenError) {
         console.error("Error getting Spotify token:", tokenError);
-        // Try one more time with the hook's token if available
-        if (spotifyToken) {
-          console.log("Fallback: using token directly from hook after error");
-          token = spotifyToken;
-        }
+        token = null;
       }
 
       // If we have a token, use it

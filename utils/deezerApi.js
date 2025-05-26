@@ -13,6 +13,17 @@ const searchDeezerViaProxy = async (query, limit = 5) => {
   try {
     console.log(`[DEEZER PROXY] Searching for: "${query}" with limit: ${limit}`);
     
+    // Check if we're in local development (localhost)
+    const isLocalDevelopment = typeof window !== 'undefined' && 
+                              (window.location.hostname === 'localhost' || 
+                               window.location.hostname === '127.0.0.1' ||
+                               window.location.port === '8085');
+    
+    if (isLocalDevelopment) {
+      console.log('[DEEZER PROXY] Local development detected, skipping serverless proxy');
+      throw new Error('Serverless proxy not available in local development');
+    }
+    
     const response = await fetch(`/api/deezer?query=${encodeURIComponent(query)}&limit=${limit}`);
     
     if (!response.ok) {
@@ -126,10 +137,19 @@ const deezerJSONP = (url, params = {}) => {
 const searchDeezerTracksJSONP = async (query, limit = 5) => {
   try {
     console.log(`[DEEZER JSONP] Searching for: "${query}"`);
+    
+    // Check if we're in a browser environment
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      console.log('[DEEZER JSONP] Not in browser environment, skipping JSONP');
+      throw new Error('JSONP only available in browser environment');
+    }
+    
     const jsonpResponse = await deezerJSONP('https://api.deezer.com/search', {
       q: query,
       limit: limit
     });
+    
+    console.log('[DEEZER JSONP] Raw response:', jsonpResponse);
     
     if (jsonpResponse && jsonpResponse.data && jsonpResponse.data.length > 0) {
       console.log(`[DEEZER JSONP] Found ${jsonpResponse.data.length} tracks`);
@@ -143,7 +163,7 @@ const searchDeezerTracksJSONP = async (query, limit = 5) => {
         link: track.link,
       }));
     } else {
-      console.log('[DEEZER JSONP] No tracks found');
+      console.log('[DEEZER JSONP] No tracks found in response');
       return [];
     }
   } catch (error) {
