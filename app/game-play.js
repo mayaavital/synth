@@ -91,16 +91,26 @@ export default function GamePlay() {
   // Mock song data to fallback on if Spotify API is unavailable
   const mockSongs = [
     {
-      songTitle: "A Day in the Life",
-      songArtists: ["The Beatles"],
-      albumName: "Sgt. Pepper's Lonely Hearts Club Band",
+      songTitle: "Blinding Lights",
+      songArtists: ["The Weeknd"],
+      albumName: "After Hours",
       imageUrl:
-        "https://i.scdn.co/image/ab67616d0000b273128450651c9f0442780d8eb8",
-      duration: 337000,
-      previewUrl:
-        "https://p.scdn.co/mp3-preview/67f504bf5b86bdcaf197aef343c2413e8ec68b1d",
-      uri: "spotify:track:0jXR9dJLlGpfYQrN0m1HLO",
-      externalUrl: "https://open.spotify.com/track/0jXR9dJLlGpfYQrN0m1HLO",
+        "https://i.scdn.co/image/ab67616d0000b273a4e1a4e77b1fd2e5f84e4b2c",
+      duration: 200040,
+      previewUrl: null, // Will be enriched with Deezer
+      uri: "spotify:track:0VjIjW4GlULA4LGcGj5Be2",
+      externalUrl: "https://open.spotify.com/track/0VjIjW4GlULA4LGcGj5Be2",
+    },
+    {
+      songTitle: "Shape of You",
+      songArtists: ["Ed Sheeran"],
+      albumName: "÷ (Deluxe)",
+      imageUrl:
+        "https://i.scdn.co/image/ab67616d0000b273ba5db46f4b838ef6027e6f96",
+      duration: 233713,
+      previewUrl: null, // Will be enriched with Deezer
+      uri: "spotify:track:7qiZfU4dY1lWllzX7mPBI3",
+      externalUrl: "https://open.spotify.com/track/7qiZfU4dY1lWllzX7mPBI3",
     },
     {
       songTitle: "Bohemian Rhapsody",
@@ -109,8 +119,7 @@ export default function GamePlay() {
       imageUrl:
         "https://i.scdn.co/image/ab67616d0000b27328581cfe196c2be2506ee6c0",
       duration: 354000,
-      previewUrl:
-        "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview122/v4/29/96/51/2996514a-35cd-b092-c7f0-dd995b0e6071/mzaf_10909209324710493166.plus.aac.p.m4a",
+      previewUrl: null, // Will be enriched with Deezer
       uri: "spotify:track:7tFiyTwD0nx5a1eklYtX2J",
       externalUrl: "https://open.spotify.com/track/7tFiyTwD0nx5a1eklYtX2J",
     },
@@ -119,12 +128,22 @@ export default function GamePlay() {
       songArtists: ["Eagles"],
       albumName: "Hotel California",
       imageUrl:
-        "https://i.scdn.co/image/ab67616d0000b273446e630d93d3fb235d70bad9",
-      duration: 391000,
-      previewUrl:
-        "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/cb/16/81/cb1681bb-a5a7-0b93-7ce0-0a55ab6dc9e5/mzaf_11284427653219671407.plus.aac.p.m4a",
+        "https://i.scdn.co/image/ab67616d0000b273c8a1b4a0a6c83b1b1a4f2a3c",
+      duration: 391394,
+      previewUrl: null, // Will be enriched with Deezer
       uri: "spotify:track:40riOy7x9W7GXjyGp4pjAv",
       externalUrl: "https://open.spotify.com/track/40riOy7x9W7GXjyGp4pjAv",
+    },
+    {
+      songTitle: "Billie Jean",
+      songArtists: ["Michael Jackson"],
+      albumName: "Thriller",
+      imageUrl:
+        "https://i.scdn.co/image/ab67616d0000b2734121faee8df82c526cbab2be",
+      duration: 294000,
+      previewUrl: null, // Will be enriched with Deezer
+      uri: "spotify:track:5ChkMS8OtdzJeqyybCc9R5",
+      externalUrl: "https://open.spotify.com/track/5ChkMS8OtdzJeqyybCc9R5",
     },
   ];
 

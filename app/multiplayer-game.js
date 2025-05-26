@@ -485,10 +485,19 @@ export default function MultiplayerGame() {
       if (!tracksToProcess.length) {
         console.log("Using mock tracks for multiplayer");
         tracksToProcess = [];
-        for (let i = 1; i <= 5; i++) {
+        // Use real song names that exist in Deezer for testing
+        const realSongs = [
+          { title: "Blinding Lights", artist: "The Weeknd" },
+          { title: "Shape of You", artist: "Ed Sheeran" },
+          { title: "Bohemian Rhapsody", artist: "Queen" },
+          { title: "Billie Jean", artist: "Michael Jackson" },
+          { title: "Hotel California", artist: "Eagles" }
+        ];
+        
+        for (let i = 0; i < realSongs.length; i++) {
           tracksToProcess.push({
-            songTitle: `Test Song ${i}`,
-            songArtists: ["Test Artist"],
+            songTitle: realSongs[i].title,
+            songArtists: [realSongs[i].artist],
             albumName: "Test Album",
             imageUrl: "https://via.placeholder.com/300",
             previewUrl: null, // Set to null to force Deezer enrichment
