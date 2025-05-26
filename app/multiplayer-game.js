@@ -439,11 +439,32 @@ export default function MultiplayerGame() {
           console.log("Using token from Spotify hook");
         } else {
           // Try to get a fresh token
+          console.log("Token invalid, attempting to refresh...");
           token = await getSpotifyToken();
           console.log("Got fresh token from Spotify hook");
+          
+          // Additional check: if getSpotifyToken returned null but hook might have updated
+          if (!token && spotifyToken) {
+            console.log("Retrying with updated token from hook after refresh");
+            token = spotifyToken;
+          }
         }
+        
+        // Final validation with better logging
+        console.log("Final token check:", {
+          hasToken: !!token,
+          tokenLength: token ? token.length : 0,
+          hookToken: !!spotifyToken,
+          isValid: token ? isSpotifyTokenValid() : false
+        });
+        
       } catch (tokenError) {
         console.error("Error getting Spotify token:", tokenError);
+        // Try one more time with the hook's token if available
+        if (spotifyToken) {
+          console.log("Fallback: using token directly from hook after error");
+          token = spotifyToken;
+        }
       }
 
       // If we have a token, use it
