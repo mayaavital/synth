@@ -1,26 +1,34 @@
 import axios from 'axios';
+import { tryAllProxyStrategies } from './corsProxy';
 
-// Deezer API endpoints with CORS proxy for web compatibility
-// Alternative CORS proxies in case one fails:
-// 1. https://api.allorigins.win/raw?url=
-// 2. https://cors-anywhere.herokuapp.com/ (requires request)
-// 3. https://corsproxy.io/?
-// 4. https://proxy.cors.sh/ (newer option)
+// Multiple CORS proxies for maximum reliability
+// We'll try them in order until one works
+const CORS_PROXIES = [
+  'https://corsproxy.io/?',
+  'https://thingproxy.freeboard.io/fetch/',
+  'https://cors-anywhere.herokuapp.com/',
+  'https://api.allorigins.win/raw?url=',
+  'https://proxy.cors.sh/',
+];
 
-const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
-// Alternative proxies (uncomment to try if current one fails):
-// const CORS_PROXY = 'https://corsproxy.io/?';
-// const CORS_PROXY = 'https://proxy.cors.sh/';
-// const CORS_PROXY = ''; // Remove proxy entirely to test direct access
+let currentProxyIndex = 0;
 
 const DEEZER_API = {
-  SEARCH: `${CORS_PROXY}https://api.deezer.com/search`,
-  TRACK: (trackId) => `${CORS_PROXY}https://api.deezer.com/track/${trackId}`,
+  SEARCH: 'https://api.deezer.com/search',
+  TRACK: (trackId) => `https://api.deezer.com/track/${trackId}`,
   // JSONP endpoints (alternative to CORS proxy)
   SEARCH_JSONP: 'https://api.deezer.com/search',
   TRACK_JSONP: (trackId) => `https://api.deezer.com/track/${trackId}`,
-  // Direct endpoints for testing
-  SEARCH_DIRECT: 'https://api.deezer.com/search',
+};
+
+/**
+ * Get the next CORS proxy URL to try
+ * @param {string} apiUrl - The Deezer API URL to proxy
+ * @returns {string} - Full proxied URL
+ */
+const getProxiedUrl = (apiUrl) => {
+  const proxy = CORS_PROXIES[currentProxyIndex];
+  return `${proxy}${encodeURIComponent(apiUrl)}`;
 };
 
 /**
@@ -65,14 +73,14 @@ const deezerJSONP = (url, params = {}) => {
     // Add script to page
     document.head.appendChild(script);
     
-    // Timeout after 10 seconds
+    // Timeout after 8 seconds
     setTimeout(() => {
       if (window[callbackName]) {
         document.head.removeChild(script);
         delete window[callbackName];
         reject(new Error('JSONP request timeout'));
       }
-    }, 10000);
+    }, 8000);
   });
 };
 
@@ -112,6 +120,48 @@ const searchDeezerTracksJSONP = async (query, limit = 10) => {
 };
 
 /**
+ * Try to fetch using the direct Deezer API with JSONP
+ * @param {string} query - Search query
+ * @param {number} limit - Number of results to return
+ * @returns {Promise<Array>} - Array of track objects
+ */
+const tryDirectDeezerAPI = async (query, limit = 10) => {
+  try {
+    console.log(`Trying direct Deezer API call for: "${query}"`);
+    
+    // Direct API call with JSONP parameters
+    const url = `${DEEZER_API.SEARCH}?q=${encodeURIComponent(query)}&limit=${limit}&output=jsonp`;
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      mode: 'no-cors',
+    });
+    
+    // This won't work due to CORS but let's try anyway
+    if (response.ok) {
+      const data = await response.json();
+      if (data && data.data && data.data.length > 0) {
+        console.log(`✅ Direct API success: Found ${data.data.length} tracks`);
+        return data.data.map(track => ({
+          id: track.id,
+          title: track.title,
+          artist: track.artist?.name || 'Unknown Artist',
+          album: track.album?.title || 'Unknown Album',
+          duration: track.duration,
+          preview: track.preview,
+          link: track.link,
+        }));
+      }
+    }
+    
+    return [];
+  } catch (error) {
+    console.log(`❌ Direct API failed (expected due to CORS):`, error.message);
+    return [];
+  }
+};
+
+/**
  * Search for tracks on Deezer by query with multiple fallback strategies
  * @param {string} query - Search query (e.g. "artist name song title")
  * @param {number} limit - Number of results to return
@@ -122,56 +172,9 @@ export const searchDeezerTracks = async (query, limit = 10) => {
   console.log(`Query: "${query}"`);
   console.log(`Limit: ${limit}`);
   
-  // Strategy 1: Try CORS proxy
+  // Strategy 1: Try JSONP first (most reliable)
   try {
-    console.log(`\n1. Trying CORS proxy: ${CORS_PROXY}`);
-    const proxyUrl = DEEZER_API.SEARCH;
-    console.log(`Full URL: ${proxyUrl}`);
-    
-    const response = await axios.get(proxyUrl, {
-      params: {
-        q: query,
-        limit: limit
-      },
-      timeout: 15000,
-      headers: {
-        'Content-Type': 'application/json',
-      }
-    });
-
-    console.log(`Response status: ${response.status}`);
-    console.log(`Response headers:`, response.headers);
-    console.log(`Response data type:`, typeof response.data);
-    console.log(`Response data:`, response.data);
-
-    // Check if we got valid data
-    if (response.data && response.data.data && Array.isArray(response.data.data) && response.data.data.length > 0) {
-      console.log(`✅ CORS proxy success: Found ${response.data.data.length} tracks`);
-      return response.data.data.map(track => ({
-        id: track.id,
-        title: track.title,
-        artist: track.artist?.name || 'Unknown Artist',
-        album: track.album?.title || 'Unknown Album',
-        duration: track.duration,
-        preview: track.preview,
-        link: track.link,
-      }));
-    } else {
-      console.log(`❌ CORS proxy: Invalid response format`);
-      throw new Error('Invalid response format from CORS proxy');
-    }
-  } catch (proxyError) {
-    console.log(`❌ CORS proxy failed:`, {
-      message: proxyError.message,
-      status: proxyError.response?.status,
-      statusText: proxyError.response?.statusText,
-      responseData: proxyError.response?.data
-    });
-  }
-  
-  // Strategy 2: Try JSONP fallback
-  try {
-    console.log(`\n2. Trying JSONP fallback...`);
+    console.log(`\n1. Trying JSONP fallback...`);
     const jsonpResult = await searchDeezerTracksJSONP(query, limit);
     if (jsonpResult && jsonpResult.length > 0) {
       console.log(`✅ JSONP success: Found ${jsonpResult.length} tracks`);
@@ -183,20 +186,65 @@ export const searchDeezerTracks = async (query, limit = 10) => {
     console.log(`❌ JSONP failed:`, jsonpError.message);
   }
   
-  // Strategy 3: Try direct API call (will likely fail due to CORS, but worth testing)
+  // Strategy 2: Try all CORS proxies in sequence
+  for (let i = 0; i < CORS_PROXIES.length; i++) {
+    currentProxyIndex = i;
+    const proxy = CORS_PROXIES[i];
+    
+    try {
+      console.log(`\n2.${i + 1}. Trying CORS proxy: ${proxy}`);
+      const proxiedUrl = getProxiedUrl(DEEZER_API.SEARCH);
+      console.log(`Full URL: ${proxiedUrl}`);
+      
+      const response = await axios.get(proxiedUrl, {
+        params: {
+          q: query,
+          limit: limit
+        },
+        timeout: 10000, // Reduced timeout for faster fallback
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept': 'application/json, text/plain, */*',
+        }
+      });
+
+      console.log(`Response status: ${response.status}`);
+
+      // Check if we got valid data
+      if (response.data && response.data.data && Array.isArray(response.data.data) && response.data.data.length > 0) {
+        console.log(`✅ CORS proxy success: Found ${response.data.data.length} tracks`);
+        return response.data.data.map(track => ({
+          id: track.id,
+          title: track.title,
+          artist: track.artist?.name || 'Unknown Artist',
+          album: track.album?.title || 'Unknown Album',
+          duration: track.duration,
+          preview: track.preview,
+          link: track.link,
+        }));
+      } else {
+        console.log(`❌ CORS proxy ${i + 1}: Invalid response format`);
+      }
+    } catch (proxyError) {
+      console.log(`❌ CORS proxy ${i + 1} failed:`, {
+        message: proxyError.message,
+        status: proxyError.response?.status,
+        statusText: proxyError.response?.statusText,
+      });
+    }
+  }
+  
+  // Strategy 3: Try alternative proxy strategies (serverless function, webworker, etc.)
   try {
-    console.log(`\n3. Trying direct API call (may fail due to CORS)...`);
-    const response = await axios.get(DEEZER_API.SEARCH_DIRECT, {
-      params: {
-        q: query,
-        limit: limit
-      },
-      timeout: 10000,
+    console.log(`\n3. Trying alternative proxy strategies...`);
+    const altResult = await tryAllProxyStrategies(DEEZER_API.SEARCH, {
+      q: query,
+      limit: limit
     });
     
-    if (response.data && response.data.data && response.data.data.length > 0) {
-      console.log(`✅ Direct API success: Found ${response.data.data.length} tracks`);
-      return response.data.data.map(track => ({
+    if (altResult && altResult.data && Array.isArray(altResult.data) && altResult.data.length > 0) {
+      console.log(`✅ Alternative proxy success: Found ${altResult.data.length} tracks`);
+      return altResult.data.map(track => ({
         id: track.id,
         title: track.title,
         artist: track.artist?.name || 'Unknown Artist',
@@ -206,8 +254,20 @@ export const searchDeezerTracks = async (query, limit = 10) => {
         link: track.link,
       }));
     }
+  } catch (altError) {
+    console.log(`❌ Alternative proxy strategies failed:`, altError.message);
+  }
+  
+  // Strategy 4: Try direct API (will likely fail but worth trying)
+  try {
+    console.log(`\n4. Trying direct API call (may fail due to CORS)...`);
+    const directResult = await tryDirectDeezerAPI(query, limit);
+    if (directResult && directResult.length > 0) {
+      console.log(`✅ Direct API success: Found ${directResult.length} tracks`);
+      return directResult;
+    }
   } catch (directError) {
-    console.log(`❌ Direct API failed (expected):`, directError.message);
+    console.log(`❌ Direct API failed:`, directError.message);
   }
   
   console.log(`\n❌ All strategies failed for query: "${query}"`);
@@ -222,7 +282,20 @@ export const searchDeezerTracks = async (query, limit = 10) => {
 export const getDeezerTrackById = async (trackId) => {
   try {
     console.log(`Fetching Deezer track with ID: ${trackId}`);
-    const response = await axios.get(DEEZER_API.TRACK(trackId));
+    
+    // Try JSONP first
+    try {
+      const jsonpResponse = await deezerJSONP(DEEZER_API.TRACK_JSONP(trackId));
+      if (jsonpResponse && jsonpResponse.id) {
+        return jsonpResponse;
+      }
+    } catch (jsonpError) {
+      console.log('JSONP track fetch failed, trying CORS proxy');
+    }
+    
+    // Fallback to CORS proxy
+    const proxiedUrl = getProxiedUrl(DEEZER_API.TRACK(trackId));
+    const response = await axios.get(proxiedUrl);
     return response.data;
   } catch (error) {
     console.error('Error fetching Deezer track:', error);
@@ -301,7 +374,7 @@ export const findDeezerTrackFromSpotify = async (spotifyTrack) => {
         const bestMatch = findBestMatch(searchResults, spotifyTrack.songTitle);
         
         if (bestMatch) {
-          console.log(`Found matching Deezer track: "${bestMatch.title}" by ${bestMatch.artist.name}`);
+          console.log(`Found matching Deezer track: "${bestMatch.title}" by ${bestMatch.artist}`);
           console.log(`Preview URL available: ${bestMatch.preview ? 'YES' : 'NO'}`);
           return formatDeezerTrack(bestMatch);
         }
@@ -370,44 +443,64 @@ export const enrichTracksWithDeezerPreviews = async (spotifyTracks) => {
   
   console.log(`Enriching ${spotifyTracks.length} Spotify tracks with Deezer preview URLs`);
   
-  // Process tracks in parallel with Promise.all
-  const enrichPromises = spotifyTracks.map(async (track, index) => {
-    // Always attempt to find a Deezer preview URL, even if one already exists
-    // This ensures we have the best possible preview URLs
-    console.log(`Enriching track ${index + 1}/${spotifyTracks.length}: "${track.songTitle}"`);
-    
-    try {
-      const deezerTrack = await findDeezerTrackFromSpotify(track);
-      
-      if (deezerTrack && deezerTrack.previewUrl) {
-        console.log(`Found Deezer preview URL for "${track.songTitle}"`);
-        
-        // Return a new object with all Spotify metadata but Deezer's preview URL
-        return {
-          ...track,
-          previewUrl: deezerTrack.previewUrl,
-          // Optionally store Deezer information for reference
-          deezerInfo: {
-            trackId: deezerTrack.trackId,
-            externalUrl: deezerTrack.externalUrl
-          }
-        };
-      } else {
-        console.log(`No Deezer preview URL found for "${track.songTitle}", keeping original`);
-      }
-      
-      return track; // Return original track if no Deezer match
-    } catch (error) {
-      console.error(`Error enriching track "${track.songTitle}":`, error);
-      return track; // Return original track on error
-    }
-  });
+  // Process tracks in small batches to avoid overwhelming the API
+  const batchSize = 3;
+  const enrichedTracks = [];
   
-  const results = await Promise.all(enrichPromises);
+  for (let i = 0; i < spotifyTracks.length; i += batchSize) {
+    const batch = spotifyTracks.slice(i, i + batchSize);
+    console.log(`Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(spotifyTracks.length / batchSize)}`);
+    
+    // Process batch with a small delay between tracks
+    const batchPromises = batch.map(async (track, batchIndex) => {
+      const trackIndex = i + batchIndex;
+      console.log(`Enriching track ${trackIndex + 1}/${spotifyTracks.length}: "${track.songTitle}"`);
+      
+      try {
+        // Add a small delay to avoid rate limiting
+        if (batchIndex > 0) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+        
+        const deezerTrack = await findDeezerTrackFromSpotify(track);
+        
+        if (deezerTrack && deezerTrack.previewUrl) {
+          console.log(`Found Deezer preview URL for "${track.songTitle}"`);
+          
+          // Return a new object with all Spotify metadata but Deezer's preview URL
+          return {
+            ...track,
+            previewUrl: deezerTrack.previewUrl,
+            // Optionally store Deezer information for reference
+            deezerInfo: {
+              trackId: deezerTrack.trackId,
+              externalUrl: deezerTrack.externalUrl
+            }
+          };
+        } else {
+          console.log(`No Deezer preview URL found for "${track.songTitle}", keeping original`);
+        }
+        
+        return track; // Return original track if no Deezer match
+      } catch (error) {
+        console.error(`Error enriching track "${track.songTitle}":`, error);
+        return track; // Return original track on error
+      }
+    });
+    
+    const batchResults = await Promise.all(batchPromises);
+    enrichedTracks.push(...batchResults);
+    
+    // Add delay between batches
+    if (i + batchSize < spotifyTracks.length) {
+      console.log('Waiting before next batch...');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+  }
   
   // Count how many tracks were successfully enriched
-  const enrichedCount = results.filter(t => t.previewUrl).length;
+  const enrichedCount = enrichedTracks.filter(t => t.previewUrl).length;
   console.log(`Successfully enriched ${enrichedCount}/${spotifyTracks.length} tracks with Deezer preview URLs`);
   
-  return results;
+  return enrichedTracks;
 }; 
