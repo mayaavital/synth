@@ -819,6 +819,7 @@ export default function GamePlay() {
       setIsLoadingAudio(false);
       setAudioLoadError(null);
       setCanVote(true);
+      setVoteProgress(100);
       return;
     }
 
@@ -830,6 +831,7 @@ export default function GamePlay() {
         setIsLoadingAudio(false);
         setIsPlaying(false);
         setCanVote(true);
+        setVoteProgress(100);
         return;
       }
 
@@ -838,6 +840,7 @@ export default function GamePlay() {
         try {
           await sound.stopAsync();
           await sound.unloadAsync();
+          setSound(null);
         } catch (error) {
           console.error(
             "[TRACK_SYNC] Error cleaning up previous sound:",
@@ -846,25 +849,31 @@ export default function GamePlay() {
         }
       }
 
-      // Simple audio load with maximum timeout
+      // Load audio with better autoplay handling for host device
       try {
         // Clear any existing timeout
         if (audioLoadTimeoutRef.current) {
           clearTimeout(audioLoadTimeoutRef.current);
         }
 
-        // Set a 20-second timeout for loading
+        // Set a 15-second timeout for loading
         const timeoutPromise = new Promise((_, reject) => {
           audioLoadTimeoutRef.current = setTimeout(() => {
-            reject(new Error("Audio load timed out after 20 seconds"));
-          }, 20000);
+            reject(new Error("Audio load timed out after 15 seconds"));
+          }, 15000);
         });
 
-        // Load and play the audio
+        console.log("[TRACK_SYNC] Host device loading audio from:", enhancedSong.previewUrl);
+
+        // First try to load without autoplay to avoid browser blocking
         const { sound: newSound } = await Promise.race([
           Audio.Sound.createAsync(
             { uri: enhancedSong.previewUrl },
-            { shouldPlay: true },
+            { 
+              shouldPlay: false, // Start without autoplay to avoid blocking
+              isLooping: false,
+              volume: 1.0 
+            },
             onPlaybackStatusUpdate
           ),
           timeoutPromise,
@@ -873,22 +882,45 @@ export default function GamePlay() {
         // Clear timeout on success
         clearTimeout(audioLoadTimeoutRef.current);
 
-        // Update state
+        // Update state with loaded sound
         setSound(newSound);
-        setIsPlaying(true);
         setIsLoadingAudio(false);
+
+        // Now try to start playback (host only)
+        try {
+          console.log("[TRACK_SYNC] Host attempting to start audio playback");
+          await newSound.playAsync();
+          setIsPlaying(true);
+          console.log("[TRACK_SYNC] Host audio playback started successfully");
+        } catch (playError) {
+          console.log("[TRACK_SYNC] Host autoplay blocked, user must click play:", playError.message);
+          // Set UI state to show play button for host
+          setIsPlaying(false);
+        }
+
+        // Always enable voting regardless of audio playback status
         setCanVote(true);
-        console.log("[TRACK_SYNC] Successfully loaded audio");
+        setVoteProgress(100);
+
       } catch (error) {
-        console.error("[TRACK_SYNC] Error loading audio:", error.message);
+        console.error("[TRACK_SYNC] Host error loading audio:", error.message);
         clearTimeout(audioLoadTimeoutRef.current);
         setIsLoadingAudio(false);
         setCanVote(true);
+        setVoteProgress(100);
+        
+        // Set error for user feedback
+        if (error.message.includes("timeout")) {
+          setAudioLoadError("Audio loading timed out. Click play to start!");
+        } else {
+          setAudioLoadError("Audio unavailable. Click play if you can hear it!");
+        }
       }
     } catch (error) {
-      console.error("[TRACK_SYNC] Unexpected error:", error);
+      console.error("[TRACK_SYNC] Host unexpected error:", error);
       setIsLoadingAudio(false);
       setCanVote(true);
+      setVoteProgress(100);
     }
   };
 
@@ -902,7 +934,7 @@ export default function GamePlay() {
     }
   }, [gameStage, currentSong]);
 
-  // Toggle play/pause function with simplified error handling
+  // Toggle play/pause function with improved autoplay handling
   const togglePlayPause = async () => {
     if (!isHost) {
       console.log("[TRACK_SYNC] Non-host device cannot control playback");
@@ -914,28 +946,32 @@ export default function GamePlay() {
       return;
     }
 
-    if (!sound) return;
+    if (!sound) {
+      console.log("[TRACK_SYNC] No sound loaded, attempting to reload current song");
+      if (currentSong) {
+        await loadAndPlaySong(currentSong);
+      }
+      return;
+    }
 
     try {
       if (isPlaying) {
+        console.log("[TRACK_SYNC] Host pausing audio");
         await sound.pauseAsync();
       } else {
+        console.log("[TRACK_SYNC] Host starting audio playback");
         await sound.playAsync();
+        console.log("[TRACK_SYNC] Host audio playback started via user interaction");
       }
     } catch (error) {
-      console.error("Error toggling playback:", error);
-      // Try to recover from error
-      if (sound) {
+      console.error("[TRACK_SYNC] Error toggling playback:", error);
+      // Try to recover from error by reloading the song
+      if (currentSong) {
+        console.log("[TRACK_SYNC] Attempting to recover by reloading song");
         try {
-          // Attempt to reset the sound
-          await sound.stopAsync();
-          setTimeout(() => {
-            sound
-              .playAsync()
-              .catch((e) => console.error("Recovery failed:", e));
-          }, 500);
-        } catch (e) {
-          console.error("Error in recovery attempt:", e);
+          await loadAndPlaySong(currentSong);
+        } catch (recoveryError) {
+          console.error("[TRACK_SYNC] Recovery failed:", recoveryError);
         }
       }
     }
@@ -2019,6 +2055,28 @@ export default function GamePlay() {
       );
     }
   }, [players, isMultiplayer]);
+
+  // Add effect to handle first user interaction for audio (host only)
+  useEffect(() => {
+    if (!isHost) return;
+
+    const enableAudioContext = async () => {
+      try {
+        // Create a silent audio context to enable audio on iOS/browsers
+        const { sound: silentSound } = await Audio.Sound.createAsync(
+          { uri: 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=' },
+          { shouldPlay: false, volume: 0 }
+        );
+        await silentSound.unloadAsync();
+        console.log("[TRACK_SYNC] Audio context enabled for host device");
+      } catch (error) {
+        console.log("[TRACK_SYNC] Could not pre-enable audio context:", error.message);
+      }
+    };
+
+    // Enable audio context on first load for host
+    enableAudioContext();
+  }, [isHost]);
 
   if (isLoading) {
     return (
