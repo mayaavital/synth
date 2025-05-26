@@ -2222,10 +2222,6 @@ export default function GamePlay() {
                       <Text style={styles.externalLinkText}>Open in Spotify</Text>
                     </TouchableOpacity>
                   )}
-
-                  <Text style={styles.noLinkText}>
-                    Full song available on Spotify
-                  </Text>
                 </>
               )}
             </View>
@@ -2556,7 +2552,7 @@ const styles = StyleSheet.create({
     transition: "width 0.3s",
   },
   voteProgressComplete: {
-    backgroundColor: "#C143FF", // Purple for complete
+    backgroundColor: "transparent", // Purple for complete
   },
   voteButtonContent: {
     flexDirection: "row",
