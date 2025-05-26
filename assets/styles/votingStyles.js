@@ -2,8 +2,9 @@ import { StyleSheet } from "react-native";
 
 export const votingStyles = StyleSheet.create({
   votingContainer: {
-    flex: 1,
+    minHeight: "100%",
     padding: 20,
+    paddingBottom: 40,
   },
   votingInstructions: {
     color: "white",

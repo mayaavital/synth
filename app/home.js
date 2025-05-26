@@ -568,10 +568,10 @@ const styles = StyleSheet.create({
     padding: 20,
     // borderWidth: 1,
     // borderColor: "#8E44AD",
-    // shadowColor: "#8E44AD", // light purple
-    // shadowOffset: { width: 0, height: 0 },
-    // shadowOpacity: 1,
-    // shadowRadius: 2,
+    shadowColor: "#542866", // light purple
+    shadowOffset: { width: 2, height: 2},
+    shadowOpacity: 1,
+    shadowRadius: 2,
   },
   iconContainer: {
     backgroundColor: "#8E44AD",
