@@ -2004,10 +2004,12 @@ export default function GamePlay() {
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#C143FF" />
-          <Text style={styles.loadingText}>Loading songs...</Text>
-        </View>
+        <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#C143FF" />
+            <Text style={styles.loadingText}>Loading songs...</Text>
+          </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -2015,22 +2017,24 @@ export default function GamePlay() {
   if (error) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.errorContainer}>
-          <Ionicons name="alert-circle" size={64} color="#FF6B6B" />
-          <Text style={styles.errorText}>{error}</Text>
+        <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
+          <View style={styles.errorContainer}>
+            <Ionicons name="alert-circle" size={64} color="#FF6B6B" />
+            <Text style={styles.errorText}>{error}</Text>
 
-          <View style={styles.buttonsContainer}>
-            <Pressable
-              style={styles.returnButton}
-              onPress={handleReturnToLobby}
-            >
-              <Text style={styles.returnButtonText}>Back to Lobby</Text>
-            </Pressable>
-            <Pressable style={styles.playAgainButton} onPress={handlePlayAgain}>
-              <Text style={styles.playAgainButtonText}>Try Again</Text>
-            </Pressable>
+            <View style={styles.buttonsContainer}>
+              <Pressable
+                style={styles.returnButton}
+                onPress={handleReturnToLobby}
+              >
+                <Text style={styles.returnButtonText}>Back to Lobby</Text>
+              </Pressable>
+              <Pressable style={styles.playAgainButton} onPress={handlePlayAgain}>
+                <Text style={styles.playAgainButtonText}>Try Again</Text>
+              </Pressable>
+            </View>
           </View>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -2043,300 +2047,302 @@ export default function GamePlay() {
         </Text>
       </View>
 
-      {currentSong && gameStage === "playing" && (
-        <View style={styles.songPlaybackContainer}>
-          <View style={styles.albumArtworkWrapper}>
-            <View style={styles.albumArtworkBackground}>
-              <Image
-                source={{ uri: currentSong.imageUrl }}
-                style={styles.albumCover}
-                resizeMode="cover"
-              />
-            </View>
-          </View>
-
-          <View style={styles.songPlaybackInfo}>
-            <View style={{ maxHeight: "2em" }}>
-              <Text style={styles.playbackSongTitle} numberOfLines={1}>
-                {currentSong.songTitle}
-              </Text>
-            </View>
-            <View style={{ maxHeight: "2em" }}>
-              <Text style={styles.playbackArtistName} numberOfLines={1}>
-                {currentSong.songArtists.join(", ")}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.playbackControlsContainer}>
-            {isLoadingAudio ? (
-              <View style={styles.loadingAudioContainer}>
-                <ActivityIndicator size="small" color="#C143FF" />
-                <Text style={styles.loadingAudioText}>Loading audio...</Text>
+      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
+        {currentSong && gameStage === "playing" && (
+          <View style={styles.songPlaybackContainer}>
+            <View style={styles.albumArtworkWrapper}>
+              <View style={styles.albumArtworkBackground}>
+                <Image
+                  source={{ uri: currentSong.imageUrl }}
+                  style={styles.albumCover}
+                  resizeMode="cover"
+                />
               </View>
-            ) : audioLoadError ? (
-              <View style={styles.audioErrorContainer}>
-                <Ionicons name="alert-circle" size={64} color="#FF6B6B" />
-                <Text style={styles.errorText}>{audioLoadError}</Text>
+            </View>
 
-                <View style={styles.buttonsContainer}>
-                  <Pressable
-                    style={styles.returnButton}
-                    onPress={handleReturnToLobby}
-                  >
-                    <Text style={styles.returnButtonText}>Back to Lobby</Text>
-                  </Pressable>
-                  <Pressable
-                    style={styles.playAgainButton}
-                    onPress={handlePlayAgain}
-                  >
-                    <Text style={styles.playAgainButtonText}>Try Again</Text>
-                  </Pressable>
+            <View style={styles.songPlaybackInfo}>
+              <View style={{ maxHeight: "2em" }}>
+                <Text style={styles.playbackSongTitle} numberOfLines={1}>
+                  {currentSong.songTitle}
+                </Text>
+              </View>
+              <View style={{ maxHeight: "2em" }}>
+                <Text style={styles.playbackArtistName} numberOfLines={1}>
+                  {currentSong.songArtists.join(", ")}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.playbackControlsContainer}>
+              {isLoadingAudio ? (
+                <View style={styles.loadingAudioContainer}>
+                  <ActivityIndicator size="small" color="#C143FF" />
+                  <Text style={styles.loadingAudioText}>Loading audio...</Text>
                 </View>
-              </View>
-            ) : (
-              <>
-                <View style={styles.progressContainer}>
-                  <Text style={styles.timeText}>
-                    {formatTime(playbackPosition)}
-                  </Text>
-                  {Platform.OS === 'web' ? (
-                    <View style={styles.progressBar}>
-                      <View style={styles.progressTrack}>
-                        <View 
-                          style={[
-                            styles.progressFill,
-                            {
-                              width: `${
-                                playbackDuration > 0 
-                                  ? Math.min(100, (playbackPosition / playbackDuration) * 100)
-                                  : 0
-                              }%`
-                            }
-                          ]}
-                        />
-                        <View 
-                          style={[
-                            styles.progressThumb,
-                            {
-                              left: `${
-                                playbackDuration > 0 
-                                  ? Math.min(100, (playbackPosition / playbackDuration) * 100)
-                                  : 0
-                              }%`
-                            }
-                          ]}
-                        />
+              ) : audioLoadError ? (
+                <View style={styles.audioErrorContainer}>
+                  <Ionicons name="alert-circle" size={64} color="#FF6B6B" />
+                  <Text style={styles.errorText}>{audioLoadError}</Text>
+
+                  <View style={styles.buttonsContainer}>
+                    <Pressable
+                      style={styles.returnButton}
+                      onPress={handleReturnToLobby}
+                    >
+                      <Text style={styles.returnButtonText}>Back to Lobby</Text>
+                    </Pressable>
+                    <Pressable
+                      style={styles.playAgainButton}
+                      onPress={handlePlayAgain}
+                    >
+                      <Text style={styles.playAgainButtonText}>Try Again</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : (
+                <>
+                  <View style={styles.progressContainer}>
+                    <Text style={styles.timeText}>
+                      {formatTime(playbackPosition)}
+                    </Text>
+                    {Platform.OS === 'web' ? (
+                      <View style={styles.progressBar}>
+                        <View style={styles.progressTrack}>
+                          <View 
+                            style={[
+                              styles.progressFill,
+                              {
+                                width: `${
+                                  playbackDuration > 0 
+                                    ? Math.min(100, (playbackPosition / playbackDuration) * 100)
+                                    : 0
+                                }%`
+                              }
+                            ]}
+                          />
+                          <View 
+                            style={[
+                              styles.progressThumb,
+                              {
+                                left: `${
+                                  playbackDuration > 0 
+                                    ? Math.min(100, (playbackPosition / playbackDuration) * 100)
+                                    : 0
+                                }%`
+                              }
+                            ]}
+                          />
+                        </View>
                       </View>
-                    </View>
-                  ) : (
-                    <Slider
-                      style={styles.progressBar}
-                      minimumValue={0}
-                      maximumValue={
-                        playbackDuration > 0 ? playbackDuration : 30000
-                      }
-                      value={playbackPosition}
-                      minimumTrackTintColor="#C143FF"
-                      maximumTrackTintColor="#444"
-                      thumbTintColor="#FFC857"
-                      disabled={true}
-                    />
+                    ) : (
+                      <Slider
+                        style={styles.progressBar}
+                        minimumValue={0}
+                        maximumValue={
+                          playbackDuration > 0 ? playbackDuration : 30000
+                        }
+                        value={playbackPosition}
+                        minimumTrackTintColor="#C143FF"
+                        maximumTrackTintColor="#444"
+                        thumbTintColor="#FFC857"
+                        disabled={true}
+                      />
+                    )}
+                    <Text style={styles.timeText}>
+                      {formatTime(playbackDuration)}
+                    </Text>
+                  </View>
+
+                  <View style={styles.controlButtonsContainer}>
+                    <TouchableOpacity
+                      style={styles.playPauseButton}
+                      onPress={togglePlayPause}
+                    >
+                      <Ionicons
+                        name={isPlaying ? "pause" : "play"}
+                        size={32}
+                        color="white"
+                      />
+                    </TouchableOpacity>
+                  </View>
+
+                  {currentSong?.externalUrl && (
+                    <TouchableOpacity
+                      style={[
+                        styles.externalLinkButton,
+                        styles.spotifyLinkButton,
+                      ]}
+                      onPress={async () => {
+                        // try {
+                        //   // Log the Spotify link click event with relevant parameters
+                        //   await logEvent(analytics, "spotify_link_click", {
+                        //     song_title: currentSong.songTitle,
+                        //     song_artists: Array.isArray(currentSong.songArtists)
+                        //       ? currentSong.songArtists.join(", ")
+                        //       : currentSong.songArtists,
+                        //     round_number: currentRound,
+                        //     game_id: gameId,
+                        //   });
+
+                        //   // Open the Spotify URL
+                        //   await Linking.openURL(currentSong.externalUrl);
+                        // } catch (error) {
+                        //   console.error(
+                        //     "Error logging Spotify link click:",
+                        //     error
+                        //   );
+                        // Still try to open the URL even if logging fails
+                        await Linking.openURL(currentSong.externalUrl);
+                        //}
+                      }}
+                    >
+                      <Image
+                        source={require("../assets/white-spotify-logo.png")}
+                        style={{ width: 20, height: 20, marginRight: 5 }}
+                      />
+                      <Text style={styles.externalLinkText}>Open in Spotify</Text>
+                    </TouchableOpacity>
                   )}
-                  <Text style={styles.timeText}>
-                    {formatTime(playbackDuration)}
-                  </Text>
-                </View>
+                </>
+              )}
+            </View>
 
-                <View style={styles.controlButtonsContainer}>
-                  <TouchableOpacity
-                    style={styles.playPauseButton}
-                    onPress={togglePlayPause}
-                  >
-                    <Ionicons
-                      name={isPlaying ? "pause" : "play"}
-                      size={32}
-                      color="white"
-                    />
-                  </TouchableOpacity>
-                </View>
-
-                {currentSong?.externalUrl && (
-                  <TouchableOpacity
-                    style={[
-                      styles.externalLinkButton,
-                      styles.spotifyLinkButton,
-                    ]}
-                    onPress={async () => {
-                      // try {
-                      //   // Log the Spotify link click event with relevant parameters
-                      //   await logEvent(analytics, "spotify_link_click", {
-                      //     song_title: currentSong.songTitle,
-                      //     song_artists: Array.isArray(currentSong.songArtists)
-                      //       ? currentSong.songArtists.join(", ")
-                      //       : currentSong.songArtists,
-                      //     round_number: currentRound,
-                      //     game_id: gameId,
-                      //   });
-
-                      //   // Open the Spotify URL
-                      //   await Linking.openURL(currentSong.externalUrl);
-                      // } catch (error) {
-                      //   console.error(
-                      //     "Error logging Spotify link click:",
-                      //     error
-                      //   );
-                      // Still try to open the URL even if logging fails
-                      await Linking.openURL(currentSong.externalUrl);
-                      //}
-                    }}
-                  >
-                    <Image
-                      source={require("../assets/white-spotify-logo.png")}
-                      style={{ width: 20, height: 20, marginRight: 5 }}
-                    />
-                    <Text style={styles.externalLinkText}>Open in Spotify</Text>
-                  </TouchableOpacity>
-                )}
-              </>
-            )}
-          </View>
-
-          <View style={styles.voteButtonContainer}>
-            <TouchableOpacity
-              activeOpacity={canVote ? 0.7 : 1}
-              onPress={() => {
-                if (canVote) {
-                  // Make sure we have an assigned player before going to voting stage
-                  if (!currentSong?.assignedToPlayer) {
-                    // Just in case it wasn't assigned, pick a random player now
-                    const randomPlayer =
-                      players[Math.floor(Math.random() * players.length)];
-                    console.log(
-                      `Assigning song ${currentSong.songTitle} to player ${randomPlayer.username} during vote`
-                    );
-                    setCurrentSong({
-                      ...currentSong,
-                      assignedToPlayer: randomPlayer,
-                    });
-                    // Update in roundSongs state too
-                    setRoundSongs((prev) => ({
-                      ...prev,
-                      [currentRound]: {
-                        ...prev[currentRound],
+            <View style={styles.voteButtonContainer}>
+              <TouchableOpacity
+                activeOpacity={canVote ? 0.7 : 1}
+                onPress={() => {
+                  if (canVote) {
+                    // Make sure we have an assigned player before going to voting stage
+                    if (!currentSong?.assignedToPlayer) {
+                      // Just in case it wasn't assigned, pick a random player now
+                      const randomPlayer =
+                        players[Math.floor(Math.random() * players.length)];
+                      console.log(
+                        `Assigning song ${currentSong.songTitle} to player ${randomPlayer.username} during vote`
+                      );
+                      setCurrentSong({
+                        ...currentSong,
                         assignedToPlayer: randomPlayer,
-                      },
-                    }));
+                      });
+                      // Update in roundSongs state too
+                      setRoundSongs((prev) => ({
+                        ...prev,
+                        [currentRound]: {
+                          ...prev[currentRound],
+                          assignedToPlayer: randomPlayer,
+                        },
+                      }));
+                    }
+                    setGameStage("voting");
+                  } else {
+                    Alert.alert(
+                      "Not Ready Yet",
+                      `Please listen to at least ${
+                        MIN_PLAY_DURATION / 1000
+                      } seconds of the song before voting.`,
+                      [{ text: "OK" }]
+                    );
                   }
-                  setGameStage("voting");
-                } else {
-                  Alert.alert(
-                    "Not Ready Yet",
-                    `Please listen to at least ${
-                      MIN_PLAY_DURATION / 1000
-                    } seconds of the song before voting.`,
-                    [{ text: "OK" }]
-                  );
-                }
-              }}
-            >
-              <View style={styles.voteButtonWrapper}>
-                {/* Progress bar background */}
-                <View style={styles.voteProgressBackground}>
-                  {/* Progress bar fill that grows based on playback position */}
+                }}
+              >
+                <View style={styles.voteButtonWrapper}>
+                  {/* Progress bar background */}
+                  <View style={styles.voteProgressBackground}>
+                    {/* Progress bar fill that grows based on playback position */}
+                    <View
+                      style={[
+                        styles.voteProgressFill,
+                        { width: `${voteProgress}%` },
+                        canVote ? styles.voteProgressComplete : {},
+                      ]}
+                    />
+                  </View>
+
+                  {/* Button content */}
                   <View
                     style={[
-                      styles.voteProgressFill,
-                      { width: `${voteProgress}%` },
-                      canVote ? styles.voteProgressComplete : {},
-                    ]}
-                  />
-                </View>
-
-                {/* Button content */}
-                <View
-                  style={[
-                    styles.voteButtonContent,
-                    !canVote
-                      ? styles.voteButtonDisabled
-                      : styles.voteButtonEnabled,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.voteButtonText,
-                      !canVote ? styles.voteButtonTextDisabled : {},
+                      styles.voteButtonContent,
+                      !canVote
+                        ? styles.voteButtonDisabled
+                        : styles.voteButtonEnabled,
                     ]}
                   >
-                    VOTE NOW
-                  </Text>
-                  <Ionicons
-                    name="arrow-forward"
-                    size={24}
-                    color={canVote ? "black" : "#777"}
-                  />
+                    <Text
+                      style={[
+                        styles.voteButtonText,
+                        !canVote ? styles.voteButtonTextDisabled : {},
+                      ]}
+                    >
+                      VOTE NOW
+                    </Text>
+                    <Ionicons
+                      name="arrow-forward"
+                      size={24}
+                      color={canVote ? "black" : "#777"}
+                    />
+                  </View>
                 </View>
-              </View>
-            </TouchableOpacity>
+              </TouchableOpacity>
 
-            {/* <Text style={styles.voteHintText}>
-              {canVote
-                ? "Make your guess about who listened to this song"
-                : `Listen for ${
-                    MIN_PLAY_DURATION / 1000
-                  } seconds before voting...`}
-            </Text> */}
+              {/* <Text style={styles.voteHintText}>
+                {canVote
+                  ? "Make your guess about who listened to this song"
+                  : `Listen for ${
+                      MIN_PLAY_DURATION / 1000
+                    } seconds before voting...`}
+              </Text> */}
+            </View>
           </View>
-        </View>
-      )}
+        )}
 
-      {gameStage === "voting" && (
-        <VotingStage
-          players={players}
-          currentSong={currentSong}
-          currentRound={currentRound}
-          selectedPlayer={selectedPlayer}
-          showVoteResult={showVoteResult}
-          setSelectedPlayer={setSelectedPlayer}
-          setShowVoteResult={setShowVoteResult}
-          setPlayerSongs={setPlayerSongs}
-          setPlayerPoints={setPlayerPoints}
-          nextRound={handleNextRound}
-          getProfilePhotoForUser={getProfilePhotoForUser}
-          isMultiplayer={isMultiplayer}
-          gameId={gameId}
-          playerPoints={playerPoints}
-          castVote={castVote}
-          allVotesCast={allVotesCast}
-        />
-      )}
+        {gameStage === "voting" && (
+          <VotingStage
+            players={players}
+            currentSong={currentSong}
+            currentRound={currentRound}
+            selectedPlayer={selectedPlayer}
+            showVoteResult={showVoteResult}
+            setSelectedPlayer={setSelectedPlayer}
+            setShowVoteResult={setShowVoteResult}
+            setPlayerSongs={setPlayerSongs}
+            setPlayerPoints={setPlayerPoints}
+            nextRound={handleNextRound}
+            getProfilePhotoForUser={getProfilePhotoForUser}
+            isMultiplayer={isMultiplayer}
+            gameId={gameId}
+            playerPoints={playerPoints}
+            castVote={castVote}
+            allVotesCast={allVotesCast}
+          />
+        )}
 
-      {gameStage === "leaderboard" && (
-        <LeaderboardScreen
-          currentSong={currentSong}
-          assignedUser={currentSong?.assignedToPlayer}
-          currentRound={currentRound}
-          players={players}
-          playerPoints={playerPoints}
-          getProfilePhotoForUser={getProfilePhotoForUser}
-          onTimeout={handleLeaderboardTimeout}
-        />
-      )}
+        {gameStage === "leaderboard" && (
+          <LeaderboardScreen
+            currentSong={currentSong}
+            assignedUser={currentSong?.assignedToPlayer}
+            currentRound={currentRound}
+            players={players}
+            playerPoints={playerPoints}
+            getProfilePhotoForUser={getProfilePhotoForUser}
+            onTimeout={handleLeaderboardTimeout}
+          />
+        )}
 
-      {gameStage === "results" && (
-        <ResultsStage
-          players={players}
-          playerPoints={playerPoints}
-          roundSongs={roundSongs}
-          getProfilePhotoForUser={getProfilePhotoForUser}
-          handleReturnToLobby={handleReturnToLobby}
-          handlePlayAgain={handlePlayAgain}
-          currentRound={currentRound}
-          isMultiplayer={isMultiplayer}
-          trackAssignments={trackAssignments}
-          styles={styles}
-        />
-      )}
+        {gameStage === "results" && (
+          <ResultsStage
+            players={players}
+            playerPoints={playerPoints}
+            roundSongs={roundSongs}
+            getProfilePhotoForUser={getProfilePhotoForUser}
+            handleReturnToLobby={handleReturnToLobby}
+            handlePlayAgain={handlePlayAgain}
+            currentRound={currentRound}
+            isMultiplayer={isMultiplayer}
+            trackAssignments={trackAssignments}
+            styles={styles}
+          />
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -2445,6 +2451,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "transparent",
+    borderWidth: 0,
     shadowColor: "#8E44AD",
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.8,
@@ -2559,7 +2566,8 @@ const styles = StyleSheet.create({
     transition: "width 0.3s",
   },
   voteProgressComplete: {
-    backgroundColor: "#C143FF", // Purple for complete
+    backgroundColor: "transparent", // Purple for complete
+    borderWidth: 0,
   },
   voteButtonContent: {
     flexDirection: "row",
