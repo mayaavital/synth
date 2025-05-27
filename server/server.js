@@ -1447,8 +1447,10 @@ io.on("connection", (socket) => {
     };
 
     // Log which username is voting for which username (for clearer logs)
-    const voterUsername =
-      game.players.find((p) => p.id === socket.id)?.username || "Unknown";
+    const voterUsername = getUsernameById(gameId, voterId) || game.players.find(p => p.id === voterId)?.username;
+        if (voterUsername) {
+          game.votes[voterUsername] = { id: targetPlayerId, username: votedForUsername };
+        }
     const votedForUsernameResolved =
       votedForUsername ||
       game.players.find((p) => p.id === targetPlayerId)?.username ||
@@ -1607,9 +1609,9 @@ io.on("connection", (socket) => {
         );
 
         // Award point if either matching method succeeds (as long as player isn't voting for themselves)
-        if ((directIdMatch || usernameMatch) && voterId !== correctPlayerId) {
+        if (directIdMatch || usernameMatch) {
           // Store score using socket ID as key
-          game.scores[voterId] = (game.scores[voterId] || 0) + 1;
+          game.scores[voterUsername] = (game.scores[voterUsername] || 0) + 1;
           console.log("game.scores", game.scores);
           // Add more detailed logging using username mappings
           console.log(

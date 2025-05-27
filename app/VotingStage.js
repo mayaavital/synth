@@ -29,84 +29,84 @@ const VotingStage = ({
   // Map socket IDs to usernames when playerPoints or players change
   useEffect(() => {
     if (
-      isMultiplayer &&
-      Object.keys(playerPoints || {}).length > 0 &&
-      players.length > 0
+      !isMultiplayer ||
+      !playerPoints ||
+      Object.keys(playerPoints).length === 0
     ) {
-      const updatedPoints = { ...playerPoints };
-      let madeChanges = false;
+      return;
+    }
 
-      // Create a comprehensive player mapping
-      const playerBySocketId = {};
-      const playerByUsername = {};
-      const allPlayerIds = new Set();
+    console.log("[TRACK_SYNC] Processing playerPoints update:", playerPoints);
+    console.log("[TRACK_SYNC] Current players:", players.map(p => ({ id: p.id, username: p.username })));
 
-      // Build complete player mappings
-      players
-        .filter((player) => player !== undefined)
-        .forEach((player) => {
-          if (player.id) {
-            playerBySocketId[player.id] = player;
-            allPlayerIds.add(player.id);
+    // If playerPoints already has scoresWithUsernames, use it directly
+    if (playerPoints.scoresWithUsernames) {
+      console.log("[TRACK_SYNC] Using scoresWithUsernames directly:", playerPoints.scoresWithUsernames);
+      setPlayerPoints(playerPoints.scoresWithUsernames);
+      return;
+    }
 
-            // Also map string version of ID
-            playerBySocketId[String(player.id)] = player;
-            allPlayerIds.add(String(player.id));
-          }
+    // Create comprehensive mappings
+    const socketIdToUsername = {};
+    const playerBySocketId = {};
 
-          if (player.username) {
-            playerByUsername[player.username] = player;
-          }
-        });
+    // Build mapping from players array
+    players.filter(p => p && p.username).forEach(player => {
+      socketIdToUsername[player.id] = player.username;
+      playerBySocketId[player.id] = player;
+      console.log(`[TRACK_SYNC] Mapped socket ID ${player.id} to username ${player.username}`);
+    });
 
-      // Create a comprehensive socket ID to username mapping
-      const socketIdToUsername = {};
-      players
-        .filter((player) => player !== undefined)
-        .forEach((player) => {
-          if (player.id && player.username) {
-            socketIdToUsername[player.id] = player.username;
-            // Also map string version of ID
-            socketIdToUsername[String(player.id)] = player.username;
-          }
-        });
+    console.log("[TRACK_SYNC] Socket ID to username mapping:", socketIdToUsername);
 
-      console.log(
-        "Socket ID to username comprehensive mapping:",
-        socketIdToUsername
-      );
+    // Process the scores
+    let updatedPoints = {};
+    let madeChanges = false;
 
-      // First pass: Map socket IDs to usernames
-      Object.keys(playerPoints || {}).forEach((pointKey) => {
-        // If this is a socket ID or other non-username identifier
-        const player = playerBySocketId[pointKey];
-        if (player && player.username) {
-          // Map the points to the username
-          updatedPoints[player.username] = playerPoints[pointKey];
-          console.log(
-            `Mapped ID ${pointKey} points to username ${player.username}`
-          );
-          madeChanges = true;
-        }
+    // First, check if playerPoints has the raw scores object
+    const scoresObject = playerPoints.scores || playerPoints;
+    
+    console.log("[TRACK_SYNC] Processing scores object:", scoresObject);
 
-        // Also check our comprehensive socketIdToUsername mapping
-        if (
-          socketIdToUsername[pointKey] &&
-          !updatedPoints[socketIdToUsername[pointKey]]
-        ) {
-          updatedPoints[socketIdToUsername[pointKey]] = playerPoints[pointKey];
-          console.log(
-            `Used socketIdToUsername to map ${pointKey} to ${socketIdToUsername[pointKey]}`
-          );
-          madeChanges = true;
-        }
-      });
-
-      // If we made changes, update playerPoints
-      if (madeChanges) {
-        console.log("Updated player points mapping:", updatedPoints);
-        setPlayerPoints(updatedPoints);
+    // Map socket IDs to usernames
+    Object.entries(scoresObject).forEach(([pointKey, score]) => {
+      console.log(`[TRACK_SYNC] Processing score entry: ${pointKey} = ${score}`);
+      
+      // If this key is already a username, keep it
+      if (players.some(p => p.username === pointKey)) {
+        updatedPoints[pointKey] = score;
+        console.log(`[TRACK_SYNC] Direct username match: ${pointKey} = ${score}`);
+        return;
       }
+
+      // Try to map socket ID to username
+      if (socketIdToUsername[pointKey]) {
+        updatedPoints[socketIdToUsername[pointKey]] = score;
+        console.log(`[TRACK_SYNC] Mapped socket ID ${pointKey} to username ${socketIdToUsername[pointKey]} with score ${score}`);
+        madeChanges = true;
+        return;
+      }
+
+      // If we can't map it, keep the original key but log it
+      console.log(`[TRACK_SYNC] Could not map key ${pointKey}, keeping as-is`);
+      updatedPoints[pointKey] = score;
+    });
+
+    // Ensure all players have a score entry (default to 0)
+    players.filter(p => p && p.username).forEach(player => {
+      if (updatedPoints[player.username] === undefined) {
+        updatedPoints[player.username] = 0;
+        console.log(`[TRACK_SYNC] Added missing score for ${player.username}: 0`);
+        madeChanges = true;
+      }
+    });
+
+    console.log("[TRACK_SYNC] Final processed scores:", updatedPoints);
+
+    // Update playerPoints if we made changes or if it's different from current state
+    if (madeChanges || JSON.stringify(updatedPoints) !== JSON.stringify(playerPoints)) {
+      console.log("[TRACK_SYNC] Updating playerPoints with processed scores");
+      setPlayerPoints(updatedPoints);
     }
   }, [playerPoints, players, isMultiplayer, setPlayerPoints]);
 

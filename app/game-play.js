@@ -841,11 +841,16 @@ export default function GamePlay() {
           }, 20000);
         });
 
-        // Load and play the audio
+        // For mobile devices, don't autoplay - let user manually start
+        const shouldAutoPlay = Platform.OS !== 'web' || !navigator.userAgent.match(/Mobile|Android|iPhone|iPad/i);
+        
+        console.log(`[TRACK_SYNC] Loading audio with autoplay: ${shouldAutoPlay}`);
+
+        // Load the audio (with or without autoplay based on platform)
         const { sound: newSound } = await Promise.race([
           Audio.Sound.createAsync(
             { uri: enhancedSong.previewUrl },
-            { shouldPlay: true },
+            { shouldPlay: shouldAutoPlay },
             onPlaybackStatusUpdate
           ),
           timeoutPromise,
@@ -856,10 +861,15 @@ export default function GamePlay() {
 
         // Update state
         setSound(newSound);
-        setIsPlaying(true);
+        setIsPlaying(shouldAutoPlay);
         setIsLoadingAudio(false);
         setCanVote(true);
-        console.log("[TRACK_SYNC] Successfully loaded audio");
+        
+        if (shouldAutoPlay) {
+          console.log("[TRACK_SYNC] Successfully loaded and started audio");
+        } else {
+          console.log("[TRACK_SYNC] Successfully loaded audio (manual play required on mobile)");
+        }
       } catch (error) {
         console.error("[TRACK_SYNC] Error loading audio:", error.message);
         clearTimeout(audioLoadTimeoutRef.current);
@@ -1275,8 +1285,15 @@ export default function GamePlay() {
       setPendingVotes({});
       setAllVotesCast(false);
 
-      // Update scores and assignments with better handling
-      if (data.scores) {
+      // Update scores with improved handling - prioritize scoresWithUsernames
+      if (data.scoresWithUsernames) {
+        // Server provided username-mapped scores - use directly
+        console.log("[TRACK_SYNC] Using scoresWithUsernames from server:", data.scoresWithUsernames);
+        setPlayerPoints(data.scoresWithUsernames);
+      } else if (data.scores) {
+        // Fallback to manual mapping if scoresWithUsernames not available
+        console.log("[TRACK_SYNC] Manually mapping scores from server:", data.scores);
+        
         // Create a mapping of player IDs to usernames for more reliable score tracking
         const playerIdToUsername = {};
         players.forEach((player) => {
@@ -1418,6 +1435,41 @@ export default function GamePlay() {
       // Update the current round
       setCurrentRound(data.roundNumber);
 
+      // Handle scores if provided in force sync
+      if (data.scoresWithUsernames) {
+        console.log("[TRACK_SYNC] Force sync includes scoresWithUsernames:", data.scoresWithUsernames);
+        setPlayerPoints(data.scoresWithUsernames);
+      } else if (data.scores) {
+        console.log("[TRACK_SYNC] Force sync includes raw scores:", data.scores);
+        // Apply the same mapping logic as in vote results
+        const playerIdToUsername = {};
+        players.forEach((player) => {
+          playerIdToUsername[player.id] = player.username;
+        });
+
+        const updatedPoints = {};
+        Object.entries(data.scores).forEach(([playerId, score]) => {
+          let playerUsername = playerIdToUsername[playerId];
+          if (!playerUsername) {
+            const player = players.find(
+              (p) =>
+                String(p.id) === String(playerId) ||
+                p.id === Number(playerId) ||
+                p.username === playerId
+            );
+            if (player) {
+              playerUsername = player.username;
+            } else {
+              playerUsername = playerId;
+            }
+          }
+          updatedPoints[playerUsername] = score;
+        });
+        
+        console.log("[TRACK_SYNC] Force sync updated player points:", updatedPoints);
+        setPlayerPoints(updatedPoints);
+      }
+
       // Normalize song data with complete fields
       const syncSong = {
         ...data.song,
@@ -1469,16 +1521,27 @@ export default function GamePlay() {
               .catch((e) => console.error("Error unloading sound:", e));
           }
 
+          // For mobile devices, don't autoplay - let user manually start
+          const shouldAutoPlay = Platform.OS !== 'web' || !navigator.userAgent.match(/Mobile|Android|iPhone|iPad/i);
+          
+          console.log(`[TRACK_SYNC] Loading force sync audio with autoplay: ${shouldAutoPlay}`);
+
           // Load the audio directly
           Audio.Sound.createAsync(
             { uri: syncSong.previewUrl },
-            { shouldPlay: true },
+            { shouldPlay: shouldAutoPlay },
             onPlaybackStatusUpdate
           )
             .then(({ sound: newSound }) => {
               setSound(newSound);
-              setIsPlaying(true);
+              setIsPlaying(shouldAutoPlay);
               setIsLoadingAudio(false);
+              
+              if (shouldAutoPlay) {
+                console.log("[TRACK_SYNC] Successfully loaded and started force sync audio");
+              } else {
+                console.log("[TRACK_SYNC] Successfully loaded force sync audio (manual play required on mobile)");
+              }
             })
             .catch((error) => {
               console.error(
@@ -2164,6 +2227,13 @@ export default function GamePlay() {
                         color="white"
                       />
                     </TouchableOpacity>
+                    
+                    {/* Show manual play prompt for mobile when audio is loaded but not playing */}
+                    {!isPlaying && sound && Platform.OS === 'web' && navigator.userAgent.match(/Mobile|Android|iPhone|iPad/i) && (
+                      <Text style={styles.mobilePlayPrompt}>
+                        Tap play to start audio
+                      </Text>
+                    )}
                   </View>
 
                   {currentSong?.externalUrl && (
@@ -2550,10 +2620,10 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: "100%",
-    backgroundColor: "#333",
+    backgroundColor: "transparent",
     borderRadius: 30,
     overflow: "hidden",
-    borderWidth: 2,
+    borderWidth: 0,
     borderColor: "#555",
   },
   voteProgressFill: {
@@ -3017,5 +3087,12 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: -6, // Center vertically on the 4px track
     marginLeft: -8, // Center horizontally on the position
+  },
+  mobilePlayPrompt: {
+    color: "white",
+    fontSize: 12,
+    marginTop: 10,
+    textAlign: "center",
+    opacity: 0.8,
   },
 });
