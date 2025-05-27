@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, Pressable, Image, Alert, ScrollView } from "react-native";
+import { View, Text, Pressable, Image, Alert } from "react-native";
 import { votingStyles } from "../assets/styles/votingStyles";
 import LeaderboardScreen from "./LeaderboardScreen";
 
@@ -21,8 +21,6 @@ const VotingStage = ({
   playerPoints,
   allVotesCast,
   socket,
-  currentUserId,
-  currentUsername,
 }) => {
   const [voteLocked, setVoteLocked] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
@@ -427,17 +425,18 @@ const VotingStage = ({
       [selectedPlayer]: [...(prev[selectedPlayer] || []), newVote],
     }));
 
-    // Use direct props for voter identity
-    const voterId = currentUserId || socket?.id; // Fallback to socket.id if currentUserId is not yet available
-    const voterName = currentUsername || players.find(p => p.id === voterId)?.username || "Unknown Player";
+    // Find the current player (the one casting the vote)
+    // Use the socket ID to find our player in the players array
+    const currentPlayer = players.find((p) => p && p.id === socket?.id);
+    const currentUsername = currentPlayer?.username || "Unknown Player";
 
     // Update points for the current player if they made a correct guess
     if (isCorrectGuess) {
       console.log(
-        `Round ${currentRound}: ${voterName} made a correct guess and earned a point!`
+        `Round ${currentRound}: ${currentUsername} made a correct guess and earned a point!`
       );
       console.log(
-        `Current player ID: ${voterId}, socket ID: ${socket?.id}`
+        `Current player ID: ${currentPlayer?.id}, socket ID: ${socket?.id}`
       );
       console.log(
         `Correct player: ${currentSong?.assignedToPlayer?.username}, ID: ${currentSong?.assignedToPlayer?.id}`
@@ -462,16 +461,16 @@ const VotingStage = ({
           const votePayload = {
             votedForPlayerId: selectedPlayerObj?.id,
             votedForUsername: selectedPlayer,
-            voterUsername: voterName, // Use voterName from props/fallback
-            voterSocketId: voterId, // Use voterId from props/fallback
-            voterPlayerId: voterId, // Use voterId for playerId as well
+            voterUsername: currentUsername,
+            voterSocketId: socket?.id,
+            voterPlayerId: currentPlayer?.id,
             currentRound: currentRound, // Include round information
           };
 
           // Log player relationships for debugging
           console.log(`Round ${currentRound}: Vote relationships check:`);
           console.log(
-            `- I am ${voterName} (ID: ${voterId}, socket: ${socket?.id})` // Log consistently
+            `- I am ${currentUsername} (ID: ${currentPlayer?.id}, socket: ${socket?.id})`
           );
           console.log(
             `- Voting for ${selectedPlayer} (ID: ${selectedPlayerObj?.id})`
@@ -558,110 +557,104 @@ const VotingStage = ({
   }
 
   return (
-    <ScrollView 
-      style={{ flex: 1 }}
-      contentContainerStyle={{ flexGrow: 1 }}
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={votingStyles.votingContainer}>
-        <Text style={votingStyles.votingInstructions}>
-          Who do you think listened to this song?
-        </Text>
+    <View style={votingStyles.votingContainer}>
+      <Text style={votingStyles.votingInstructions}>
+        Who do you think listened to this song?
+      </Text>
 
-        <View style={votingStyles.playersGrid}>
-          {players
-            .filter((player) => player !== undefined)
-            .map((player) => {
-              // Determine style based on selection and result
-              const isSelected = selectedPlayer === player.username;
-              const isCorrect =
-                currentSong?.assignedToPlayer?.username === player.username;
-              const wasVoted = isSelected && showVoteResult;
+      <View style={votingStyles.playersGrid}>
+        {players
+          .filter((player) => player !== undefined)
+          .map((player) => {
+            // Determine style based on selection and result
+            const isSelected = selectedPlayer === player.username;
+            const isCorrect =
+              currentSong?.assignedToPlayer?.username === player.username;
+            const wasVoted = isSelected && showVoteResult;
 
-              // Determine the button style for dynamic feedback
-              let buttonStyle = votingStyles.playerVoteButton;
-              if (showVoteResult) {
-                if (wasVoted) {
-                  if (isCorrect) {
-                    buttonStyle = [
-                      votingStyles.playerVoteButton,
-                      votingStyles.correctVoteButton,
-                    ];
-                  } else {
-                    buttonStyle = [
-                      votingStyles.playerVoteButton,
-                      votingStyles.incorrectVoteButton,
-                    ];
-                  }
-                } else if (isCorrect) {
-                  // Show correct answer even if not selected
+            // Determine the button style for dynamic feedback
+            let buttonStyle = votingStyles.playerVoteButton;
+            if (showVoteResult) {
+              if (wasVoted) {
+                if (isCorrect) {
                   buttonStyle = [
                     votingStyles.playerVoteButton,
                     votingStyles.correctVoteButton,
                   ];
+                } else {
+                  buttonStyle = [
+                    votingStyles.playerVoteButton,
+                    votingStyles.incorrectVoteButton,
+                  ];
                 }
-              } else if (isSelected) {
+              } else if (isCorrect) {
+                // Show correct answer even if not selected
                 buttonStyle = [
                   votingStyles.playerVoteButton,
-                  { borderColor: "#6C3EB6", borderWidth: 3 },
+                  votingStyles.correctVoteButton,
                 ];
               }
+            } else if (isSelected) {
+              buttonStyle = [
+                votingStyles.playerVoteButton,
+                { borderColor: "#6C3EB6", borderWidth: 3 },
+              ];
+            }
 
-              return (
-                <Pressable
-                  key={
-                    player.id ||
-                    `player-${player.username || Math.random().toString()}`
-                  }
-                  style={buttonStyle}
-                  onPress={() => {
-                    if (voteLocked || showVoteResult) return;
-                    setSelectedPlayer(player.username);
-                  }}
-                >
-                  <View style={votingStyles.profileImageContainer}>
-                    <View style={votingStyles.profileBackground}>
-                      <Image
-                        source={getProfileImage(player)}
-                        style={votingStyles.profileImage}
-                      />
-                    </View>
+            return (
+              <Pressable
+                key={
+                  player.id ||
+                  `player-${player.username || Math.random().toString()}`
+                }
+                style={buttonStyle}
+                onPress={() => {
+                  if (voteLocked || showVoteResult) return;
+                  setSelectedPlayer(player.username);
+                }}
+              >
+                <View style={votingStyles.profileImageContainer}>
+                  <View style={votingStyles.profileBackground}>
+                    <Image
+                      source={getProfileImage(player)}
+                      style={votingStyles.profileImage}
+                    />
                   </View>
-                  <Text style={votingStyles.playerVoteName}>
-                    {getDisplayName(player)}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          {/* Overlay when vote is locked but results not shown 
-              Show whenever the player has voted (voteLocked) and we're not showing results yet */}
-          {voteLocked && !showVoteResult && (
-            <View style={votingStyles.voteLockedOverlay} accessible={true} accessibilityLabel="Vote is locked, waiting for other players">
-              <View style={votingStyles.lockedMessageContainer}>
-                <Text style={votingStyles.lockIcon}>🔒</Text>
-                <Text style={votingStyles.lockedMessage}>
-                  Your vote{"\n"}is locked!
+                </View>
+                <Text style={votingStyles.playerVoteName}>
+                  {getDisplayName(player)}
                 </Text>
-              </View>
-            </View>
-          )}
-        </View>
-        {/* Submit button, only show if vote not locked and a player is selected */}
-        {!voteLocked && !showVoteResult && selectedPlayer && (
-          <Pressable style={votingStyles.submitButton} onPress={handleSubmitVote}>
-            <Text style={votingStyles.submitButtonText}>Submit</Text>
-          </Pressable>
-        )}
-        {/* Waiting banner at the bottom */}
+              </Pressable>
+            );
+          })}
+        {/* Overlay when vote is locked but results not shown 
+            Show whenever the player has voted (voteLocked) and we're not showing results yet */}
         {voteLocked && !showVoteResult && (
-          <View style={votingStyles.waitingBanner}>
-            <Text style={votingStyles.waitingBannerText}>
-              {allVotesCast ? "Results coming..." : "Waiting for all votes…"}
-            </Text>
+          <View style={votingStyles.voteLockedOverlay}>
+            <View style={votingStyles.lockedMessageContainer}>
+              <Text style={votingStyles.lockIcon}>🔒</Text>
+              <Text style={votingStyles.lockedMessage}>
+                Your vote{"\n"}is locked!
+              </Text>
+            </View>
           </View>
         )}
       </View>
-    </ScrollView>
+      {/* Submit button, only show if vote not locked and a player is selected */}
+      {!voteLocked && !showVoteResult && selectedPlayer && (
+        <Pressable style={votingStyles.submitButton} onPress={handleSubmitVote}>
+          <Text style={votingStyles.submitButtonText}>Submit</Text>
+        </Pressable>
+      )}
+      {/* Waiting banner at the bottom */}
+      {voteLocked && !showVoteResult && (
+        <View style={votingStyles.waitingBanner}>
+          <Text style={votingStyles.waitingBannerText}>
+            {allVotesCast ? "Results coming..." : "Waiting for all votes…"}
+          </Text>
+        </View>
+      )}
+    </View>
   );
 };
 

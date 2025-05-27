@@ -25,7 +25,7 @@ import {
   getMyRecentlyPlayedTracks,
   getSpotifyUserProfile,
 } from "../utils/apiOptions";
-import useSpotifyAuth from "../utils/SpotifyAuthContext";
+import useSpotifyAuth from "../utils/useSpotifyAuth";
 
 const windowWidth = Dimensions.get("window").width;
 const windowHeight = Dimensions.get("window").height;
@@ -52,12 +52,13 @@ export default function MultiplayerGame() {
     token: spotifyToken,
     getValidToken: getSpotifyToken,
     isTokenValid: isSpotifyTokenValid,
-    isInitialized: isSpotifyInitialized,
   } = useSpotifyAuth();
 
   // Game state
   const [connectionStep, setConnectionStep] = useState("initial"); // initial, connecting, host, join, lobby, game
-  const [serverUrl, setServerUrl] = useState("https://synth-69a11b47cbf3.herokuapp.com");
+  const [serverUrl, setServerUrl] = useState(
+    "https://synth-69a11b47cbf3.herokuapp.com"
+  );
   const [username, setUsername] = useState("");
   const [gameName, setGameName] = useState("");
   const [gameId, setGameId] = useState("");
@@ -430,193 +431,127 @@ export default function MultiplayerGame() {
     try {
       setLoading(true);
       console.log("Fetching recent tracks for multiplayer game...");
-      
-      // Wait for Spotify hook to be initialized
-      if (!isSpotifyInitialized) {
-        console.log("⏳ Waiting for Spotify hook to initialize...");
-        // Wait a bit and try again
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        if (!isSpotifyInitialized) {
-          console.log("❌ Spotify hook not initialized after waiting");
-          return await getFallbackTracks();
-        }
-      }
-      
-      // Give additional time for AsyncStorage to load after initialization
-      console.log("⏳ Giving extra time for AsyncStorage to load...");
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // Check if token is loaded, if not wait a bit more
-      if (!spotifyToken) {
-        console.log("⏳ No token in hook state yet, waiting longer...");
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        // Check AsyncStorage directly to see if token exists but isn't loaded into hook
-        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-        const storedToken = await AsyncStorage.getItem('spotify_access_token');
-        const storedExpiration = await AsyncStorage.getItem('spotify_token_expiration');
-        
-        if (storedToken && storedExpiration && !spotifyToken) {
-          console.log("🚨 FOUND TOKEN SYNC ISSUE: Token exists in AsyncStorage but not in hook state!");
-          console.log("This suggests a hook state synchronization problem");
-          
-          // Check if the stored token is still valid
-          const expirationTime = parseInt(storedExpiration);
-          if (expirationTime > Date.now() + 30000) {
-            console.log("✅ Using token directly from AsyncStorage as fallback");
-            // Use the stored token directly since hook state is out of sync
-            return await fetchTracksWithToken(storedToken);
-          } else {
-            console.log("❌ Stored token is expired, cannot use as fallback");
-          }
-        }
-      }
 
-      // Get valid token using our hook, but be more careful about clearing tokens
+      // Get valid token using our hook
       let token = null;
       try {
-        console.log("=== PRE-TOKEN VALIDATION DEBUG ===");
-        console.log("Hook state - spotifyToken:", !!spotifyToken);
-        console.log("Hook state - spotifyToken length:", spotifyToken ? spotifyToken.length : 0);
-        console.log("About to call isSpotifyTokenValid()...");
-        
-        // First try to use the token from our hook if it appears valid
-        if (spotifyToken && isSpotifyTokenValid()) {
+        // First try to use the token from our hook
+        if (isSpotifyTokenValid()) {
           token = spotifyToken;
-          console.log("✅ Using valid token from Spotify hook");
-        } else if (spotifyToken) {
-          // Token exists but appears invalid - try a single refresh attempt
-          console.log("⚠️ Token exists but appears invalid, attempting ONE refresh...");
-          try {
-            token = await getSpotifyToken();
-            if (token) {
-              console.log("✅ Token refresh successful");
-            } else {
-              console.log("❌ Token refresh failed, will use fallback");
-            }
-          } catch (refreshError) {
-            console.error("❌ Token refresh error:", refreshError);
-            console.log("Will use fallback tracks instead of clearing tokens");
-            token = null;
-          }
+          console.log("Using token from Spotify hook");
         } else {
-          console.log("❌ No token available in hook state");
+          // Try to get a fresh token
+          token = await getSpotifyToken();
+          console.log("Got fresh token from Spotify hook");
         }
-        
-        console.log("Final token check:", {
-          hasToken: !!token,
-          tokenLength: token ? token.length : 0,
-          willUseFallback: !token
-        });
-        
       } catch (tokenError) {
         console.error("Error getting Spotify token:", tokenError);
-        token = null;
       }
 
-      // If we have a token, try to fetch tracks
+      // If we have a token, use it
+      let tracksToProcess = [];
+
       if (token) {
-        return await fetchTracksWithToken(token);
+        try {
+          console.log("Using token to fetch recently played tracks");
+          const tracks = await getMyRecentlyPlayedTracks(token);
+
+          if (tracks && tracks.length > 0) {
+            // Convert to the format expected by the multiplayer game
+            tracksToProcess = tracks.slice(0, 5).map((track) => ({
+              songTitle: track.songTitle,
+              songArtists: track.songArtists.map(
+                (artist) => artist.name || artist
+              ),
+              albumName: track.albumName,
+              imageUrl: track.imageUrl,
+              previewUrl: track.previewUrl,
+              uri: track.uri,
+              trackId: track.id,
+              externalUrl: track.externalUrl,
+              duration: track.duration,
+            }));
+
+            console.log(
+              `Found ${tracksToProcess.length} valid tracks for multiplayer`
+            );
+          }
+        } catch (apiError) {
+          console.error("Error calling Spotify API:", apiError);
+        }
       } else {
-        console.log("No valid Spotify token available, using fallback");
-        return await getFallbackTracks();
+        console.log("No valid Spotify token available");
       }
 
+      // If we didn't get any tracks from Spotify, use mock tracks
+      if (!tracksToProcess.length) {
+        console.log("Using mock tracks for multiplayer");
+        tracksToProcess = [];
+        for (let i = 1; i <= 5; i++) {
+          tracksToProcess.push({
+            songTitle: `Test Song ${i}`,
+            songArtists: ["Test Artist"],
+            albumName: "Test Album",
+            imageUrl: "https://via.placeholder.com/300",
+            previewUrl: null, // Set to null to force Deezer enrichment
+            uri: `spotify:track:mock${i}`,
+            trackId: `mock${i}`,
+            duration: 30000,
+          });
+        }
+      }
+
+      // IMPORTANT: Always enrich tracks with Deezer preview URLs
+      console.log(
+        "Enriching all tracks with Deezer preview URLs before sending to server"
+      );
+
+      try {
+        // Import the enrichTracksWithDeezerPreviews function
+        const {
+          enrichTracksWithDeezerPreviews,
+        } = require("../utils/deezerApi");
+
+        // Enrich all tracks with Deezer, even if they already have preview URLs
+        const enrichedTracks = await enrichTracksWithDeezerPreviews(
+          tracksToProcess
+        );
+
+        // Log the enrichment results
+        const tracksWithPreviewUrls = enrichedTracks.filter(
+          (track) => !!track.previewUrl
+        ).length;
+        console.log(
+          `After Deezer enrichment: ${tracksWithPreviewUrls}/${enrichedTracks.length} tracks have preview URLs`
+        );
+
+        return enrichedTracks;
+      } catch (deezerError) {
+        console.error("Error enriching tracks with Deezer:", deezerError);
+        // Continue with original tracks if enrichment fails
+        return tracksToProcess;
+      }
     } catch (error) {
       console.error("Error fetching recent tracks:", error);
       setError(`Could not fetch your tracks: ${error.message}`);
-      return await getFallbackTracks();
+
+      // Return mock tracks on failure
+      return Array(5)
+        .fill()
+        .map((_, i) => ({
+          songTitle: `Backup Song ${i + 1}`,
+          songArtists: ["Backup Artist"],
+          albumName: "Backup Album",
+          imageUrl: "https://via.placeholder.com/300",
+          previewUrl: "https://p.scdn.co/mp3-preview/your-preview-url",
+          uri: `spotify:track:backup${i}`,
+          trackId: `backup${i}`,
+          duration: 30000,
+        }));
     } finally {
       setLoading(false);
     }
-  }, [isSpotifyTokenValid, spotifyToken, getSpotifyToken, isSpotifyInitialized]);
-
-  // Helper function to fetch tracks with a given token
-  const fetchTracksWithToken = async (token) => {
-    try {
-      console.log("📀 Fetching tracks using provided token");
-      const tracks = await getMyRecentlyPlayedTracks(token);
-
-      if (tracks && tracks.length > 0) {
-        // Convert to the format expected by the multiplayer game
-        const tracksToProcess = tracks.slice(0, 5).map((track) => ({
-          songTitle: track.songTitle,
-          songArtists: track.songArtists.map(
-            (artist) => artist.name || artist
-          ),
-          albumName: track.albumName,
-          imageUrl: track.imageUrl,
-          previewUrl: track.previewUrl,
-          uri: track.uri,
-          trackId: track.id,
-          externalUrl: track.externalUrl,
-          duration: track.duration,
-        }));
-
-        console.log(`✅ Found ${tracksToProcess.length} valid tracks from Spotify`);
-        
-        // Enrich with Deezer preview URLs
-        return await enrichTracksWithDeezer(tracksToProcess);
-      } else {
-        console.log("❌ Spotify API returned empty or invalid tracks");
-        return await getFallbackTracks();
-      }
-    } catch (apiError) {
-      console.error("Error calling Spotify API:", apiError);
-      
-      // Don't clear tokens for API errors - just fallback
-      if (apiError?.response?.status === 401) {
-        console.log("⚠️ 401 error from Spotify API - using fallback instead of clearing tokens");
-      }
-      
-      return await getFallbackTracks();
-    }
-  };
-
-  // Helper function to get fallback tracks (mock data that exists in Deezer)
-  const getFallbackTracks = async () => {
-    console.log("🚫 FALLBACK TRACKS DISABLED - No mock tracks will be provided");
-    console.log("⚠️ User must provide real Spotify tracks or the game cannot proceed");
-    
-    // Return empty array instead of mock tracks
-    return [];
-  };
-
-  // Helper function to enrich tracks with Deezer preview URLs
-  const enrichTracksWithDeezer = async (tracksToProcess) => {
-    console.log("🎧 Enriching all tracks with Deezer preview URLs before sending to server");
-
-    try {
-      // Import the enrichTracksWithDeezerPreviews function
-      const { enrichTracksWithDeezerPreviews } = require("../utils/deezerApi");
-
-      // Enrich all tracks with Deezer, even if they already have preview URLs
-      const enrichedTracks = await enrichTracksWithDeezerPreviews(tracksToProcess);
-
-      // Log the enrichment results
-      const tracksWithPreviewUrls = enrichedTracks.filter(
-        (track) => !!track.previewUrl
-      ).length;
-      
-      // Count mock tracks
-      const mockTracks = enrichedTracks.filter((track) => !!track.isMockTrack).length;
-      
-      console.log(
-        `After Deezer enrichment: ${tracksWithPreviewUrls}/${enrichedTracks.length} tracks have preview URLs`
-      );
-      
-      if (mockTracks > 0) {
-        console.log(`⚠️ WARNING: ${mockTracks}/${enrichedTracks.length} tracks are mock Deezer tracks`);
-        console.log("Mock tracks being sent to server - these should be handled properly by server logic");
-      }
-
-      return enrichedTracks;
-    } catch (deezerError) {
-      console.error("Error enriching tracks with Deezer:", deezerError);
-      // Continue with original tracks if enrichment fails
-      return tracksToProcess;
-    }
-  };
+  }, [isSpotifyTokenValid, spotifyToken, getSpotifyToken]);
 
   // Create a new game
   const handleCreateGame = useCallback(async () => {
@@ -871,11 +806,9 @@ export default function MultiplayerGame() {
         transparent={true}
         animationType="fade"
         onRequestClose={() => setShowServerInput(false)}
-        accessibilityViewIsModal={true}
-        statusBarTranslucent={true}
       >
-        <View style={styles.modalOverlay} accessible={false}>
-          <View style={styles.modalContent} accessible={true} accessibilityRole="dialog" accessibilityLabel="Server Configuration">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Server Configuration</Text>
 
             <Text style={styles.inputLabel}>Server URL</Text>
@@ -887,8 +820,6 @@ export default function MultiplayerGame() {
               placeholderTextColor="#888"
               autoCapitalize="none"
               autoCorrect={false}
-              accessible={true}
-              accessibilityLabel="Server URL input"
             />
 
             <Text style={styles.modalHelpText}>
@@ -900,9 +831,6 @@ export default function MultiplayerGame() {
               <Pressable
                 style={styles.modalCancelButton}
                 onPress={() => setShowServerInput(false)}
-                accessible={true}
-                accessibilityRole="button"
-                accessibilityLabel="Cancel server configuration"
               >
                 <Text style={styles.modalCancelButtonText}>Cancel</Text>
               </Pressable>
@@ -913,9 +841,6 @@ export default function MultiplayerGame() {
                   setShowServerInput(false);
                   handleConnect();
                 }}
-                accessible={true}
-                accessibilityRole="button"
-                accessibilityLabel="Save configuration and connect"
               >
                 <Text style={styles.modalSaveButtonText}>Save & Connect</Text>
               </Pressable>
@@ -1094,17 +1019,15 @@ export default function MultiplayerGame() {
           transparent={true}
           animationType="fade"
           onRequestClose={() => setShowQrCode(false)}
-          accessibilityViewIsModal={true}
-          statusBarTranslucent={true}
         >
-          <View style={styles.modalOverlay} accessible={false}>
-            <View style={styles.qrModalContent} accessible={true} accessibilityRole="dialog" accessibilityLabel="QR Code for joining game">
+          <View style={styles.modalOverlay}>
+            <View style={styles.qrModalContent}>
               <Text style={styles.modalTitle}>Join Game</Text>
               <Text style={styles.qrInstructions}>
                 Scan this code with another device to join
               </Text>
 
-              <View style={styles.qrCodeContainer} accessible={true} accessibilityLabel={`QR code for joining game ${gameId}`}>
+              <View style={styles.qrCodeContainer}>
                 <QRCode
                   value={joinUrl}
                   size={200}
@@ -1125,9 +1048,6 @@ export default function MultiplayerGame() {
               <Pressable
                 style={styles.modalCloseButton}
                 onPress={() => setShowQrCode(false)}
-                accessible={true}
-                accessibilityRole="button"
-                accessibilityLabel="Close QR code modal"
               >
                 <Text style={styles.modalCloseButtonText}>Close</Text>
               </Pressable>
@@ -1262,9 +1182,9 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     justifyContent: "space-between",
     backgroundColor: "#8E44AD",
-    paddingVertical: 5,
+    paddingVertical: 10,
     paddingHorizontal: 16,
-    height: 80,
+    height: 100,
     shadowColor: "#000000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.6,
@@ -1284,7 +1204,7 @@ const styles = StyleSheet.create({
     right: 0,
     alignItems: "center",
     justifyContent: "center",
-    paddingBottom: 10,
+    paddingBottom: 15,
   },
   headerTitle: {
     color: "white",

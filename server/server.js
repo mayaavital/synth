@@ -22,79 +22,29 @@ var db = admin.database();
 
 // Initialize Express and HTTP server
 const app = express();
-
-// Configure CORS to specifically allow the Vercel domain
-const allowedOrigins = [
-  "https://synth-ten-hazel.vercel.app", // Your Vercel domain
-  "http://127.0.0.1:8081", // Local development
-  "http://localhost:8082", // Local development alternate port
-  "http://localhost:3000", // Local development
-  "http://10.27.144.69:8082", // Local network development
-  "http://10.32.168.74:8081", // Local network development
-];
-
 app.use(
   cors({
-    origin: function (origin, callback) {
-      // Allow requests with no origin (like mobile apps or curl requests)
-      if (!origin) return callback(null, true);
-      
-      // Check if the origin is in our allowed origins
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-      
-      // For development, also allow any localhost origin
-      if (origin && origin.includes('localhost')) {
-        return callback(null, true);
-      }
-      
-      console.log(`CORS blocked origin: ${origin}`);
-      return callback(new Error('Not allowed by CORS'));
-    },
+    origin: "*",
     methods: ["GET", "POST", "OPTIONS"],
-    credentials: false,
-    allowedHeaders: ["Content-Type", "Authorization", "Accept"],
-    optionsSuccessStatus: 200
+    credentials: true,
   })
 );
-
-// Add explicit preflight handling
-app.options('*', cors());
-
 const server = http.createServer(app);
 
-// Initialize Socket.io with updated CORS configuration
+// Initialize Socket.io with more detailed configuration
 const io = new Server(server, {
   cors: {
-    origin: function (origin, callback) {
-      // Allow requests with no origin (like mobile apps)
-      if (!origin) return callback(null, true);
-      
-      // Check if the origin is in our allowed origins
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-      
-      // For development, also allow any localhost origin
-      if (origin && origin.includes('localhost')) {
-        return callback(null, true);
-      }
-      
-      console.log(`Socket.io CORS blocked origin: ${origin}`);
-      return callback(new Error('Not allowed by CORS'));
-    },
+    origin: "*", // Allow connections from any origin
     methods: ["GET", "POST", "OPTIONS"],
-    credentials: false,
-    allowedHeaders: ["Content-Type", "Authorization", "Accept"],
+    credentials: true,
+    allowedHeaders: ["Content-Type", "Authorization"],
   },
-  allowEIO3: true,
-  maxHttpBufferSize: 1e8,
-  transports: ["polling", "websocket"],
-  pingInterval: 25000,
-  pingTimeout: 60000,
-  cookie: false,
-  connectTimeout: 20000,
+  maxHttpBufferSize: 1e8, // Increase buffer size for larger payloads (100 MB) - fixes serialization issues
+  transports: ["websocket", "polling"], // Support both WebSocket and long-polling
+  pingInterval: 10000, // Ping every 10 seconds
+  pingTimeout: 5000, // Consider connection closed if no response after 5 seconds
+  cookie: false, // Don't use cookies for session tracking
+  connectTimeout: 15000, // Allow more time for initial connection (15 seconds)
 });
 
 // Store active games
@@ -547,13 +497,10 @@ io.on("connection", (socket) => {
             const round1TraceId = `ROUND_${gameId}_1_${Date.now()}`;
             activeGames[gameId].currentRoundTraceId = round1TraceId;
 
-            // Get a random song from the playlist for round 1 (instead of always using first)
-            const randomIndex = Math.floor(Math.random() * activeGames[gameId].consolidatedPlaylist.length);
-            const firstSong = activeGames[gameId].consolidatedPlaylist[randomIndex].track;
+            // Get the first song from the playlist
+            const firstSong = activeGames[gameId].consolidatedPlaylist[0].track;
             const firstSongOwner =
-              activeGames[gameId].consolidatedPlaylist[randomIndex].owner;
-
-            console.log(`[TRACK_SYNC] Selected random song for round 1: "${firstSong.songTitle}" (index ${randomIndex}/${activeGames[gameId].consolidatedPlaylist.length})`);
+              activeGames[gameId].consolidatedPlaylist[0].owner;
 
             // Create the song with trace ID
             const songWithTraceId = {
@@ -580,7 +527,7 @@ io.on("connection", (socket) => {
               roundTraceId: round1TraceId,
               // Add username mappings to ensure clients can match socket IDs to usernames
               playerMappings: gameUsernameMappings[gameId] || {},
-              maxRounds: activeGames[gameId].maxRounds, // Include maxRounds in every round_started event
+              maxRounds: game.maxRounds, // Include maxRounds in every round_started event
             });
 
             console.log(`[TRACK_SYNC] Round 1 auto-started for game ${gameId}`);
@@ -663,13 +610,9 @@ io.on("connection", (socket) => {
       const round1TraceId = `ROUND_${gameId}_1_${Date.now()}`;
       activeGames[gameId].currentRoundTraceId = round1TraceId;
 
-      // Get a random song from the playlist for round 1 (instead of always using first)
-      const randomIndex = Math.floor(Math.random() * activeGames[gameId].consolidatedPlaylist.length);
-      const firstSong = activeGames[gameId].consolidatedPlaylist[randomIndex].track;
-      const firstSongOwner =
-        activeGames[gameId].consolidatedPlaylist[randomIndex].owner;
-
-      console.log(`[TRACK_SYNC] Selected random song for round 1: "${firstSong.songTitle}" (index ${randomIndex}/${activeGames[gameId].consolidatedPlaylist.length})`);
+      // Get the first song from the playlist
+      const firstSong = activeGames[gameId].consolidatedPlaylist[0].track;
+      const firstSongOwner = activeGames[gameId].consolidatedPlaylist[0].owner;
 
       // Create the song with trace ID
       const songWithTraceId = {
@@ -696,7 +639,7 @@ io.on("connection", (socket) => {
         roundTraceId: round1TraceId,
         // Add username mappings to ensure clients can match socket IDs to usernames
         playerMappings: gameUsernameMappings[gameId] || {},
-        maxRounds: activeGames[gameId].maxRounds, // Include maxRounds in every round_started event
+        maxRounds: game.maxRounds, // Include maxRounds in every round_started event
       });
 
       console.log(`[TRACK_SYNC] Round 1 auto-started for game ${gameId}`);
@@ -828,14 +771,10 @@ io.on("connection", (socket) => {
     // Check if we have player tracks
     if (!game.playerTracks || Object.keys(game.playerTracks).length === 0) {
       console.warn(
-        `[TRACK_SYNC] WARNING: Game ${gameId} has no player tracks - Mock tracks disabled`
+        `[TRACK_SYNC] WARNING: Game ${gameId} has no player tracks, using fallback tracks only`
       );
-      console.error(`[TRACK_SYNC] ERROR: Cannot proceed without real player tracks`);
-      
-      // Emit error to all players instead of using mock tracks
-      io.to(gameId).emit("error", { 
-        message: "No player tracks available. Please ensure all players have shared their Spotify tracks before starting the game." 
-      });
+      addMockTracksToGame(game);
+      sharePlaylistWithClients(gameId);
       return;
     }
 
@@ -890,28 +829,13 @@ io.on("connection", (socket) => {
           return;
         }
 
-        // IMPORTANT: Filter out known mock tracks by title
-        if (isMockTrackByTitle(track.songTitle)) {
-          console.log(`[TRACK_SYNC] ❌ BLOCKING MOCK TRACK: "${track.songTitle}" - this track is on the mock track blacklist`);
-          return;
-        }
-
-        // Check if this is a client-side mock track from Deezer enrichment
-        const isClientMockTrack = track.isMockTrack === true;
-        
-        if (isClientMockTrack) {
-          console.log(`[TRACK_SYNC] ❌ BLOCKING CLIENT MOCK TRACK: "${track.songTitle}" - marked as mock by client`);
-          return;
-        }
-
         // Check for preview URL
         const hasPreviewUrl =
           track.previewUrl && typeof track.previewUrl === "string";
-        
         console.log(
-          `[TRACK_SYNC] ✅ ACCEPTING REAL TRACK: "${track.songTitle}" - ${
-            hasPreviewUrl ? "with preview URL" : "without preview URL"
-          }`
+          `[TRACK_SYNC] Track "${track.songTitle}" has ${
+            hasPreviewUrl ? "VALID" : "NO"
+          } preview URL, but keeping it anyway`
         );
 
         // Normalize track format
@@ -928,9 +852,7 @@ io.on("connection", (socket) => {
           duration: track.duration || 30000,
           externalUrl: track.externalUrl || null,
           uri: track.uri || null,
-          // IMPORTANT: Check if this track was marked as mock during Deezer enrichment
-          isMockTrack: track.isMockTrack || false, // Preserve mock flag from client
-          isRealTrack: !track.isMockTrack, // Set opposite for backwards compatibility
+          isRealTrack: true, // Flag to distinguish from mock tracks
         };
 
         // Add to consolidated playlist with player info
@@ -970,20 +892,22 @@ io.on("connection", (socket) => {
       `[TRACK_SYNC] Shuffling ${game.consolidatedPlaylist.length} tracks for rounds`
     );
 
-    // Check if we need to add mock tracks - DISABLED TO PREVENT MOCK TRACKS
+    // Check if we need to add mock tracks
     if (tracksWithPreviewUrls === 0) {
       console.log(
-        `[TRACK_SYNC] ⚠️ NO TRACKS HAVE PREVIEW URLs - Mock tracks disabled, game will use tracks without preview URLs`
+        `[TRACK_SYNC] No tracks have preview URLs, using fallback tracks`
       );
-      console.log(`[TRACK_SYNC] Game will proceed with ${validTracksCount} tracks (no audio preview available)`);
-      // Do not add mock tracks - let the game proceed with tracks that don't have preview URLs
+      addMockTracksToGame(game);
     } else if (game.consolidatedPlaylist.length < game.players.length * 2) {
       // If we don't have enough tracks for each player to have at least 2
       console.log(
-        `[TRACK_SYNC] Not enough tracks (${game.consolidatedPlaylist.length}) for ${game.players.length} players`
+        `[TRACK_SYNC] Not enough tracks (${game.consolidatedPlaylist.length}) for ${game.players.length} players, adding some mock tracks`
       );
-      console.log(`[TRACK_SYNC] Mock tracks disabled - game will proceed with available ${game.consolidatedPlaylist.length} real tracks`);
-      // Do not add mock tracks - let the game proceed with fewer tracks
+
+      // Add just enough mock tracks to supplement
+      const tracksToAdd =
+        game.players.length * 2 - game.consolidatedPlaylist.length;
+      addMockTracksToGame(game, tracksToAdd);
     }
 
     // Finalize the number of rounds based on available tracks
@@ -1030,129 +954,148 @@ io.on("connection", (socket) => {
             : "Missing"
         }`
       );
-      
-      // Log additional details for mock tracks
-      if (item.track.isMockTrack) {
-        console.log(`[TRACK_SYNC]       ⚠️ This is a mock track (likely from Deezer fallback)`);
-      }
     });
-    
-    // Summary statistics
-    const realTracks = game.consolidatedPlaylist.filter((item) => !item.track.isMockTrack);
-    const clientMockTracks = game.consolidatedPlaylist.filter((item) => item.track.isMockTrack);
-    
-    console.log(`[TRACK_SYNC] SUMMARY: ${realTracks.length} real tracks, ${clientMockTracks.length} client-side mock tracks`);
-    
-    if (clientMockTracks.length > 0) {
-      console.log(`[TRACK_SYNC] ⚠️ WARNING: Game contains ${clientMockTracks.length} mock tracks from Deezer fallback`);
-      console.log(`[TRACK_SYNC] These tracks will be properly handled by selectRandomSongForRound logic`);
-    }
 
     // Share the consolidated playlist with clients
     sharePlaylistWithClients(gameId);
   }
 
-  // MOCK TRACKS COMPLETELY DISABLED - addMockTracksToGame function removed
-  // This ensures no mock tracks can ever be added to games
+  function addMockTracksToGame(game, tracksToAdd = null) {
+    const mockTracks = [
+      {
+        songTitle: "Bohemian Rhapsody",
+        songArtists: ["Queen"],
+        albumName: "A Night at the Opera",
+        imageUrl:
+          "https://i.scdn.co/image/ab67616d0000b2739f39192f4f0fae773d3f8a95",
+        previewUrl:
+          "https://p.scdn.co/mp3-preview/1f3bd078c7ad27b427fa210f6efd957fc5eecea0",
+        duration: 354000,
+        isMockTrack: true,
+      },
+      {
+        songTitle: "Don't Stop Believin'",
+        songArtists: ["Journey"],
+        albumName: "Escape",
+        imageUrl:
+          "https://i.scdn.co/image/ab67616d0000b273c5653f9038e42efad2f8def2",
+        previewUrl:
+          "https://p.scdn.co/mp3-preview/21b9abd3cd2eea634e17a917196fdd5ba2e82670",
+        duration: 251000,
+        isMockTrack: true,
+      },
+      {
+        songTitle: "Billie Jean",
+        songArtists: ["Michael Jackson"],
+        albumName: "Thriller",
+        imageUrl:
+          "https://i.scdn.co/image/ab67616d0000b2734121faee8df82c526cbab2be",
+        previewUrl:
+          "https://p.scdn.co/mp3-preview/f504e6b8e037771318656394f532dede4f9bcaea",
+        duration: 294000,
+        isMockTrack: true,
+      },
+      {
+        songTitle: "Sweet Child O' Mine",
+        songArtists: ["Guns N' Roses"],
+        albumName: "Appetite for Destruction",
+        imageUrl:
+          "https://i.scdn.co/image/ab67616d0000b273e44963b8bb127552ac0090e0",
+        previewUrl:
+          "https://p.scdn.co/mp3-preview/9af2ebe7ff34dbdbcb042fba67b81bcdd6f9dbe3",
+        duration: 356000,
+        isMockTrack: true,
+      },
+      {
+        songTitle: "I Want It That Way",
+        songArtists: ["Backstreet Boys"],
+        albumName: "Millennium",
+        imageUrl:
+          "https://i.scdn.co/image/ab67616d0000b27384c52f39de3a4e687424f622",
+        previewUrl:
+          "https://p.scdn.co/mp3-preview/c9a980c0a1e48b84795c2c28ab212a476d5dae43",
+        duration: 213000,
+        isMockTrack: true,
+      },
+    ];
 
-  // List of known mock track titles that should never be used
-  const KNOWN_MOCK_TRACK_TITLES = [
-    "Bohemian Rhapsody",
-    "Don't Stop Believin'", 
-    "Billie Jean",
-    "Sweet Child O' Mine",
-    "I Want It That Way",
-    "Blinding Lights",
-    "Shape of You",
-    "Hotel California"
-  ];
+    // If we already have real tracks, check how many mock tracks to add
+    if (tracksToAdd) {
+      console.log(
+        `[TRACK_SYNC] Adding ${tracksToAdd} mock tracks to supplement real tracks`
+      );
 
-  // Function to check if a track is a mock track by title
-  function isMockTrackByTitle(trackTitle) {
-    if (!trackTitle) return false;
-    return KNOWN_MOCK_TRACK_TITLES.some(mockTitle => 
-      trackTitle.toLowerCase().trim() === mockTitle.toLowerCase().trim()
-    );
-  }
+      const availableMockTracks = [...mockTracks].slice(0, tracksToAdd);
+      const players = game.players.slice(); // Create a copy so we can shuffle
+      shuffleArray(players);
 
-  // Helper function to get username by player ID/socket ID
-  function getUsernameById(gameId, playerId) {
-    const game = activeGames[gameId];
-    if (!game) return null;
+      // Assign mock tracks to players
+      for (let i = 0; i < availableMockTracks.length; i++) {
+        const playerIndex = i % players.length;
+        const player = players[playerIndex];
 
-    // First check the gameUsernameMappings (most reliable)
-    if (gameUsernameMappings[gameId]) {
-      for (const [username, socketId] of Object.entries(gameUsernameMappings[gameId])) {
-        if (socketId === playerId) {
-          return username;
+        game.consolidatedPlaylist.push({
+          track: availableMockTracks[i],
+          owner: {
+            id: player.id,
+            username: player.username,
+          },
+        });
+
+        console.log(
+          `[TRACK_SYNC] Added mock track "${availableMockTracks[i].songTitle}" assigned to ${player.username}`
+        );
+      }
+    } else {
+      // If we need only mock tracks, create a full playlist
+      const playerCount = game.players.length;
+      const tracksPerPlayer = Math.max(Math.ceil(3 / playerCount), 1); // At least 3 rounds total
+      const totalMockTracksNeeded = Math.min(
+        playerCount * tracksPerPlayer,
+        mockTracks.length
+      );
+
+      console.log(
+        `[TRACK_SYNC] Creating mock playlist with ${totalMockTracksNeeded} tracks for ${playerCount} players`
+      );
+
+      // Create a copy of players array so we can shuffle
+      const players = game.players.slice();
+
+      // Use Fisher-Yates shuffle
+      shuffleArray(players);
+
+      // Assign tracks to players for balanced gameplay
+      game.consolidatedPlaylist = [];
+
+      for (let i = 0; i < totalMockTracksNeeded; i++) {
+        const playerIndex = i % players.length;
+        const player = players[playerIndex];
+
+        if (i < mockTracks.length) {
+          game.consolidatedPlaylist.push({
+            track: mockTracks[i],
+            owner: {
+              id: player.id,
+              username: player.username,
+            },
+          });
+
+          console.log(
+            `[TRACK_SYNC] Added mock track "${mockTracks[i].songTitle}" assigned to ${player.username}`
+          );
         }
       }
+
+      // Respect the configured maxRounds
+      const configuredMaxRounds = game.maxRounds || 3;
+      game.maxRounds = Math.min(totalMockTracksNeeded, 5, configuredMaxRounds); // Limit mock games to 5 rounds or configured max
+      console.log(
+        `[TRACK_SYNC] Set max rounds to ${game.maxRounds} based on available mock tracks and configured max of ${configuredMaxRounds}`
+      );
     }
 
-    // Fallback to searching players list
-    const player = game.players.find((p) => p && p.id === playerId);
-    return player ? player.username : null;
-  }
-
-  // Helper function to get player ID by username
-  function getPlayerIdByUsername(gameId, username) {
-    const game = activeGames[gameId];
-    if (!game) return null;
-
-    // First check the gameUsernameMappings (most reliable)
-    if (gameUsernameMappings[gameId] && gameUsernameMappings[gameId][username]) {
-      return gameUsernameMappings[gameId][username];
-    }
-
-    // Fallback to searching players list
-    const player = game.players.find((p) => p && p.username === username);
-    return player ? player.id : null;
-  }
-
-  // Helper function to get comprehensive player mappings for client-side use
-  function getPlayerMappings(gameId) {
-    const game = activeGames[gameId];
-    if (!game) return {};
-
-    // Create comprehensive mappings for clients
-    const socketIdToUsername = {};
-    const playerIdToUsername = {};
-    const usernameToIds = {};
-
-    // Build mappings from gameUsernameMappings (most reliable)
-    if (gameUsernameMappings[gameId]) {
-      Object.entries(gameUsernameMappings[gameId]).forEach(([username, socketId]) => {
-        socketIdToUsername[socketId] = username;
-        playerIdToUsername[socketId] = username;
-        
-        if (!usernameToIds[username]) {
-          usernameToIds[username] = [];
-        }
-        usernameToIds[username].push(socketId);
-      });
-    }
-
-    // Also add from players list for redundancy
-    game.players.forEach((player) => {
-      if (player && player.id && player.username) {
-        socketIdToUsername[player.id] = player.username;
-        playerIdToUsername[player.id] = player.username;
-        
-        if (!usernameToIds[player.username]) {
-          usernameToIds[player.username] = [];
-        }
-        if (!usernameToIds[player.username].includes(player.id)) {
-          usernameToIds[player.username].push(player.id);
-        }
-      }
-    });
-
-    return {
-      socketIdToUsername,
-      playerIdToUsername,
-      usernameToIds,
-      playerMappings: gameUsernameMappings[gameId] || {} // Backward compatibility
-    };
+    return game.consolidatedPlaylist;
   }
 
   function sharePlaylistWithClients(gameId) {
@@ -1208,12 +1151,9 @@ io.on("connection", (socket) => {
       `[TRACK_SYNC] Playlist shared, game ready for play with ${game.maxRounds} rounds`
     );
 
-    // If this is a fresh game and no round has started yet, start round 1
-    if ((!game.currentRound || game.currentRound < 1) && !game.roundSongs[1]) {
-      console.log(`[TRACK_SYNC] Starting fresh round 1 from playlist sharing`);
+    // If this is a fresh game, start round 1
+    if (!game.currentRound || game.currentRound < 1) {
       selectRandomSongForRound(gameId, 1);
-    } else if (game.currentRound >= 1 && game.roundSongs[game.currentRound]) {
-      console.log(`[TRACK_SYNC] Round ${game.currentRound} already in progress, not selecting new song`);
     }
   }
 
@@ -1257,123 +1197,47 @@ io.on("connection", (socket) => {
       console.log(
         `[TRACK_SYNC] Using existing song selection for round ${roundNumber}`
       );
-      
-      // Handle both storage structures when reusing existing song
-      const existingRoundData = game.roundSongs[roundNumber];
-      const song = existingRoundData.song || existingRoundData; // Get the actual song data
-      
-      // Ensure the song has all required properties for startRoundWithSong
-      const songForRound = {
-        songTitle: song.songTitle || song.title || "Unknown Song",
-        songArtists: song.songArtists || song.artists || ["Unknown Artist"],
-        albumName: song.albumName || "Unknown Album", 
-        imageUrl: song.imageUrl || "https://via.placeholder.com/300",
-        previewUrl: song.previewUrl,
-        hasPreviewUrl: !!song.previewUrl,
-        externalUrl: song.externalUrl,
-        trackId: song.trackId || song.songTitle || song.title,
-        roundTraceId: song.roundTraceId || `REUSE_ROUND_${gameId}_${roundNumber}_${Date.now()}`,
-        assignedToPlayer: song.assignedToPlayer || existingRoundData.owner
-      };
-      
-      console.log(`[TRACK_SYNC] Reusing song: "${songForRound.songTitle}" for round ${roundNumber}`);
-      startRoundWithSong(gameId, roundNumber, songForRound);
+      startRoundWithSong(gameId, roundNumber, game.roundSongs[roundNumber]);
       return;
     }
 
     // 2. Try to select a new song by prioritizing real tracks over mock tracks
 
-    // Debug: Log current roundSongs structure
-    console.log(`[TRACK_SYNC] Current roundSongs structure:`, Object.keys(game.roundSongs || {}).map(roundNum => {
-      const roundData = game.roundSongs[roundNum];
-      const songData = roundData.song || roundData;
-      return {
-        round: roundNum,
-        songTitle: songData.songTitle || songData.title || 'Unknown',
-        trackId: songData.trackId || 'No ID',
-        hasNestedStructure: !!roundData.song
-      };
-    }));
-
     // Get all available tracks that haven't been used in previous rounds
-    const usedTrackIds = Object.values(game.roundSongs || {}).map((roundSongData) => {
-      // Handle both storage structures:
-      // 1. Flat structure: roundSongData has songTitle, trackId directly
-      // 2. Nested structure: roundSongData.song has songTitle, trackId
-      const songData = roundSongData.song || roundSongData;
-      return songData.trackId || songData.songTitle || songData.title;
-    }).filter(Boolean); // Remove any undefined/null values
-
-    // Log what we're filtering with
-    console.log(`[TRACK_SYNC] Total available tracks: ${game.consolidatedPlaylist.length}`);
-    console.log(`[TRACK_SYNC] Used track IDs from previous rounds: ${usedTrackIds.length}`);
-    console.log(`[TRACK_SYNC] Used tracks: ${usedTrackIds.join(', ')}`);
+    const usedTrackIds = Object.values(game.roundSongs || {}).map(
+      (song) => song.trackId || song.title
+    );
 
     // Filter available tracks: first real tracks, then fallback to mock if needed
     let availableTracks = game.consolidatedPlaylist.filter(
       (item) =>
         !usedTrackIds.includes(item.track.trackId) &&
         !usedTrackIds.includes(item.track.songTitle) &&
-        !item.track.isMockTrack && // Still exclude mock tracks
-        !isMockTrackByTitle(item.track.songTitle) && // EXTRA: Filter by known mock titles
+        !item.track.isMockTrack && // Prefer real tracks first
         item.track.previewUrl // Must have a preview URL
     );
 
-    console.log(`[TRACK_SYNC] Available real tracks with preview URLs: ${availableTracks.length}`);
-
-    // If we don't have enough real tracks, include ALL tracks (even without preview URLs)
+    // If we don't have enough real tracks, include mock tracks too
     if (availableTracks.length === 0) {
       console.log(
-        `[TRACK_SYNC] No unused real tracks with preview URLs available, including ALL tracks (with or without preview URLs)`
+        `[TRACK_SYNC] No unused real tracks with preview URLs available, including mock tracks`
       );
       availableTracks = game.consolidatedPlaylist.filter(
         (item) =>
           !usedTrackIds.includes(item.track.trackId) &&
           !usedTrackIds.includes(item.track.songTitle) &&
-          !item.track.isMockTrack && // Still exclude mock tracks
-          !isMockTrackByTitle(item.track.songTitle) // EXTRA: Filter by known mock titles
+          item.track.previewUrl // Must have a preview URL
       );
-      
-      const tracksWithPreview = availableTracks.filter((item) => !!item.track.previewUrl).length;
-      const tracksWithoutPreview = availableTracks.length - tracksWithPreview;
-      console.log(`[TRACK_SYNC] Available tracks: ${availableTracks.length} total (${tracksWithPreview} with preview, ${tracksWithoutPreview} without preview)`);
     }
 
-    // If we still don't have enough tracks, allow reusing tracks but still exclude mock tracks
+    // If we still don't have enough tracks, use any available track with preview URL
     if (availableTracks.length === 0) {
       console.log(
-        `[TRACK_SYNC] No unused tracks available, reusing real tracks (excluding mock tracks)`
+        `[TRACK_SYNC] No unused tracks available, reusing tracks with preview URLs`
       );
-      
-      // SMART REUSE: First try to avoid the most recently used tracks (especially the current round's track)
-      const recentTrackIds = usedTrackIds.slice(-2); // Last 2 used tracks to avoid
-      console.log(`[TRACK_SYNC] Trying to avoid recently used tracks: ${recentTrackIds.join(', ')}`);
-      
       availableTracks = game.consolidatedPlaylist.filter(
-        (item) => 
-          !item.track.isMockTrack && 
-          !isMockTrackByTitle(item.track.songTitle) &&
-          !recentTrackIds.includes(item.track.trackId) &&
-          !recentTrackIds.includes(item.track.songTitle)
+        (item) => item.track.previewUrl
       );
-      
-      // If that's still empty, allow reusing any track except mock tracks
-      if (availableTracks.length === 0) {
-        console.log(
-          `[TRACK_SYNC] No tracks available even avoiding recent ones, allowing any real track reuse`
-        );
-        availableTracks = game.consolidatedPlaylist.filter(
-          (item) => !item.track.isMockTrack && !isMockTrackByTitle(item.track.songTitle) // Only exclude mock tracks
-        );
-      } else {
-        console.log(
-          `[TRACK_SYNC] Found ${availableTracks.length} real tracks that avoid the last ${recentTrackIds.length} used tracks`
-        );
-      }
-      
-      if (availableTracks.length > 0) {
-        console.log(`[TRACK_SYNC] Reusing from ${availableTracks.length} real tracks`);
-      }
     }
 
     // If we still don't have tracks, this is a critical error
@@ -1414,49 +1278,30 @@ io.on("connection", (socket) => {
     );
 
     if (selectedTrack.track.isMockTrack) {
-      console.log(`[TRACK_SYNC] ❌ ERROR: MOCK TRACK SELECTED - This should not happen!`);
-    } else if (!selectedTrack.track.previewUrl) {
-      console.log(`[TRACK_SYNC] ⚠️ WARNING: Selected track has no preview URL - players will not hear audio preview`);
-    } else {
-      console.log(`[TRACK_SYNC] ✅ Real track with preview URL selected`);
+      console.log(`[TRACK_SYNC] USING MOCK TRACK for round ${roundNumber}`);
     }
 
     // Create the round song object
     const roundSong = {
-      songTitle: selectedTrack.track.songTitle,
-      songArtists: Array.isArray(selectedTrack.track.songArtists)
-        ? selectedTrack.track.songArtists
-        : [selectedTrack.track.songArtists],
+      title: selectedTrack.track.songTitle,
+      artists: Array.isArray(selectedTrack.track.songArtists)
+        ? selectedTrack.track.songArtists.join(", ")
+        : selectedTrack.track.songArtists,
       albumName: selectedTrack.track.albumName,
       hasPreviewUrl: !!selectedTrack.track.previewUrl,
       previewUrl: selectedTrack.track.previewUrl,
       imageUrl: selectedTrack.track.imageUrl,
       externalUrl: selectedTrack.track.externalUrl, // Ensure externalUrl is included
-      assignedToPlayer: {
-        username: selectedTrack.owner.username,
-        id: selectedTrack.owner.id,
-      },
+      assignedPlayer: selectedTrack.owner.username,
       trackId: selectedTrack.track.trackId || selectedTrack.track.songTitle,
       roundTraceId: `ROUND_${gameId}_${roundNumber}_${Date.now()}`,
     };
-
-    // Set the trace ID for the game level tracking
-    game.currentRoundTraceId = roundSong.roundTraceId;
 
     // Save this track as the round song
     if (!game.roundSongs) {
       game.roundSongs = {};
     }
-    
-    // Use the same nested structure as round 1 auto-start for consistency
-    game.roundSongs[roundNumber] = {
-      song: roundSong,
-      owner: {
-        username: selectedTrack.owner.username,
-        id: selectedTrack.owner.id,
-      },
-      roundTraceId: roundSong.roundTraceId,
-    };
+    game.roundSongs[roundNumber] = roundSong;
 
     // Start the round with this song
     startRoundWithSong(gameId, roundNumber, roundSong);
@@ -1548,18 +1393,7 @@ io.on("connection", (socket) => {
   // Handle player vote
 
   socket.on("cast_vote", (data) => {
-    const { 
-      gameId, 
-      // votedForPlayerId, // This is from selectedPlayerObj.id
-      // votedForUsername, // This is selectedPlayer (username)
-      // --- Fields from the votePayload sent by client ---
-      votedForPlayerId, // ID of the player being voted for
-      votedForUsername, // Username of the player being voted for
-      voterUsername,    // Username of the player casting the vote
-      voterSocketId,    // Socket ID of the player casting the vote (this is the key)
-      voterPlayerId,    // Player ID of the player casting the vote (should be same as voterSocketId)
-      currentRound: voteRound // Round number from client
-    } = data;
+    const { gameId, votedForPlayerId, votedForUsername } = data;
 
     if (!activeGames[gameId]) {
       socket.emit("error", { message: "Game not found" });
@@ -1567,16 +1401,7 @@ io.on("connection", (socket) => {
     }
 
     const game = activeGames[gameId];
-    const currentRound = game.currentRound; // Use server's current round for consistency
-
-    // Validate client round with server round
-    if (voteRound !== currentRound) {
-      console.warn(
-        `[PLAYER_MAPPING] Vote received for round ${voteRound} but server is on ${currentRound}. Ignoring vote from ${voterSocketId}.`
-      );
-      socket.emit("error", { message: `Vote for wrong round. Server is on ${currentRound}.` });
-      return;
-    }
+    const currentRound = game.currentRound;
 
     // Record who this player voted for with better player ID handling
     if (!game.votes) {
@@ -1591,7 +1416,7 @@ io.on("connection", (socket) => {
       // First check our username mapping (most reliable)
       if (
         gameUsernameMappings[gameId] &&
-        gameUsernameMappings[gameId][votedForUsername] // votedForUsername is the one being voted for
+        gameUsernameMappings[gameId][votedForUsername]
       ) {
         targetPlayerId = gameUsernameMappings[gameId][votedForUsername];
         console.log(
@@ -1616,27 +1441,21 @@ io.on("connection", (socket) => {
     }
 
     // Store target player ID and username together for better debugging and validation
-    // Use voterSocketId as the key for the vote, as it's the actual sender's ID
-    game.votes[voterSocketId] = {
-      id: targetPlayerId, // ID of the player they voted for
-      username: votedForUsername, // Username of the player they voted for
+    game.votes[socket.id] = {
+      id: targetPlayerId,
+      username: votedForUsername,
     };
 
     // Log which username is voting for which username (for clearer logs)
-    // const voterUsername = getUsernameById(gameId, voterId) || game.players.find(p => p.id === voterId)?.username;
-    // Use voterUsername directly from the payload
-    const resolvedVoterUsername = gameUsernameMappings[gameId]?.[voterSocketId] || voterUsername || game.players.find(p => p.id === voterSocketId)?.username || "Unknown Voter";
-
-    // if (voterUsername) { // This was voterUsername, not resolvedVoterUsername
-    //   game.votes[voterUsername] = { id: targetPlayerId, username: votedForUsername };
-    // }
+    const voterUsername =
+      game.players.find((p) => p.id === socket.id)?.username || "Unknown";
     const votedForUsernameResolved =
       votedForUsername ||
       game.players.find((p) => p.id === targetPlayerId)?.username ||
       "Unknown";
 
     console.log(
-      `[PLAYER_MAPPING] Player "${resolvedVoterUsername}" (${voterSocketId}) voted for "${votedForUsernameResolved}" (${targetPlayerId}) in round ${currentRound}`
+      `[PLAYER_MAPPING] Player "${voterUsername}" (${socket.id}) voted for "${votedForUsernameResolved}" (${targetPlayerId}) in round ${currentRound}`
     );
 
     // Try to get the correct player for this round with improved lookup
@@ -1722,9 +1541,9 @@ io.on("connection", (socket) => {
       totalPlayers,
       round: currentRound,
       player: {
-        id: voterSocketId, // Use voterSocketId from payload
+        id: socket.id,
         username:
-          resolvedVoterUsername, // Use the resolved voter username
+          game.players.find((p) => p.id === socket.id)?.username || "Unknown",
       },
     });
 
@@ -1743,18 +1562,16 @@ io.on("connection", (socket) => {
       }
 
       // Award points for correct guesses ONLY (as requested by user)
-      Object.entries(game.votes).forEach(([currentVoterId, votedForData]) => {
+      Object.entries(game.votes).forEach(([voterId, votedForData]) => {
         // Extract vote info - handle both object and string formats
         const votedForId =
           typeof votedForData === "object" ? votedForData.id : votedForData;
-        const currentVoterActualUsername =
-          gameUsernameMappings[gameId]?.[currentVoterId] || // Get username from mapping first
-          game.players.find((p) => p.id === currentVoterId)?.username || // Then from players list
-          currentVoterId; // Fallback to ID if username not found
+        const votedForUsername =
+          typeof votedForData === "object" ? votedForData.username : null;
 
         // Log raw vote data for debugging
         console.log(
-          `[VOTE_DEBUG] Vote in round ${currentRound}: voter=${currentVoterId}, votedFor=${JSON.stringify(
+          `[VOTE_DEBUG] Vote in round ${currentRound}: voter=${voterId}, votedFor=${JSON.stringify(
             votedForData
           )}`
         );
@@ -1769,10 +1586,9 @@ io.on("connection", (socket) => {
         let usernameMatch = false;
 
         // Get voter username for logging
-        // const voterUsername =
-        //   getUsernameById(gameId, voterId) ||
-        //   game.players.find((p) => p.id === voterId)?.username;
-        // Use currentVoterActualUsername defined above
+        const voterUsername =
+          getUsernameById(gameId, voterId) ||
+          game.players.find((p) => p.id === voterId)?.username;
 
         // Get username of voted-for player
         const votedForUsernameResolved =
@@ -1791,27 +1607,25 @@ io.on("connection", (socket) => {
         );
 
         // Award point if either matching method succeeds (as long as player isn't voting for themselves)
-        if ((directIdMatch || usernameMatch)) {
-          // game.scores[voterUsername] = (game.scores[voterUsername] || 0) + 1;
-          // Use currentVoterId (which is the socket ID) for game.scores key as per existing logic
-          // but ensure points are mapped to username correctly later for scoresWithUsernames
-          game.scores[currentVoterId] = (game.scores[currentVoterId] || 0) + 1;
-          console.log("game.scores based on ID:", game.scores);
+        if ((directIdMatch || usernameMatch) && voterId !== correctPlayerId) {
+          // Store score using socket ID as key
+          game.scores[voterId] = (game.scores[voterId] || 0) + 1;
+          console.log("game.scores", game.scores);
           // Add more detailed logging using username mappings
           console.log(
-            `[PLAYER_MAPPING] Player "${currentVoterActualUsername}" (${currentVoterId}) earned 1 point for correctly guessing "${correctPlayerUsername}" (match type: ${
+            `[PLAYER_MAPPING] Player "${voterUsername}" earned 1 point for correctly guessing "${correctPlayerUsername}" (match type: ${
               directIdMatch ? "ID" : "username"
             })`
           );
         } else {
           // Log why no point was awarded for debugging
-          if (currentVoterId === correctPlayerId) {
+          if (voterId === correctPlayerId) {
             console.log(
-              `[PLAYER_MAPPING] No point for "${currentVoterActualUsername}" (${currentVoterId}): Cannot vote for yourself`
+              `[PLAYER_MAPPING] No point for "${voterUsername}": Cannot vote for yourself`
             );
           } else if (!directIdMatch && !usernameMatch) {
             console.log(
-              `[PLAYER_MAPPING] No point for "${currentVoterActualUsername}" (${currentVoterId}): Voted for ${votedForUsernameResolved} but correct was ${correctPlayerUsername}`
+              `[PLAYER_MAPPING] No point for "${voterUsername}": Voted for ${votedForUsernameResolved} but correct was ${correctPlayerUsername}`
             );
           }
         }
@@ -1954,8 +1768,136 @@ io.on("connection", (socket) => {
     // This helps prevent desynchronization between rounds
     game.clientPlaying = {};
 
-    // Use the proper selectRandomSongForRound function that prioritizes real tracks
-    selectRandomSongForRound(gameId, game.currentRound);
+    // Create a trace ID for the new round
+    const newRoundTraceId = `ROUND_${gameId}_${
+      game.currentRound
+    }_${Date.now()}`;
+    game.currentRoundTraceId = newRoundTraceId;
+
+    // Select the next song for this round
+    const availableSongs = game.consolidatedPlaylist || [];
+
+    if (!availableSongs || availableSongs.length === 0) {
+      console.error(`[TRACK_SYNC] No songs available for game ${gameId}`);
+      socket.emit("error", { message: "No songs available for this round" });
+      return;
+    }
+
+    // Check if we've already used all songs and need to recycle
+    const maxRounds = Math.min(game.maxRounds || 3, availableSongs.length);
+    const currentRoundIndex = (game.currentRound - 1) % availableSongs.length;
+
+    // Log if we're starting to recycle songs
+    if (game.currentRound > availableSongs.length) {
+      console.log(
+        `[TRACK_SYNC] Round ${game.currentRound} exceeds available songs (${availableSongs.length}), recycling tracks`
+      );
+    }
+
+    // Select a song from the pool based on round index
+    const selectedItem = availableSongs[currentRoundIndex];
+
+    if (!selectedItem || !selectedItem.track) {
+      console.error(
+        `[TRACK_SYNC] Invalid song selected for round ${game.currentRound}`
+      );
+      socket.emit("error", {
+        message: "Failed to select a song for this round",
+      });
+      return;
+    }
+
+    // Check if this song is a user-provided track or a mock track
+    const isMockTrack =
+      selectedItem.track.isMockTrack ||
+      selectedItem.track.songTitle === "Bohemian Rhapsody" ||
+      selectedItem.track.songTitle === "Don't Stop Believin'" ||
+      selectedItem.track.songTitle === "Billie Jean";
+
+    if (isMockTrack) {
+      console.log(
+        `[TRACK_SYNC] Using mock track: "${selectedItem.track.songTitle}" for round ${game.currentRound}`
+      );
+    } else {
+      console.log(
+        `[TRACK_SYNC] Using real user track: "${
+          selectedItem.track.songTitle
+        }" for round ${game.currentRound} (Track ${currentRoundIndex + 1}/${
+          availableSongs.length
+        })`
+      );
+    }
+
+    const selectedSong = selectedItem.track;
+    const songOwner = selectedItem.owner;
+
+    // Add the song to the round data with the trace ID
+    const roundSong = {
+      ...selectedSong,
+      externalUrl: selectedSong.externalUrl, // Ensure externalUrl is included
+      roundTraceId: newRoundTraceId,
+      roundNumber: game.currentRound, // Explicitly add round number to prevent confusion
+    };
+
+    console.log(
+      `[TRACK_SYNC] Selected song for round ${game.currentRound}: "${roundSong.songTitle}" (Trace ID: ${newRoundTraceId})`
+    );
+    console.log(`[TRACK_SYNC] Song owner: ${songOwner.username}`);
+    console.log(`[TRACK_SYNC] PreviewUrl available: ${!!roundSong.previewUrl}`);
+
+    // Store the song in the game's round data
+    if (!game.roundSongs) {
+      game.roundSongs = {};
+    }
+
+    game.roundSongs[game.currentRound] = {
+      song: {
+        ...roundSong,
+        assignedToPlayer: songOwner,
+      },
+      owner: songOwner,
+      roundTraceId: newRoundTraceId,
+    };
+
+    /*
+      Send our completed game data to the database
+      */
+    var gameRef = db.ref().child(DATABASE_BRANCHES.GAME).child(gameId);
+    var metaRef = gameRef.child(GameDataBranches.GAME_BRANCHES.METADATA);
+    metaRef.update({
+      [GameDataBranches.METADATA.PLAYERS]: activeGames[gameId].players,
+    });
+
+    var gameDataRef = gameRef.child(GameDataBranches.GAME_BRANCHES.GAME_DATA);
+
+    gameDataRef.update({
+      [GameDataBranches.GAME_DATA.SCORES]: activeGames[gameId].scores,
+    });
+
+    // Notify all clients of the new round
+    io.to(gameId).emit("round_started", {
+      gameId,
+      roundNumber: game.currentRound,
+      song: {
+        ...roundSong,
+        assignedToPlayer: songOwner,
+      },
+      roundTraceId: newRoundTraceId,
+      votingReset: true, // Flag to tell clients to reset their voting UI
+      // Add username mappings to ensure clients can match socket IDs to usernames
+      playerMappings: gameUsernameMappings[gameId] || {},
+      maxRounds: game.maxRounds, // Include maxRounds in every round_started event
+    });
+
+    console.log(
+      `[TRACK_SYNC] Round ${game.currentRound} started for game ${gameId} with trace ID ${newRoundTraceId}`
+    );
+
+    // IMPORTANT: Initial force sync at the start of a new round
+    // Schedule a slightly delayed force sync to ensure all clients are on the same page
+    setTimeout(() => {
+      forceSongSync(gameId);
+    }, 500);
 
     return true;
   });
@@ -2067,10 +2009,6 @@ io.on("connection", (socket) => {
       roundNumber,
       song,
       roundTraceId: song.roundTraceId,
-      votingReset: true, // Flag to tell clients to reset their voting UI
-      // Add username mappings to ensure clients can match socket IDs to usernames
-      playerMappings: gameUsernameMappings[gameId] || {},
-      maxRounds: game.maxRounds, // Include maxRounds in every round_started event
     };
 
     // Reset any previous voting
@@ -2205,7 +2143,7 @@ io.on("connection", (socket) => {
 
       // Force sync with more aggressive timing:
       // 1. Always force sync immediately if significant inconsistency (less than half playing same song)
-      // 2. Force sync for any inconsistency if we haven't forced recently (last 8 seconds)
+      // 2. Force sync for any inconsistency if we haven't forced recently (last 3 seconds)
       // 3. Force sync if it's the first inconsistency for this round regardless of timing
 
       const significantInconsistency = maxClients < clientIds.length / 2;
@@ -2215,18 +2153,18 @@ io.on("connection", (socket) => {
 
       const now = Date.now();
       const recentSync =
-        game.lastForceSyncTime && now - game.lastForceSyncTime <= 8000;
+        game.lastForceSyncTime && now - game.lastForceSyncTime <= 3000;
 
       if (
         significantInconsistency ||
-        (isFirstInconsistencyForRound && !recentSync) ||
-        (!recentSync && maxClients === 1) // Only if no recent sync and only 1 client has majority
+        isFirstInconsistencyForRound ||
+        !recentSync
       ) {
         // Record that we detected an inconsistency for this round
         game.lastInconsistencyDetectedForRound = game.currentRound;
 
         console.log(
-          `[TRACK_SYNC] CRITICAL: Detected song inconsistency in game ${gameId}. Forcing sync... (Significant: ${significantInconsistency}, First: ${isFirstInconsistencyForRound}, Recent: ${recentSync})`
+          `[TRACK_SYNC] CRITICAL: Detected song inconsistency in game ${gameId}. Forcing sync...`
         );
         forceSongSync(gameId);
       } else {
@@ -2235,7 +2173,7 @@ io.on("connection", (socket) => {
           1000
         ).toFixed(3);
         console.log(
-          `[TRACK_SYNC] Skipping force sync - last sync was ${timeSinceLastSync} seconds ago (conditions: sig=${significantInconsistency}, first=${isFirstInconsistencyForRound}, recent=${recentSync})`
+          `[TRACK_SYNC] Skipping force sync - last sync was ${timeSinceLastSync} seconds ago`
         );
       }
     }
@@ -2308,19 +2246,15 @@ io.on("connection", (socket) => {
         `[TRACK_SYNC] Round mismatch detected: Client reports round ${roundNumber}, game is on round ${game.currentRound}`
       );
 
-      // Only sync if we haven't just done so very recently (within 5 seconds, increased from 1)
+      // Only sync if we haven't just done so very recently (within 1 second)
       const now = Date.now();
-      if (!game.lastForceSyncTime || now - game.lastForceSyncTime > 5000) {
+      if (!game.lastForceSyncTime || now - game.lastForceSyncTime > 1000) {
         console.log(
-          `[TRACK_SYNC] Force syncing client to correct round after 5s debounce`
+          `[TRACK_SYNC] Force syncing client to correct round immediately`
         );
         // Force sync to ensure client is on the right round
         forceSongSync(gameId);
         return;
-      } else {
-        console.log(
-          `[TRACK_SYNC] Skipping round mismatch sync - too recent (${(now - game.lastForceSyncTime)/1000}s ago)`
-        );
       }
     }
 
@@ -2379,22 +2313,18 @@ io.on("connection", (socket) => {
               `[TRACK_SYNC] Song mismatch: Client playing "${songTitle}", expected "${expectedTitle}" for round ${roundNumber}`
             );
 
-            // Only sync if we haven't just done so very recently (within 5 seconds, increased from 1)
+            // Only sync if we haven't just done so very recently (within 1 second)
             const now = Date.now();
             if (
               !game.lastForceSyncTime ||
-              now - game.lastForceSyncTime > 5000
+              now - game.lastForceSyncTime > 1000
             ) {
               console.log(
-                `[TRACK_SYNC] Force syncing client to correct song after 5s debounce`
+                `[TRACK_SYNC] Force syncing client to correct song immediately`
               );
               // Force sync to ensure client plays the right song
               forceSongSync(gameId);
               return;
-            } else {
-              console.log(
-                `[TRACK_SYNC] Skipping song mismatch sync - too recent (${(now - game.lastForceSyncTime)/1000}s ago)`
-              );
             }
           }
         }
@@ -2534,13 +2464,10 @@ io.on("connection", (socket) => {
         // This helps new clients joining mid-round
         if (isFirstReport) {
           console.log(
-            `[TRACK_SYNC] First song report from client ${socket.id}, scheduling consistency check instead of immediate sync`
+            `[TRACK_SYNC] First song report from client ${socket.id}, forcing immediate sync`
           );
-          // Schedule a consistency check instead of immediate force sync
-          setTimeout(() => {
-            checkSongConsistency(gameId);
-          }, 3000);
-          // Don't return here - let the normal flow continue
+          forceSongSync(gameId);
+          return;
         }
 
         // IMPORTANT: Lower the threshold for force sync (3 seconds instead of 5)
@@ -2548,7 +2475,7 @@ io.on("connection", (socket) => {
         const now = Date.now();
         const lastForceSyncTime = game.lastForceSyncTime || 0;
 
-        if (now - lastForceSyncTime > 8000) {
+        if (now - lastForceSyncTime > 3000) {
           console.log(
             `[TRACK_SYNC] Detailed song comparison for game ${gameId}:`
           );
@@ -2576,7 +2503,7 @@ io.on("connection", (socket) => {
           console.log(
             `[TRACK_SYNC] Skipping force sync - last sync was ${
               (now - lastForceSyncTime) / 1000
-            } seconds ago (waiting for 8s debounce)`
+            } seconds ago`
           );
         }
       }
@@ -2980,15 +2907,252 @@ io.on("connection", (socket) => {
       }
     }
 
-    // If we reach here, we couldn't find a suitable song to sync
+    // If we get here, try fallback to any song with a valid preview URL
+    if (game.consolidatedPlaylist && game.consolidatedPlaylist.length > 0) {
+      // Find a song with a preview URL
+      const validSongs = game.consolidatedPlaylist.filter(
+        (item) => !!item.track.previewUrl
+      );
+
+      if (validSongs.length > 0) {
+        // Use the first valid song
+        const fallbackSong = validSongs[0];
+
+        // Create a trace ID for this force sync
+        const syncTraceId = `FORCESYNC_FALLBACK_G${gameId}_R${game.currentRound}_${now}`;
+
+        // Construct the sync song data
+        const syncSong = {
+          songTitle: fallbackSong.track.songTitle,
+          songArtists: fallbackSong.track.songArtists,
+          albumName: fallbackSong.track.albumName || "Unknown Album",
+          imageUrl:
+            fallbackSong.track.imageUrl || "https://via.placeholder.com/300",
+          previewUrl: fallbackSong.track.previewUrl,
+          roundTraceId: syncTraceId,
+          roundNumber: game.currentRound, // Explicitly include the round number
+          assignedToPlayer: fallbackSong.owner,
+        };
+
+        console.log(
+          `[TRACK_SYNC] Forcing fallback song sync with "${syncSong.songTitle}" (Trace ID: ${syncTraceId})`
+        );
+        console.log(
+          `[TRACK_SYNC] Preview URL present: ${!!syncSong.previewUrl}`
+        );
+
+        // Send the force sync command to all clients
+        io.to(gameId).emit("force_song_sync", {
+          gameId,
+          roundNumber: game.currentRound,
+          song: syncSong,
+          roundTraceId: syncTraceId,
+          syncTimestamp: syncTimestamp,
+          scores: game.scores, // Include current scores to ensure consistency
+          votingReset: true, // Flag to reset voting UI state
+          // Add username mappings to ensure clients can match socket IDs to usernames
+          playerMappings: gameUsernameMappings[gameId] || {},
+          maxRounds: game.maxRounds, // Include maxRounds in force sync
+        });
+
+        console.log(
+          `[TRACK_SYNC] Force sync sent to all clients in game ${gameId} at ${syncTimestamp}`
+        );
+
+        // Schedule another sync check after a short delay to ensure everyone got the message
+        setTimeout(() => {
+          checkSongConsistency(gameId);
+        }, 2000);
+
+        return;
+      }
+    }
+
+    // If all else fails, use an emergency mock track
     console.error(
-      `[TRACK_SYNC] Could not find a suitable song for force sync in game ${gameId}`
+      `[TRACK_SYNC] CRITICAL: No valid song found for force sync in game ${gameId}`
+    );
+
+    // Create an emergency track
+    const emergencyTrack = {
+      songTitle: "Emergency Fallback Song",
+      songArtists: ["System"],
+      albumName: "Emergency",
+      imageUrl: "https://via.placeholder.com/300",
+      previewUrl:
+        "https://p.scdn.co/mp3-preview/1f3bd078c7ad27b427fa210f6efd957fc5eecea0", // Bohemian Rhapsody as fallback
+      roundTraceId: `EMERGENCY_G${gameId}_R${game.currentRound}_${now}`,
+      roundNumber: game.currentRound, // Explicitly include the round number
+      isMockTrack: true,
+    };
+
+    // Send the emergency track to all clients
+    io.to(gameId).emit("force_song_sync", {
+      gameId,
+      roundNumber: game.currentRound,
+      song: emergencyTrack,
+      roundTraceId: emergencyTrack.roundTraceId,
+      syncTimestamp: syncTimestamp,
+      scores: game.scores, // Include current scores to ensure consistency
+      votingReset: true, // Flag to reset voting UI state
+      // Add username mappings to ensure clients can match socket IDs to usernames
+      playerMappings: gameUsernameMappings[gameId] || {},
+      maxRounds: game.maxRounds, // Include maxRounds in force sync
+    });
+
+    console.log(
+      `[TRACK_SYNC] Emergency song sync sent to all clients in game ${gameId} at ${syncTimestamp}`
     );
   }
 });
 
-// Start the server
-const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+// Basic route for checking server status
+app.get("/", (req, res) => {
+  res.send("Synth WebSocket Server is running!");
 });
+
+// Get active games
+app.get("/games", (req, res) => {
+  const gamesList = Object.values(activeGames).map((game) => ({
+    id: game.id,
+    name: game.name,
+    playerCount: game.players.length,
+    status: game.status,
+  }));
+
+  res.json({ games: gamesList });
+});
+
+app.get("/prev_game", (req, res) => {
+  const gameID = req.query.gameId;
+
+  var gameRef = db.ref().child(DATABASE_BRANCHES.GAME).child(gameID);
+  gameRef.once("value", (snapshot) => {
+    const gameData = snapshot.val();
+    console.log(gameData);
+    if (!gameData) {
+      res.status(404).json({ error: "Game not found" });
+      return;
+    }
+
+    res.json({ game: gameData });
+  });
+});
+
+// Server port
+const PORT = process.env.PORT || 3000;
+
+// Start server only when run directly (not when imported as a module)
+if (require.main === module) {
+  server.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on port ${PORT}`);
+    console.log(`WebSocket server is ready for connections`);
+    console.log(`Server accessible at http://172.20.10.10:${PORT}`);
+  });
+}
+
+// Export the function and other necessary components
+module.exports = {
+  generateSimpleGameCode,
+  app,
+  server,
+  io,
+  activeGames,
+  gameUsernameMappings,
+  getPlayerIdByUsername,
+  getUsernameById,
+};
+
+// Add helper functions for username/socketID mapping
+
+// Get a player's socket ID by username
+function getPlayerIdByUsername(gameId, username) {
+  // Check if we have a direct mapping first
+  if (gameUsernameMappings[gameId] && gameUsernameMappings[gameId][username]) {
+    return gameUsernameMappings[gameId][username];
+  }
+
+  // Fall back to player list if no direct mapping
+  if (activeGames[gameId]) {
+    const player = activeGames[gameId].players.find(
+      (p) => p.username === username
+    );
+    return player ? player.id : null;
+  }
+
+  return null;
+}
+
+// Get a username by socket ID
+function getUsernameById(gameId, socketId) {
+  // Check direct mapping first (reverse lookup)
+  if (gameUsernameMappings[gameId]) {
+    for (const [username, id] of Object.entries(gameUsernameMappings[gameId])) {
+      if (id === socketId) return username;
+    }
+  }
+
+  // Fall back to player list
+  if (activeGames[gameId]) {
+    const player = activeGames[gameId].players.find((p) => p.id === socketId);
+    return player ? player.username : null;
+  }
+
+  return null;
+}
+
+// Helper function to get all player mapping information for a game
+function getPlayerMappings(gameId) {
+  const game = activeGames[gameId];
+  if (!game) return {};
+
+  const mappings = {
+    socketIdToUsername: {},
+    playerIdToUsername: {},
+    usernameToIds: {},
+    playerMappings: {}, // Legacy format
+    players: [], // Full player objects (sanitized)
+  };
+
+  // Map all players
+  game.players.forEach((player) => {
+    if (player && player.username) {
+      // Store full player object (sanitized)
+      mappings.players.push({
+        id: player.id,
+        username: player.username,
+        displayName: player.displayName || player.username,
+        platform: player.platform || null,
+        isHost: player.isHost || false,
+      });
+
+      // Map socket ID to username
+      mappings.socketIdToUsername[player.id] = player.username;
+
+      // Map player ID to username (if available)
+      if (player.playerId) {
+        mappings.playerIdToUsername[player.playerId] = player.username;
+      }
+
+      // Map numeric ID to username (if available)
+      if (typeof player.id === "number" || !isNaN(Number(player.id))) {
+        mappings.playerIdToUsername[player.id] = player.username;
+      }
+
+      // Store in legacy format
+      mappings.playerMappings[player.username] = player.id;
+
+      // Create reverse mapping
+      mappings.usernameToIds[player.username] = {
+        socketId: player.id,
+        playerId: player.playerId || null,
+        numericId: typeof player.id === "number" ? player.id : null,
+      };
+    }
+  });
+
+  console.log(
+    `[TRACK_SYNC] Generated comprehensive player mappings for game ${gameId}`
+  );
+  return mappings;
+}

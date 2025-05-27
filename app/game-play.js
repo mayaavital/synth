@@ -79,8 +79,6 @@ export default function GamePlay() {
     nextRound: sendNextRound,
     castVote,
     isConnected,
-    currentUser, // Destructure currentUser
-    socket, // Destructure socket
   } = useWebSocket();
 
   // Track the last few trace IDs we've received to avoid infinite sync loops
@@ -93,26 +91,16 @@ export default function GamePlay() {
   // Mock song data to fallback on if Spotify API is unavailable
   const mockSongs = [
     {
-      songTitle: "Blinding Lights",
-      songArtists: ["The Weeknd"],
-      albumName: "After Hours",
+      songTitle: "A Day in the Life",
+      songArtists: ["The Beatles"],
+      albumName: "Sgt. Pepper's Lonely Hearts Club Band",
       imageUrl:
-        "https://i.scdn.co/image/ab67616d0000b273a4e1a4e77b1fd2e5f84e4b2c",
-      duration: 200040,
-      previewUrl: null, // Will be enriched with Deezer
-      uri: "spotify:track:0VjIjW4GlULA4LGcGj5Be2",
-      externalUrl: "https://open.spotify.com/track/0VjIjW4GlULA4LGcGj5Be2",
-    },
-    {
-      songTitle: "Shape of You",
-      songArtists: ["Ed Sheeran"],
-      albumName: "÷ (Deluxe)",
-      imageUrl:
-        "https://i.scdn.co/image/ab67616d0000b273ba5db46f4b838ef6027e6f96",
-      duration: 233713,
-      previewUrl: null, // Will be enriched with Deezer
-      uri: "spotify:track:7qiZfU4dY1lWllzX7mPBI3",
-      externalUrl: "https://open.spotify.com/track/7qiZfU4dY1lWllzX7mPBI3",
+        "https://i.scdn.co/image/ab67616d0000b273128450651c9f0442780d8eb8",
+      duration: 337000,
+      previewUrl:
+        "https://p.scdn.co/mp3-preview/67f504bf5b86bdcaf197aef343c2413e8ec68b1d",
+      uri: "spotify:track:0jXR9dJLlGpfYQrN0m1HLO",
+      externalUrl: "https://open.spotify.com/track/0jXR9dJLlGpfYQrN0m1HLO",
     },
     {
       songTitle: "Bohemian Rhapsody",
@@ -121,7 +109,8 @@ export default function GamePlay() {
       imageUrl:
         "https://i.scdn.co/image/ab67616d0000b27328581cfe196c2be2506ee6c0",
       duration: 354000,
-      previewUrl: null, // Will be enriched with Deezer
+      previewUrl:
+        "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview122/v4/29/96/51/2996514a-35cd-b092-c7f0-dd995b0e6071/mzaf_10909209324710493166.plus.aac.p.m4a",
       uri: "spotify:track:7tFiyTwD0nx5a1eklYtX2J",
       externalUrl: "https://open.spotify.com/track/7tFiyTwD0nx5a1eklYtX2J",
     },
@@ -130,22 +119,12 @@ export default function GamePlay() {
       songArtists: ["Eagles"],
       albumName: "Hotel California",
       imageUrl:
-        "https://i.scdn.co/image/ab67616d0000b273c8a1b4a0a6c83b1b1a4f2a3c",
-      duration: 391394,
-      previewUrl: null, // Will be enriched with Deezer
+        "https://i.scdn.co/image/ab67616d0000b273446e630d93d3fb235d70bad9",
+      duration: 391000,
+      previewUrl:
+        "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/cb/16/81/cb1681bb-a5a7-0b93-7ce0-0a55ab6dc9e5/mzaf_11284427653219671407.plus.aac.p.m4a",
       uri: "spotify:track:40riOy7x9W7GXjyGp4pjAv",
       externalUrl: "https://open.spotify.com/track/40riOy7x9W7GXjyGp4pjAv",
-    },
-    {
-      songTitle: "Billie Jean",
-      songArtists: ["Michael Jackson"],
-      albumName: "Thriller",
-      imageUrl:
-        "https://i.scdn.co/image/ab67616d0000b2734121faee8df82c526cbab2be",
-      duration: 294000,
-      previewUrl: null, // Will be enriched with Deezer
-      uri: "spotify:track:5ChkMS8OtdzJeqyybCc9R5",
-      externalUrl: "https://open.spotify.com/track/5ChkMS8OtdzJeqyybCc9R5",
     },
   ];
 
@@ -198,9 +177,6 @@ export default function GamePlay() {
   // Add state for tracking whether tracks have been shared
   const [hasSharedTracks, setHasSharedTracks] = useState(false);
 
-  // Add state to ensure params are loaded before initializing game
-  const [paramsReady, setParamsReady] = useState(false);
-
   // Get game details from params
   const gameName = params.gameName || "Game Name";
   const playerCount = parseInt(params.playerCount) || 4;
@@ -208,16 +184,6 @@ export default function GamePlay() {
   // Update to read the multiplayer flag from params
   const isMultiplayer = params.isMultiplayer === "true";
   const isHost = params.isHost === "true";
-
-  // Add a useEffect to set paramsReady when navigation params are stable
-  useEffect(() => {
-    if (
-      typeof params.isMultiplayer === "string" &&
-      typeof params.isHost === "string"
-    ) {
-      setParamsReady(true);
-    }
-  }, [params.isMultiplayer, params.isHost]);
 
   // Parse player data from params if available
   let playerData = [];
@@ -379,115 +345,317 @@ export default function GamePlay() {
     }
   }, [allSongs, isMultiplayer, emit, hasSharedTracks, shareTracks]);
 
-  // Initialize game
+  // Fetch songs when component mounts - but only once
   useEffect(() => {
-    const initializeGame = async () => {
+    // Skip if we've already fetched songs or if still loading
+    if (allSongs.length > 0 || isLoading || !isInitialized) {
+      return;
+    }
+
+    const fetchSongs = async () => {
       setIsLoading(true);
       setError(null);
-      try {
-        // Ensure Spotify token is valid before fetching songs
-        if (!isInitialized || !token || !isTokenValid()) {
-          console.log("Waiting for Spotify token initialization or validation...");
-          // Attempt to get a valid token if not already initialized or valid
-          if (!isInitialized) {
-            await getSpotifyAuth(); // This should trigger initialization
-          } else if (!token || !isTokenValid()) {
-            await getValidToken();
-          }
+      console.log("Starting fetchSongs function");
+      console.log(
+        "Token initialized:",
+        isInitialized,
+        "Token available:",
+        !!token
+      );
 
-          // If still no valid token, return and wait
-          if (!token || !isTokenValid()) {
-            console.log("Token still not valid after attempt, will retry.");
-            return; // Rely on the isInitialized/token useEffect to re-trigger
-          }
+      let currentToken = token;
+
+      // If we have a token, make sure it's valid before using it
+      if (token) {
+        try {
+          console.log("Validating token...");
+          // This will either return the valid token or refresh it automatically
+          currentToken = await getValidToken();
+          console.log(
+            "Using valid token for API request:",
+            currentToken ? "Token received" : "No token received"
+          );
+        } catch (error) {
+          console.error("Error validating/refreshing token:", error);
+          currentToken = null;
         }
+      } else {
+        console.log("No initial token available after initialization");
 
-        let fetchedSongs = [];
-        let fetchedPlayerSongs = {};
-
-        // Fetch songs only if not multiplayer or if it is multiplayer and this client is the host
-        // And only if songs haven't been fetched yet
-        if (paramsReady && !hasFetchedSongs) {
-          if (isMultiplayer && isHost) {
-            // Host fetches songs and shares them
-            console.log(
-              "[TRACK_SYNC] Host is fetching and preparing to share songs."
-            );
-            fetchedSongs = await fetchSongs();
-            setAllSongs(fetchedSongs); // Host sets allSongs for its own use
-            fetchedPlayerSongs = groupSongsByPlayer(fetchedSongs, players);
-            setPlayerSongs(fetchedPlayerSongs); // Host sets playerSongs
-
-            // Share these songs with other clients via WebSocket
-            if (emit && fetchedSongs.length > 0 && !hasSharedTracks) {
-            console.log(
-                `[TRACK_SYNC] Host emitting shared_playlist with ${fetchedSongs.length} songs`
-              );
-              emit(EVENTS.SHARE_PLAYLIST, {
-                gameId,
-                tracks: fetchedSongs,
-                playerSongs: fetchedPlayerSongs, // Send player-grouped songs as well
-                maxRounds: maxRounds, // Send current maxRounds
-              });
-              setHasSharedTracks(true); // Mark tracks as shared
-            }
-          } else if (!isMultiplayer) {
-            // Single player fetches songs
-            console.log("[TRACK_SYNC] Single player: fetching songs.");
-            fetchedSongs = await fetchSongs();
-            setAllSongs(fetchedSongs);
-            fetchedPlayerSongs = groupSongsByPlayer(fetchedSongs, players);
-            setPlayerSongs(fetchedPlayerSongs);
-            // In single-player, select song for round 1 immediately
-            selectSongForRound(1, fetchedSongs);
-          } else {
-            // Non-host multiplayer client, waits for shared_playlist event
-              console.log(
-              "[TRACK_SYNC] Non-host client: waiting for shared playlist from host."
-            );
-          }
-          setHasFetchedSongs(true); // Mark that fetching (or decision not to fetch) has occurred
-        }
-
-        // Load played songs from AsyncStorage
-        await loadPlayedSongs();
-      } catch (e) {
-        console.error("Error initializing game:", e);
-        setError(
-          e.message || "An unknown error occurred during game initialization."
+        // Give user option to authenticate if no token is available
+        Alert.alert(
+          "Spotify Authentication Needed",
+          "No Spotify token available. Would you like to connect to Spotify?",
+          [
+            {
+              text: "Use Sample Songs",
+              onPress: () => console.log("Using sample songs only"),
+              style: "cancel",
+            },
+            {
+              text: "Connect to Spotify",
+              onPress: async () => {
+                try {
+                  setIsLoading(false); // Reset loading state
+                  await getSpotifyAuth(); // Start auth process
+                  // Note: After successful auth, the token will be set and this effect will run again
+                } catch (authError) {
+                  console.error("Authentication error:", authError);
+                  setIsLoading(false);
+                  setError("Authentication failed. Using sample songs.");
+                }
+              },
+            },
+          ]
         );
-        // Fallback to mock songs if there is an error
-        if (!isMultiplayer) { // Only use mock songs for single player on error
-          setAllSongs(mockSongs);
-          selectSongForRound(1, mockSongs);
-        }
-      } finally {
-        // Only set loading to false if we are not a non-host waiting for tracks
-        if (!(isMultiplayer && !isHost && !hasSharedTracks)) {
-          setIsLoading(false);
-        }
-        // If we are a non-host and tracks have been shared, also stop loading
-        if (isMultiplayer && !isHost && hasSharedTracks) {
-      setIsLoading(false);
+      }
+
+      let tracks;
+
+      // If we don't have a valid token, use mock data
+      if (!currentToken) {
+        console.log("No valid Spotify token, using mock song data");
+        console.log("Mock songs available:", mockSongs?.length || 0);
+        tracks = mockSongs;
+      } else {
+        try {
+          // First try getting recently played tracks as they often have preview URLs
+          console.log("Fetching recently played tracks...");
+          try {
+            tracks = await getMyRecentlyPlayedTracks(currentToken);
+            console.log(
+              "Successfully fetched recently played tracks:",
+              tracks?.length || 0
+            );
+          } catch (recentError) {
+            console.error(
+              "Error fetching recently played tracks:",
+              recentError
+            );
+            tracks = null;
+          }
+
+          // If no recent tracks or error, try the album tracks
+          if (!tracks || tracks.length === 0) {
+            console.log("Fetching tracks from specified album:", ALBUM_ID);
+            tracks = await getAlbumTracks(ALBUM_ID, currentToken);
+            console.log(
+              "Successfully fetched album tracks:",
+              tracks?.length || 0
+            );
+          }
+
+          if (!tracks || tracks.length === 0) {
+            console.log("No tracks found, using mock data");
+            console.log("Mock songs available:", mockSongs?.length || 0);
+            tracks = mockSongs;
+          } else {
+            // Debug all tracks and their preview URLs
+            console.log("=== TRACK PREVIEW URL DEBUG ===");
+            tracks.forEach((track, index) => {
+              console.log(
+                `Track ${index + 1}: ${track.songTitle} - Preview URL: ${
+                  track.previewUrl || "None"
+                }`
+              );
+            });
+
+            // NOTE: Spotify preview URLs are now deprecated
+            console.log(
+              "Spotify preview URLs are deprecated - we will rely on Deezer for audio playback"
+            );
+
+            // IMPORTANT CHANGE: Always try to enrich all tracks with Deezer
+            console.log(
+              "Enriching all tracks with Deezer preview URLs BEFORE filtering"
+            );
+
+            try {
+              // Try to enrich all tracks with Deezer preview URLs
+              // Take more tracks to increase chances of finding ones with preview URLs
+              const tracksToTry = tracks.slice(0, 20); // Increased from 15 to 20 tracks to process
+              console.log(
+                `Attempting to enrich ${tracksToTry.length} tracks with Deezer`
+              );
+
+              // Use enrichTracksWithDeezerPreviews to get Deezer previews
+              const deezerEnrichedTracks = await enrichTracksWithDeezerPreviews(
+                tracksToTry
+              );
+
+              // Filter tracks that now have preview URLs
+              const validDeezerTracks = deezerEnrichedTracks.filter(
+                (track) => track.previewUrl
+              );
+
+              console.log(
+                `Found ${validDeezerTracks.length} tracks with Deezer preview URLs out of ${deezerEnrichedTracks.length} processed`
+              );
+
+              if (validDeezerTracks.length >= 2) {
+                console.log(
+                  "Using tracks with Deezer preview URLs as they're available"
+                );
+                tracks = validDeezerTracks;
+                console.log(
+                  "Sample enriched track:",
+                  JSON.stringify({
+                    title: tracks[0].songTitle,
+                    preview: tracks[0].previewUrl?.substring(0, 30) + "...",
+                    source: "Deezer",
+                  })
+                );
+              } else {
+                // If we don't have enough tracks with preview URLs,
+                // still use whatever we got from Deezer (even if just 1)
+                console.log(
+                  "Not enough tracks with Deezer preview URLs, using what we have"
+                );
+                tracks =
+                  validDeezerTracks.length > 0
+                    ? validDeezerTracks
+                    : deezerEnrichedTracks.slice(0, 10);
+              }
+            } catch (deezerError) {
+              console.error("Error enriching tracks with Deezer:", deezerError);
+
+              // Still use the tracks we have
+              console.log("Using available tracks despite Deezer error");
+              tracks = tracks.slice(0, 15);
+            }
+
+            // This flag helps debug whether tracks are being enriched properly
+            const hasPreviewUrls = tracks.some((track) => !!track.previewUrl);
+            console.log(
+              `Tracks now have preview URLs: ${hasPreviewUrls ? "YES" : "NO"}`
+            );
+            if (hasPreviewUrls) {
+              const previewCount = tracks.filter(
+                (track) => !!track.previewUrl
+              ).length;
+              console.log(
+                `${previewCount}/${tracks.length} tracks have preview URLs`
+              );
+            }
+
+            // Add additional data fields as needed
+            tracks = tracks.map((track) => ({
+              ...track,
+              uri: track.uri || null,
+              externalUrl: track.externalUrl || null,
+              _debug: {
+                title: track.songTitle,
+                artists: track.songArtists,
+                duration: track.duration,
+                albumArt: track.imageUrl ? "Available" : "Unavailable",
+                previewUrl: track.previewUrl ? "Available" : "Unavailable",
+                source: track.previewUrl ? "Deezer" : "Spotify",
+              },
+            }));
+
+            console.log(
+              "Sample track data:",
+              JSON.stringify(tracks[0], null, 2)
+            );
+          }
+        } catch (apiError) {
+          console.error("Error fetching from Spotify API:", apiError);
+          console.log("Using fallback mock data");
+          console.log("Mock songs available:", mockSongs?.length || 0);
+          tracks = mockSongs;
+
+          // Handle API errors
+          if (apiError?.response?.status === 401) {
+            console.log("Authentication error (401)");
+            // We don't need to handle token refresh here since getValidToken already did that
+            // Just notify the user and use mock data
+            Alert.alert(
+              "Spotify Authentication Issue",
+              "There was a problem with your Spotify authentication. Using sample songs instead.",
+              [{ text: "OK" }]
+            );
+          } else if (apiError?.response?.status === 403) {
+            console.log("Authorization error (403): Missing required scope");
+            Alert.alert(
+              "Permission Error",
+              "This app needs permission to access your tracks. Please reconnect to Spotify with all permissions.",
+              [{ text: "OK", onPress: () => handleReturnToLobby() }]
+            );
+          } else if (apiError?.response?.status === 429) {
+            console.log("Rate limit reached (429)");
+            Alert.alert(
+              "Too Many Requests",
+              "You've made too many requests to Spotify. Please try again later.",
+              [{ text: "OK" }]
+            );
+          }
         }
       }
+
+      // Final check to make sure we have tracks to use
+      if (!tracks || tracks.length === 0) {
+        console.error("No tracks available, even after trying mock data!");
+        // Create emergency fallback track if all else fails
+        tracks = [
+          {
+            songTitle: "Emergency Fallback Song",
+            songArtists: ["Synth App"],
+            albumName: "Fallback Album",
+            imageUrl: "https://via.placeholder.com/300",
+            duration: 30000,
+            previewUrl: null, // No audio available for fallback
+            uri: null,
+            externalUrl: null,
+          },
+        ];
+
+        setError("Could not load song data. Using emergency fallback.");
+      }
+
+      console.log(`Using ${tracks.length} tracks for the game`);
+      console.log(
+        `Tracks with preview URLs: ${
+          tracks.filter((t) => !!t.previewUrl).length
+        }/${tracks.length}`
+      );
+
+      // Process the tracks for the game
+      const processedSongs = tracks.slice(0, 15).map((track) => ({
+        ...track,
+        // We'll assign players to songs when they are selected for a round, not in advance
+      }));
+
+      setAllSongs(processedSongs);
+      selectSongForRound(1, processedSongs);
+      setIsLoading(false);
+      setGameStage("playing");
+      setHasFetchedSongs(true);
+
+      // If we're in multiplayer, ensure we're sending tracks with preview URLs to the server
+      if (isMultiplayer && emit) {
+        const tracksWithPreviews = processedSongs.filter(
+          (track) => !!track.previewUrl
+        );
+        if (tracksWithPreviews.length > 0) {
+          console.log(
+            `[TRACK_SYNC] Sending ${tracksWithPreviews.length} tracks with preview URLs to server`
+          );
+          // Only send tracks that have preview URLs to avoid server using mock tracks
+          return tracksWithPreviews;
+        } else {
+          console.warn(
+            "[TRACK_SYNC] No tracks with preview URLs to send to server!"
+          );
+          return processedSongs;
+        }
+      }
+
+      return processedSongs;
     };
 
-    if (isInitialized && paramsReady) { // Depend on paramsReady here
-      initializeGame();
-    }
-  }, [
-    isInitialized,
-    token,
-    paramsReady, // Add paramsReady to dependency array
-    gameId,
-    isMultiplayer,
-    isHost,
-    emit,
-    hasFetchedSongs,
-    hasSharedTracks,
-    maxRounds // ensure re-run if maxRounds changes from server
-  ]); // Added playerTracks to dependencies
+    // Only fetch songs once and after auth is initialized
+    fetchSongs();
+  }, [token, players, hasFetchedSongs, isInitialized]);
 
   // Improve Audio resource management
   // Unload audio resources properly when unmounting
@@ -632,7 +800,6 @@ export default function GamePlay() {
       setIsLoadingAudio(false);
       setAudioLoadError(null);
       setCanVote(true);
-      setVoteProgress(100);
       return;
     }
 
@@ -644,7 +811,6 @@ export default function GamePlay() {
         setIsLoadingAudio(false);
         setIsPlaying(false);
         setCanVote(true);
-        setVoteProgress(100);
         return;
       }
 
@@ -653,7 +819,6 @@ export default function GamePlay() {
         try {
           await sound.stopAsync();
           await sound.unloadAsync();
-          setSound(null);
         } catch (error) {
           console.error(
             "[TRACK_SYNC] Error cleaning up previous sound:",
@@ -662,31 +827,25 @@ export default function GamePlay() {
         }
       }
 
-      // Load audio with better autoplay handling for host device
+      // Simple audio load with maximum timeout
       try {
         // Clear any existing timeout
         if (audioLoadTimeoutRef.current) {
           clearTimeout(audioLoadTimeoutRef.current);
         }
 
-        // Set a 15-second timeout for loading
+        // Set a 20-second timeout for loading
         const timeoutPromise = new Promise((_, reject) => {
           audioLoadTimeoutRef.current = setTimeout(() => {
-            reject(new Error("Audio load timed out after 15 seconds"));
-          }, 15000);
+            reject(new Error("Audio load timed out after 20 seconds"));
+          }, 20000);
         });
 
-        console.log("[TRACK_SYNC] Host device loading audio from:", enhancedSong.previewUrl);
-
-        // First try to load without autoplay to avoid browser blocking
+        // Load and play the audio
         const { sound: newSound } = await Promise.race([
           Audio.Sound.createAsync(
             { uri: enhancedSong.previewUrl },
-            { 
-              shouldPlay: false, // Start without autoplay to avoid blocking
-              isLooping: false,
-              volume: 1.0 
-            },
+            { shouldPlay: true },
             onPlaybackStatusUpdate
           ),
           timeoutPromise,
@@ -695,45 +854,22 @@ export default function GamePlay() {
         // Clear timeout on success
         clearTimeout(audioLoadTimeoutRef.current);
 
-        // Update state with loaded sound
+        // Update state
         setSound(newSound);
+        setIsPlaying(true);
         setIsLoadingAudio(false);
-
-        // Now try to start playback (host only)
-        try {
-          console.log("[TRACK_SYNC] Host attempting to start audio playback");
-          await newSound.playAsync();
-          setIsPlaying(true);
-          console.log("[TRACK_SYNC] Host audio playback started successfully");
-        } catch (playError) {
-          console.log("[TRACK_SYNC] Host autoplay blocked, user must click play:", playError.message);
-          // Set UI state to show play button for host
-          setIsPlaying(false);
-        }
-
-        // Always enable voting regardless of audio playback status
         setCanVote(true);
-        setVoteProgress(100);
-
+        console.log("[TRACK_SYNC] Successfully loaded audio");
       } catch (error) {
-        console.error("[TRACK_SYNC] Host error loading audio:", error.message);
+        console.error("[TRACK_SYNC] Error loading audio:", error.message);
         clearTimeout(audioLoadTimeoutRef.current);
         setIsLoadingAudio(false);
         setCanVote(true);
-        setVoteProgress(100);
-        
-        // Set error for user feedback
-        if (error.message.includes("timeout")) {
-          setAudioLoadError("Audio loading timed out. Click play to start!");
-        } else {
-          setAudioLoadError("Audio unavailable. Click play if you can hear it!");
-        }
       }
     } catch (error) {
-      console.error("[TRACK_SYNC] Host unexpected error:", error);
+      console.error("[TRACK_SYNC] Unexpected error:", error);
       setIsLoadingAudio(false);
       setCanVote(true);
-      setVoteProgress(100);
     }
   };
 
@@ -747,7 +883,7 @@ export default function GamePlay() {
     }
   }, [gameStage, currentSong]);
 
-  // Toggle play/pause function with improved autoplay handling
+  // Toggle play/pause function with simplified error handling
   const togglePlayPause = async () => {
     if (!isHost) {
       console.log("[TRACK_SYNC] Non-host device cannot control playback");
@@ -759,32 +895,28 @@ export default function GamePlay() {
       return;
     }
 
-    if (!sound) {
-      console.log("[TRACK_SYNC] No sound loaded, attempting to reload current song");
-      if (currentSong) {
-        await loadAndPlaySong(currentSong);
-      }
-      return;
-    }
+    if (!sound) return;
 
     try {
       if (isPlaying) {
-        console.log("[TRACK_SYNC] Host pausing audio");
         await sound.pauseAsync();
       } else {
-        console.log("[TRACK_SYNC] Host starting audio playback");
         await sound.playAsync();
-        console.log("[TRACK_SYNC] Host audio playback started via user interaction");
       }
     } catch (error) {
-      console.error("[TRACK_SYNC] Error toggling playback:", error);
-      // Try to recover from error by reloading the song
-      if (currentSong) {
-        console.log("[TRACK_SYNC] Attempting to recover by reloading song");
+      console.error("Error toggling playback:", error);
+      // Try to recover from error
+      if (sound) {
         try {
-          await loadAndPlaySong(currentSong);
-        } catch (recoveryError) {
-          console.error("[TRACK_SYNC] Recovery failed:", recoveryError);
+          // Attempt to reset the sound
+          await sound.stopAsync();
+          setTimeout(() => {
+            sound
+              .playAsync()
+              .catch((e) => console.error("Recovery failed:", e));
+          }, 500);
+        } catch (e) {
+          console.error("Error in recovery attempt:", e);
         }
       }
     }
@@ -924,6 +1056,26 @@ export default function GamePlay() {
         setMaxRounds(data.maxRounds);
       }
 
+      // Count the number of mock tracks
+      const mockTracks = data.playlist.filter(
+        (item) =>
+          item.track.songTitle === "Bohemian Rhapsody" ||
+          item.track.songTitle === "Don't Stop Believin'" ||
+          item.track.songTitle === "Billie Jean"
+      );
+
+      if (mockTracks.length > 0) {
+        console.warn(
+          `[TRACK_SYNC] WARNING: Received ${mockTracks.length} mock tracks from server!`
+        );
+        console.warn(
+          `[TRACK_SYNC] This is happening because the server couldn't find any tracks with preview URLs`
+        );
+        console.warn(
+          `[TRACK_SYNC] Try enriching tracks with Deezer before sending to server`
+        );
+      }
+
       // Log all tracks for debugging purposes
       console.log("[TRACK_SYNC] Available tracks in playlist:");
       data.playlist.forEach((item, index) => {
@@ -956,25 +1108,8 @@ export default function GamePlay() {
 
       setAllSongs(extractedSongs);
 
-      // For non-host devices, immediately set up the UI
-      if (!isHost && extractedSongs.length > 0) {
-        console.log("[NON-HOST] Setting up UI with received playlist");
-        
-        // Set the first song as current song for UI display
-        const firstSong = extractedSongs[0];
-        setCurrentSong(firstSong);
-        
-        // Enable voting immediately for non-host devices
-        setCanVote(true);
-        setVoteProgress(100);
-        
-        // Set game stage to playing
-        setGameStage("playing");
-      }
-
       // Force loading to complete if needed
       if (isLoading) {
-        console.log("[TRACK_SYNC] Playlist received, completing loading");
         setIsLoading(false);
         setGameStage("playing");
       }
@@ -1691,7 +1826,7 @@ export default function GamePlay() {
   useEffect(() => {
     if (isLoading) {
       console.log(
-        "Loading timeout started - will auto-advance in 3 seconds if still loading"
+        "Loading timeout started - will auto-advance in 5 seconds if still loading"
       );
       const loadingTimeout = setTimeout(() => {
         if (isLoading) {
@@ -1714,26 +1849,29 @@ export default function GamePlay() {
             setAllSongs(extractedSongs);
           }
 
-          // For non-host devices, ensure we have a current song to display
-          if (!isHost && !currentSong && allSongs.length > 0) {
-            console.log("[NON-HOST] Setting first song for UI display");
-            const firstSong = allSongs[0];
-            setCurrentSong(firstSong);
-            setCanVote(true);
-            setVoteProgress(100);
+          // If we still have no songs, use mock songs
+          if (allSongs.length === 0) {
+            console.log("No songs loaded, using mock songs");
+            setAllSongs(mockSongs);
+          }
+
+          // Check if we already have a current song
+          if (!currentSong && allSongs.length > 0) {
+            console.log("Setting a current song since none is loaded");
+            setCurrentSong(allSongs[0]);
           }
         }
-      }, 3000); // Reduced from 5000 to 3000 (3 seconds)
+      }, 5000); // Reduced from 10000 to 5000 (5 seconds)
 
       return () => clearTimeout(loadingTimeout);
     }
-  }, [isLoading, allSongs, consolidatedPlaylist, currentSong, isHost]);
+  }, [isLoading, allSongs, consolidatedPlaylist, mockSongs]);
 
   // Add an additional timeout for the host specifically
   useEffect(() => {
     if (isHost && isLoading) {
       console.log(
-        "[HOST] Special host loading check - will verify in 2 seconds"
+        "[HOST] Special host loading check - will verify in 3 seconds"
       );
       const hostLoadingTimeout = setTimeout(() => {
         console.log("[HOST] Checking if host is still loading...");
@@ -1757,7 +1895,10 @@ export default function GamePlay() {
               },
             }));
             setAllSongs(extractedSongs);
-          } 
+          } else if (allSongs.length === 0) {
+            console.log("[HOST] No songs found, using mock songs for host");
+            setAllSongs(mockSongs);
+          }
 
           // Make sure we have a current song
           if (!currentSong && allSongs.length > 0) {
@@ -1767,7 +1908,7 @@ export default function GamePlay() {
             loadAndPlaySong(firstSong);
           }
         }
-      }, 2000); // Reduced from 3000 to 2000 (2 seconds)
+      }, 3000); // Check after 3 seconds
 
       return () => clearTimeout(hostLoadingTimeout);
     }
@@ -1776,6 +1917,7 @@ export default function GamePlay() {
     isLoading,
     allSongs,
     consolidatedPlaylist,
+    mockSongs,
     currentSong,
   ]);
 
@@ -1859,135 +2001,6 @@ export default function GamePlay() {
     }
   }, [players, isMultiplayer]);
 
-  // Add effect to handle first user interaction for audio (host only)
-  useEffect(() => {
-    if (!isHost) return;
-
-    const enableAudioContext = async () => {
-      try {
-        // Create a silent audio context to enable audio on iOS/browsers
-        const { sound: silentSound } = await Audio.Sound.createAsync(
-          { uri: 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=' },
-          { shouldPlay: false, volume: 0 }
-        );
-        await silentSound.unloadAsync();
-        console.log("[TRACK_SYNC] Audio context enabled for host device");
-      } catch (error) {
-        console.log("[TRACK_SYNC] Could not pre-enable audio context:", error.message);
-      }
-    };
-
-    // Enable audio context on first load for host
-    enableAudioContext();
-  }, [isHost]);
-
-  // Define fetchSongs and loadPlayedSongs here
-  const fetchSongs = async () => {
-    let rawSongs = [];
-    try {
-      // Try to get recently played tracks first
-      rawSongs = await getMyRecentlyPlayedTracks(token);
-
-      if (!rawSongs || rawSongs.length < 5) {
-        console.log(
-          "Not enough recently played tracks, fetching from album..."
-        );
-        // If not enough, get album tracks (ensure ALBUM_ID is defined)
-        const albumSongs = await getAlbumTracks(ALBUM_ID, token);
-        if (albumSongs) {
-          rawSongs = rawSongs ? [...rawSongs, ...albumSongs] : albumSongs;
-          // Remove duplicates based on songTitle and artist
-          rawSongs = rawSongs.filter(
-            (song, index, self) =>
-              index ===
-              self.findIndex(
-                (s) =>
-                  s.songTitle === song.songTitle &&
-                  JSON.stringify(s.songArtists) ===
-                    JSON.stringify(song.songArtists)
-              )
-          );
-        }
-      }
-
-      // If still not enough songs, use mock songs to fill up
-      if (rawSongs.length < 5) {
-        console.log("Still not enough songs, adding mock songs...");
-        const needed = 5 - rawSongs.length;
-        // Add unique mock songs that are not already in rawSongs
-        const mockSongsToAdd = mockSongs
-          .filter(
-            (mockSong) =>
-              !rawSongs.some(
-                (s) =>
-                  s.songTitle === mockSong.songTitle &&
-                  JSON.stringify(s.songArtists) ===
-                    JSON.stringify(mockSong.songArtists)
-              )
-          )
-          .slice(0, needed);
-        rawSongs.push(...mockSongsToAdd);
-      }
-
-      // Ensure all songs have preview URLs, enriching with Deezer if necessary
-      const enrichedSongs = await enrichTracksWithDeezerPreviews(rawSongs);
-      console.log(
-        `Fetched and enriched ${enrichedSongs.length} songs. ${
-          enrichedSongs.filter((s) => s.previewUrl).length
-        } have preview URLs.`
-      );
-      return enrichedSongs.slice(0, 20); // Limit to 20 songs
-    } catch (error) {
-      console.error("Error fetching songs:", error);
-      handleTokenError(error); // Handle token errors specifically
-      // Fallback to mock songs if there is an unrecoverable error
-      return mockSongs.slice(0, 20);
-    }
-  };
-
-  const loadPlayedSongs = async () => {
-    try {
-      const storedPlayedSongs = await AsyncStorage.getItem("playedSongs");
-      if (storedPlayedSongs) {
-        const parsedSongs = JSON.parse(storedPlayedSongs);
-        console.log(
-          `Loaded ${parsedSongs.length} previously played songs from storage`
-        );
-        setPlayedSongs(parsedSongs);
-      }
-    } catch (error) {
-      console.error("Error loading played songs from storage:", error);
-    }
-  };
-
-  // Helper function to group songs by player
-  const groupSongsByPlayer = (songs, players) => {
-    if (!songs || !players || songs.length === 0 || players.length === 0) {
-      return {};
-    }
-
-    const grouped = {};
-    
-    // Initialize each player with an empty array
-    players.forEach(player => {
-      grouped[player.id] = [];
-    });
-
-    // Distribute songs evenly among players
-    songs.forEach((song, index) => {
-      const playerIndex = index % players.length;
-      const player = players[playerIndex];
-      if (player && grouped[player.id]) {
-        grouped[player.id].push({
-          ...song,
-          assignedToPlayer: player
-        });
-      }
-    });
-
-    return grouped;
-  };
-
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -2031,223 +2044,250 @@ export default function GamePlay() {
       </View>
 
       {currentSong && gameStage === "playing" && (
-        <ScrollView 
-          style={styles.gamePlayScrollView}
-          contentContainerStyle={styles.gamePlayScrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.songPlaybackContainer}>
-            <View style={styles.albumArtworkWrapper}>
-              <View style={styles.albumArtworkBackground}>
-                <Image
-                  source={{ uri: currentSong.imageUrl }}
-                  style={styles.albumCover}
-                  resizeMode="cover"
-                />
-              </View>
+        <View style={styles.songPlaybackContainer}>
+          <View style={styles.albumArtworkWrapper}>
+            <View style={styles.albumArtworkBackground}>
+              <Image
+                source={{ uri: currentSong.imageUrl }}
+                style={styles.albumCover}
+                resizeMode="cover"
+              />
             </View>
+          </View>
 
-            <View style={styles.songPlaybackInfo}>
-              <View style={{ maxHeight: "2em" }}>
-                <Text style={styles.playbackSongTitle} numberOfLines={1}>
-                  {currentSong.songTitle}
-                </Text>
-              </View>
-              <View style={{ maxHeight: "2em" }}>
-                <Text style={styles.playbackArtistName} numberOfLines={1}>
-                  {currentSong.songArtists.join(", ")}
-                </Text>
-              </View>
+          <View style={styles.songPlaybackInfo}>
+            <View style={{ maxHeight: "2em" }}>
+              <Text style={styles.playbackSongTitle} numberOfLines={1}>
+                {currentSong.songTitle}
+              </Text>
             </View>
+            <View style={{ maxHeight: "2em" }}>
+              <Text style={styles.playbackArtistName} numberOfLines={1}>
+                {currentSong.songArtists.join(", ")}
+              </Text>
+            </View>
+          </View>
 
-            <View style={styles.playbackControlsContainer}>
-              {isLoadingAudio ? (
-                <View style={styles.loadingAudioContainer}>
-                  <ActivityIndicator size="small" color="#C143FF" />
-                  <Text style={styles.loadingAudioText}>Loading audio...</Text>
-                </View>
-              ) : audioLoadError ? (
-                <View style={styles.audioErrorContainer}>
-                  <Ionicons name="alert-circle" size={64} color="#FF6B6B" />
-                  <Text style={styles.errorText}>{audioLoadError}</Text>
+          <View style={styles.playbackControlsContainer}>
+            {isLoadingAudio ? (
+              <View style={styles.loadingAudioContainer}>
+                <ActivityIndicator size="small" color="#C143FF" />
+                <Text style={styles.loadingAudioText}>Loading audio...</Text>
+              </View>
+            ) : audioLoadError ? (
+              <View style={styles.audioErrorContainer}>
+                <Ionicons name="alert-circle" size={64} color="#FF6B6B" />
+                <Text style={styles.errorText}>{audioLoadError}</Text>
 
-                  <View style={styles.buttonsContainer}>
-                    <Pressable
-                      style={styles.returnButton}
-                      onPress={handleReturnToLobby}
-                    >
-                      <Text style={styles.returnButtonText}>Back to Lobby</Text>
-                    </Pressable>
-                    <Pressable
-                      style={styles.playAgainButton}
-                      onPress={handlePlayAgain}
-                    >
-                      <Text style={styles.playAgainButtonText}>Try Again</Text>
-                    </Pressable>
-                  </View>
+                <View style={styles.buttonsContainer}>
+                  <Pressable
+                    style={styles.returnButton}
+                    onPress={handleReturnToLobby}
+                  >
+                    <Text style={styles.returnButtonText}>Back to Lobby</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.playAgainButton}
+                    onPress={handlePlayAgain}
+                  >
+                    <Text style={styles.playAgainButtonText}>Try Again</Text>
+                  </Pressable>
                 </View>
-              ) : (
-                <>
-                  <View style={styles.progressContainer}>
-                    <Text style={styles.timeText}>
-                      {formatTime(playbackPosition)}
-                    </Text>
-                    {Platform.OS === 'web' ? (
-                      <View style={styles.progressBar}>
-                        <View style={styles.progressTrack}>
-                          <View 
-                            style={[
-                              styles.progressFill,
-                              {
-                                width: `${
-                                  playbackDuration > 0 
-                                    ? Math.min(100, (playbackPosition / playbackDuration) * 100)
-                                    : 0
-                                }%`
-                              }
-                            ]}
-                          />
-                          <View 
-                            style={[
-                              styles.progressThumb,
-                              {
-                                left: `${
-                                  playbackDuration > 0 
-                                    ? Math.min(100, (playbackPosition / playbackDuration) * 100)
-                                    : 0
-                                }%`
-                              }
-                            ]}
-                          />
-                        </View>
+              </View>
+            ) : (
+              <>
+                <View style={styles.progressContainer}>
+                  <Text style={styles.timeText}>
+                    {formatTime(playbackPosition)}
+                  </Text>
+                  {Platform.OS === 'web' ? (
+                    <View style={styles.progressBar}>
+                      <View style={styles.progressTrack}>
+                        <View 
+                          style={[
+                            styles.progressFill,
+                            {
+                              width: `${
+                                playbackDuration > 0 
+                                  ? Math.min(100, (playbackPosition / playbackDuration) * 100)
+                                  : 0
+                              }%`
+                            }
+                          ]}
+                        />
+                        <View 
+                          style={[
+                            styles.progressThumb,
+                            {
+                              left: `${
+                                playbackDuration > 0 
+                                  ? Math.min(100, (playbackPosition / playbackDuration) * 100)
+                                  : 0
+                              }%`
+                            }
+                          ]}
+                        />
                       </View>
-                    ) : (
-                      <Slider
-                        style={styles.progressBar}
-                        minimumValue={0}
-                        maximumValue={
-                          playbackDuration > 0 ? playbackDuration : 30000
-                        }
-                        value={playbackPosition}
-                        minimumTrackTintColor="#C143FF"
-                        maximumTrackTintColor="#444"
-                        thumbTintColor="#FFC857"
-                        disabled={true}
-                      />
-                    )}
-                    <Text style={styles.timeText}>
-                      {formatTime(playbackDuration)}
-                    </Text>
-                  </View>
-
-                  <View style={styles.controlButtonsContainer}>
-                    <TouchableOpacity
-                      style={styles.playPauseButton}
-                      onPress={togglePlayPause}
-                    >
-                      <Ionicons
-                        name={isPlaying ? "pause" : "play"}
-                        size={32}
-                        color="white"
-                      />
-                    </TouchableOpacity>
-                  </View>
-
-                  {currentSong?.externalUrl && (
-                    <TouchableOpacity
-                      style={[
-                        styles.externalLinkButton,
-                        styles.spotifyLinkButton,
-                      ]}
-                      onPress={async () => {
-                        // try {
-                        //   // Log the Spotify link click event with relevant parameters
-                        //   await logEvent(analytics, "spotify_link_click", {
-                        //     song_title: currentSong.songTitle,
-                        //     song_artists: Array.isArray(currentSong.songArtists)
-                        //       ? currentSong.songArtists.join(", ")
-                        //       : currentSong.songArtists,
-                        //     round_number: currentRound,
-                        //     game_id: gameId,
-                        //   });
-
-                        //   // Open the Spotify URL
-                        //   await Linking.openURL(currentSong.externalUrl);
-                        // } catch (error) {
-                        //   console.error(
-                        //     "Error logging Spotify link click:",
-                        //     error
-                        //   );
-                        // Still try to open the URL even if logging fails
-                        await Linking.openURL(currentSong.externalUrl);
-                        //}
-                      }}
-                    >
-                      <Image
-                        source={require("../assets/white-spotify-logo.png")}
-                        style={{ width: 20, height: 20, marginRight: 5 }}
-                      />
-                      <Text style={styles.externalLinkText}>Open in Spotify</Text>
-                    </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <Slider
+                      style={styles.progressBar}
+                      minimumValue={0}
+                      maximumValue={
+                        playbackDuration > 0 ? playbackDuration : 30000
+                      }
+                      value={playbackPosition}
+                      minimumTrackTintColor="#C143FF"
+                      maximumTrackTintColor="#444"
+                      thumbTintColor="#FFC857"
+                      disabled={true}
+                    />
                   )}
-                </>
-              )}
-            </View>
+                  <Text style={styles.timeText}>
+                    {formatTime(playbackDuration)}
+                  </Text>
+                </View>
 
-            {/* Voting button that appears when voting is allowed */}
-            <View style={styles.voteButtonContainer}>
+                <View style={styles.controlButtonsContainer}>
+                  <TouchableOpacity
+                    style={styles.playPauseButton}
+                    onPress={togglePlayPause}
+                  >
+                    <Ionicons
+                      name={isPlaying ? "pause" : "play"}
+                      size={32}
+                      color="white"
+                    />
+                  </TouchableOpacity>
+                </View>
+
+                {currentSong?.externalUrl && (
+                  <TouchableOpacity
+                    style={[
+                      styles.externalLinkButton,
+                      styles.spotifyLinkButton,
+                    ]}
+                    onPress={async () => {
+                      // try {
+                      //   // Log the Spotify link click event with relevant parameters
+                      //   await logEvent(analytics, "spotify_link_click", {
+                      //     song_title: currentSong.songTitle,
+                      //     song_artists: Array.isArray(currentSong.songArtists)
+                      //       ? currentSong.songArtists.join(", ")
+                      //       : currentSong.songArtists,
+                      //     round_number: currentRound,
+                      //     game_id: gameId,
+                      //   });
+
+                      //   // Open the Spotify URL
+                      //   await Linking.openURL(currentSong.externalUrl);
+                      // } catch (error) {
+                      //   console.error(
+                      //     "Error logging Spotify link click:",
+                      //     error
+                      //   );
+                      // Still try to open the URL even if logging fails
+                      await Linking.openURL(currentSong.externalUrl);
+                      //}
+                    }}
+                  >
+                    <Image
+                      source={require("../assets/white-spotify-logo.png")}
+                      style={{ width: 20, height: 20, marginRight: 5 }}
+                    />
+                    <Text style={styles.externalLinkText}>Open in Spotify</Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
+          </View>
+
+          <View style={styles.voteButtonContainer}>
+            <TouchableOpacity
+              activeOpacity={canVote ? 0.7 : 1}
+              onPress={() => {
+                if (canVote) {
+                  // Make sure we have an assigned player before going to voting stage
+                  if (!currentSong?.assignedToPlayer) {
+                    // Just in case it wasn't assigned, pick a random player now
+                    const randomPlayer =
+                      players[Math.floor(Math.random() * players.length)];
+                    console.log(
+                      `Assigning song ${currentSong.songTitle} to player ${randomPlayer.username} during vote`
+                    );
+                    setCurrentSong({
+                      ...currentSong,
+                      assignedToPlayer: randomPlayer,
+                    });
+                    // Update in roundSongs state too
+                    setRoundSongs((prev) => ({
+                      ...prev,
+                      [currentRound]: {
+                        ...prev[currentRound],
+                        assignedToPlayer: randomPlayer,
+                      },
+                    }));
+                  }
+                  setGameStage("voting");
+                } else {
+                  Alert.alert(
+                    "Not Ready Yet",
+                    `Please listen to at least ${
+                      MIN_PLAY_DURATION / 1000
+                    } seconds of the song before voting.`,
+                    [{ text: "OK" }]
+                  );
+                }
+              }}
+            >
               <View style={styles.voteButtonWrapper}>
-                <View
-                  style={[
-                    styles.voteProgressBackground,
-                    voteProgress === 100 && styles.voteProgressComplete,
-                  ]}
-                >
+                {/* Progress bar background */}
+                <View style={styles.voteProgressBackground}>
+                  {/* Progress bar fill that grows based on playback position */}
                   <View
                     style={[
                       styles.voteProgressFill,
-                      {
-                        width: `${voteProgress}%`,
-                      },
-                      voteProgress === 100 && styles.voteProgressComplete,
+                      { width: `${voteProgress}%` },
+                      canVote ? styles.voteProgressComplete : {},
                     ]}
                   />
                 </View>
 
-                <Pressable
+                {/* Button content */}
+                <View
                   style={[
                     styles.voteButtonContent,
-                    canVote ? styles.voteButtonEnabled : styles.voteButtonDisabled,
+                    !canVote
+                      ? styles.voteButtonDisabled
+                      : styles.voteButtonEnabled,
                   ]}
-                  onPress={() => setGameStage("voting")}
-                  disabled={!canVote}
                 >
                   <Text
                     style={[
                       styles.voteButtonText,
-                      canVote ? null : styles.voteButtonTextDisabled,
+                      !canVote ? styles.voteButtonTextDisabled : {},
                     ]}
                   >
-                    {canVote ? "Vote Now!" : "Listen to vote..."}
+                    VOTE NOW
                   </Text>
                   <Ionicons
-                    name={canVote ? "arrow-forward" : "time"}
+                    name="arrow-forward"
                     size={24}
-                    color={canVote ? "#000" : "#000"}
+                    color={canVote ? "black" : "#777"}
                   />
-                </Pressable>
+                </View>
               </View>
+            </TouchableOpacity>
 
-              {/* <Text style={styles.voteHintText}>
-                {canVote
-                  ? "Make your guess about who listened to this song"
-                  : `Listen for ${
-                      MIN_PLAY_DURATION / 1000
-                    } seconds before voting...`}
-              </Text> */}
-            </View>
+            {/* <Text style={styles.voteHintText}>
+              {canVote
+                ? "Make your guess about who listened to this song"
+                : `Listen for ${
+                    MIN_PLAY_DURATION / 1000
+                  } seconds before voting...`}
+            </Text> */}
           </View>
-        </ScrollView>
+        </View>
       )}
 
       {gameStage === "voting" && (
@@ -2268,9 +2308,6 @@ export default function GamePlay() {
           playerPoints={playerPoints}
           castVote={castVote}
           allVotesCast={allVotesCast}
-          socket={socket} // Pass the whole socket object as before
-          currentUserId={currentUser?.id} // Pass currentUserId
-          currentUsername={currentUser?.username} // Pass currentUsername (will be undefined for now)
         />
       )}
 
@@ -2314,9 +2351,9 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     justifyContent: "space-between",
     backgroundColor: "#8E44AD",
-    paddingVertical: 5, // Reduced from 10
+    paddingVertical: 10,
     paddingHorizontal: 16,
-    height: 80, // Reduced from 100
+    height: 100,
     shadowColor: "#000000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.6,
@@ -2342,7 +2379,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "bold",
     textAlign: "center",
-    bottom: 5, // Reduced from 10
+    bottom: 10,
   },
   placeholder: {
     width: 44,
@@ -2392,11 +2429,9 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   songPlaybackContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 20,
-    paddingBottom: 20,
+    flex: 1,
+    padding: 16,
     justifyContent: "space-between",
-    minHeight: "100%",
   },
   albumArtworkWrapper: {
     alignItems: "center",
@@ -2409,7 +2444,6 @@ const styles = StyleSheet.create({
     padding: 6,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 0,
     backgroundColor: "transparent",
     shadowColor: "#8E44AD",
     shadowOffset: { width: 0, height: 0 },
@@ -2513,7 +2547,7 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     overflow: "hidden",
     borderWidth: 2,
-    borderColor: "transparent",
+    borderColor: "#555",
   },
   voteProgressFill: {
     position: "absolute",
@@ -2524,8 +2558,7 @@ const styles = StyleSheet.create({
     transition: "width 0.3s",
   },
   voteProgressComplete: {
-    backgroundColor: "transparent", // Purple for complete
-    borderWidth: 0,
+    backgroundColor: "#C143FF", // Purple for complete
   },
   voteButtonContent: {
     flexDirection: "row",
@@ -2975,11 +3008,5 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: -6, // Center vertically on the 4px track
     marginLeft: -8, // Center horizontally on the position
-  },
-  gamePlayScrollView: {
-    flexGrow: 1,
-  },
-  gamePlayScrollContent: {
-    paddingBottom: 30,
   },
 });
