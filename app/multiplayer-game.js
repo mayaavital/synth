@@ -575,33 +575,11 @@ export default function MultiplayerGame() {
 
   // Helper function to get fallback tracks (mock data that exists in Deezer)
   const getFallbackTracks = async () => {
-    console.log("🎵 Using fallback tracks with real song data for Deezer enrichment");
+    console.log("🚫 FALLBACK TRACKS DISABLED - No mock tracks will be provided");
+    console.log("⚠️ User must provide real Spotify tracks or the game cannot proceed");
     
-    // Use real song names that exist in Deezer for testing
-    const realSongs = [
-      { title: "Blinding Lights", artist: "The Weeknd" },
-      { title: "Shape of You", artist: "Ed Sheeran" },
-      { title: "Bohemian Rhapsody", artist: "Queen" },
-      { title: "Billie Jean", artist: "Michael Jackson" },
-      { title: "Hotel California", artist: "Eagles" }
-    ];
-    
-    const tracksToProcess = realSongs.map((song, i) => ({
-      songTitle: song.title,
-      songArtists: [song.artist],
-      albumName: "Popular Album",
-      imageUrl: "https://via.placeholder.com/300",
-      previewUrl: null, // Set to null to force Deezer enrichment
-      uri: `spotify:track:mock${i}`,
-      trackId: `mock${i}`,
-      externalUrl: `https://open.spotify.com/track/mock${i}`,
-      duration: 30000,
-    }));
-
-    console.log("⚠️ Using mock tracks for multiplayer (Spotify tracks not available)");
-    
-    // Enrich with Deezer preview URLs
-    return await enrichTracksWithDeezer(tracksToProcess);
+    // Return empty array instead of mock tracks
+    return [];
   };
 
   // Helper function to enrich tracks with Deezer preview URLs
@@ -619,9 +597,18 @@ export default function MultiplayerGame() {
       const tracksWithPreviewUrls = enrichedTracks.filter(
         (track) => !!track.previewUrl
       ).length;
+      
+      // Count mock tracks
+      const mockTracks = enrichedTracks.filter((track) => !!track.isMockTrack).length;
+      
       console.log(
         `After Deezer enrichment: ${tracksWithPreviewUrls}/${enrichedTracks.length} tracks have preview URLs`
       );
+      
+      if (mockTracks > 0) {
+        console.log(`⚠️ WARNING: ${mockTracks}/${enrichedTracks.length} tracks are mock Deezer tracks`);
+        console.log("Mock tracks being sent to server - these should be handled properly by server logic");
+      }
 
       return enrichedTracks;
     } catch (deezerError) {

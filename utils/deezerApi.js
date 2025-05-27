@@ -218,18 +218,14 @@ export const searchDeezerTracks = async (query, limit = 10) => {
   // Strategy 3: Final fallback to mock data (React Native environments)
   if (Platform.OS !== 'web') {
     try {
-      console.log(`\n3. Using mock data fallback for ${Platform.OS}...`);
-      const mockResult = await getMockDeezerTracks(query, limit);
-      if (mockResult && mockResult.length > 0) {
-        console.log(`✅ Mock data success: Found ${mockResult.length} tracks`);
-        return mockResult;
-      }
+      console.log(`\n3. Mock data fallback disabled - no fallback tracks will be provided`);
+      console.log(`✅ Skipping mock data to ensure only real tracks are used`);
     } catch (mockError) {
-      console.log(`❌ Mock data failed:`, mockError.message);
+      console.log(`❌ Mock data was disabled`);
     }
   }
   
-  console.log(`\n❌ All strategies failed for query: "${query}"`);
+  console.log(`\n❌ All strategies failed for query: "${query}" - NO MOCK TRACKS WILL BE PROVIDED`);
   return [];
 };
 
@@ -294,9 +290,10 @@ export const getDeezerTrackById = async (trackId) => {
 /**
  * Format Deezer track data to match the app's expected format
  * @param {Object} deezerTrack - Track object from Deezer API
+ * @param {boolean} isMockData - Whether this track comes from mock data
  * @returns {Object} - Formatted track object
  */
-export const formatDeezerTrack = (deezerTrack) => {
+export const formatDeezerTrack = (deezerTrack, isMockData = false) => {
   return {
     songTitle: deezerTrack.title,
     songArtists: deezerTrack.artist ? [deezerTrack.artist.name] : [],
@@ -308,12 +305,14 @@ export const formatDeezerTrack = (deezerTrack) => {
     externalUrl: deezerTrack.link,
     trackId: deezerTrack.id.toString(),
     platformSource: 'deezer',
+    isMockTrack: isMockData, // IMPORTANT: Mark mock tracks properly
     _debug: {
       title: deezerTrack.title,
       artists: [deezerTrack.artist?.name],
       duration: deezerTrack.duration * 1000,
       albumArt: deezerTrack.album?.cover_medium ? "Available" : "Unavailable",
       previewUrl: deezerTrack.preview ? "Available" : "Unavailable",
+      isMockData: isMockData,
     }
   };
 };
@@ -364,7 +363,16 @@ export const findDeezerTrackFromSpotify = async (spotifyTrack) => {
         if (bestMatch) {
           console.log(`Found matching Deezer track: "${bestMatch.title}" by ${bestMatch.artist}`);
           console.log(`Preview URL available: ${bestMatch.preview ? 'YES' : 'NO'}`);
-          return formatDeezerTrack(bestMatch);
+          
+          // Check if this is a mock track by comparing with known mock track titles
+          const mockTrackTitles = ["Blinding Lights", "Shape of You", "Bohemian Rhapsody", "Billie Jean", "Hotel California"];
+          const isMockData = mockTrackTitles.includes(bestMatch.title);
+          
+          if (isMockData) {
+            console.log(`⚠️ WARNING: Using mock Deezer track "${bestMatch.title}" as fallback`);
+          }
+          
+          return formatDeezerTrack(bestMatch, isMockData);
         }
       }
     } catch (error) {
@@ -455,14 +463,21 @@ export const enrichTracksWithDeezerPreviews = async (spotifyTracks) => {
         if (deezerTrack && deezerTrack.previewUrl) {
           console.log(`Found Deezer preview URL for "${track.songTitle}"`);
           
+          // Check if this is a mock track and log it
+          if (deezerTrack.isMockTrack) {
+            console.log(`⚠️ WARNING: Enriched "${track.songTitle}" with mock Deezer track`);
+          }
+          
           // Return a new object with all Spotify metadata but Deezer's preview URL
           return {
             ...track,
             previewUrl: deezerTrack.previewUrl,
+            isMockTrack: deezerTrack.isMockTrack || false, // IMPORTANT: Propagate mock flag
             // Optionally store Deezer information for reference
             deezerInfo: {
               trackId: deezerTrack.trackId,
-              externalUrl: deezerTrack.externalUrl
+              externalUrl: deezerTrack.externalUrl,
+              isMockTrack: deezerTrack.isMockTrack || false
             }
           };
         } else {

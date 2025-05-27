@@ -821,10 +821,14 @@ io.on("connection", (socket) => {
     // Check if we have player tracks
     if (!game.playerTracks || Object.keys(game.playerTracks).length === 0) {
       console.warn(
-        `[TRACK_SYNC] WARNING: Game ${gameId} has no player tracks, using fallback tracks only`
+        `[TRACK_SYNC] WARNING: Game ${gameId} has no player tracks - Mock tracks disabled`
       );
-      addMockTracksToGame(game);
-      sharePlaylistWithClients(gameId);
+      console.error(`[TRACK_SYNC] ERROR: Cannot proceed without real player tracks`);
+      
+      // Emit error to all players instead of using mock tracks
+      io.to(gameId).emit("error", { 
+        message: "No player tracks available. Please ensure all players have shared their Spotify tracks before starting the game." 
+      });
       return;
     }
 
@@ -882,10 +886,14 @@ io.on("connection", (socket) => {
         // Check for preview URL
         const hasPreviewUrl =
           track.previewUrl && typeof track.previewUrl === "string";
+        
+        // Check if this is a client-side mock track from Deezer enrichment
+        const isClientMockTrack = track.isMockTrack === true;
+        
         console.log(
           `[TRACK_SYNC] Track "${track.songTitle}" has ${
             hasPreviewUrl ? "VALID" : "NO"
-          } preview URL, but keeping it anyway`
+          } preview URL${isClientMockTrack ? " (CLIENT MOCK TRACK)" : ""}, but keeping it anyway`
         );
 
         // Normalize track format
@@ -902,7 +910,9 @@ io.on("connection", (socket) => {
           duration: track.duration || 30000,
           externalUrl: track.externalUrl || null,
           uri: track.uri || null,
-          isRealTrack: true, // Flag to distinguish from mock tracks
+          // IMPORTANT: Check if this track was marked as mock during Deezer enrichment
+          isMockTrack: track.isMockTrack || false, // Preserve mock flag from client
+          isRealTrack: !track.isMockTrack, // Set opposite for backwards compatibility
         };
 
         // Add to consolidated playlist with player info
@@ -942,22 +952,20 @@ io.on("connection", (socket) => {
       `[TRACK_SYNC] Shuffling ${game.consolidatedPlaylist.length} tracks for rounds`
     );
 
-    // Check if we need to add mock tracks
+    // Check if we need to add mock tracks - DISABLED TO PREVENT MOCK TRACKS
     if (tracksWithPreviewUrls === 0) {
       console.log(
-        `[TRACK_SYNC] No tracks have preview URLs, using fallback tracks`
+        `[TRACK_SYNC] ⚠️ NO TRACKS HAVE PREVIEW URLs - Mock tracks disabled, game will use tracks without preview URLs`
       );
-      addMockTracksToGame(game);
+      console.log(`[TRACK_SYNC] Game will proceed with ${validTracksCount} tracks (no audio preview available)`);
+      // Do not add mock tracks - let the game proceed with tracks that don't have preview URLs
     } else if (game.consolidatedPlaylist.length < game.players.length * 2) {
       // If we don't have enough tracks for each player to have at least 2
       console.log(
-        `[TRACK_SYNC] Not enough tracks (${game.consolidatedPlaylist.length}) for ${game.players.length} players, adding some mock tracks`
+        `[TRACK_SYNC] Not enough tracks (${game.consolidatedPlaylist.length}) for ${game.players.length} players`
       );
-
-      // Add just enough mock tracks to supplement
-      const tracksToAdd =
-        game.players.length * 2 - game.consolidatedPlaylist.length;
-      addMockTracksToGame(game, tracksToAdd);
+      console.log(`[TRACK_SYNC] Mock tracks disabled - game will proceed with available ${game.consolidatedPlaylist.length} real tracks`);
+      // Do not add mock tracks - let the game proceed with fewer tracks
     }
 
     // Finalize the number of rounds based on available tracks
@@ -1004,7 +1012,23 @@ io.on("connection", (socket) => {
             : "Missing"
         }`
       );
+      
+      // Log additional details for mock tracks
+      if (item.track.isMockTrack) {
+        console.log(`[TRACK_SYNC]       ⚠️ This is a mock track (likely from Deezer fallback)`);
+      }
     });
+    
+    // Summary statistics
+    const realTracks = game.consolidatedPlaylist.filter((item) => !item.track.isMockTrack);
+    const clientMockTracks = game.consolidatedPlaylist.filter((item) => item.track.isMockTrack);
+    
+    console.log(`[TRACK_SYNC] SUMMARY: ${realTracks.length} real tracks, ${clientMockTracks.length} client-side mock tracks`);
+    
+    if (clientMockTracks.length > 0) {
+      console.log(`[TRACK_SYNC] ⚠️ WARNING: Game contains ${clientMockTracks.length} mock tracks from Deezer fallback`);
+      console.log(`[TRACK_SYNC] These tracks will be properly handled by selectRandomSongForRound logic`);
+    }
 
     // Share the consolidated playlist with clients
     sharePlaylistWithClients(gameId);
@@ -1258,6 +1282,10 @@ io.on("connection", (socket) => {
       (song) => song.trackId || song.title
     );
 
+    // Log what we're filtering with
+    console.log(`[TRACK_SYNC] Total available tracks: ${game.consolidatedPlaylist.length}`);
+    console.log(`[TRACK_SYNC] Used track IDs from previous rounds: ${usedTrackIds.length}`);
+
     // Filter available tracks: first real tracks, then fallback to mock if needed
     let availableTracks = game.consolidatedPlaylist.filter(
       (item) =>
@@ -1267,27 +1295,37 @@ io.on("connection", (socket) => {
         item.track.previewUrl // Must have a preview URL
     );
 
-    // If we don't have enough real tracks, include mock tracks too
+    console.log(`[TRACK_SYNC] Available real tracks with preview URLs: ${availableTracks.length}`);
+
+    // If we don't have enough real tracks, include ALL tracks (even without preview URLs)
     if (availableTracks.length === 0) {
       console.log(
-        `[TRACK_SYNC] No unused real tracks with preview URLs available, including mock tracks`
+        `[TRACK_SYNC] No unused real tracks with preview URLs available, including ALL tracks (with or without preview URLs)`
       );
       availableTracks = game.consolidatedPlaylist.filter(
         (item) =>
           !usedTrackIds.includes(item.track.trackId) &&
           !usedTrackIds.includes(item.track.songTitle) &&
-          item.track.previewUrl // Must have a preview URL
+          !item.track.isMockTrack // Still exclude mock tracks
       );
+      
+      const tracksWithPreview = availableTracks.filter((item) => !!item.track.previewUrl).length;
+      const tracksWithoutPreview = availableTracks.length - tracksWithPreview;
+      console.log(`[TRACK_SYNC] Available tracks: ${availableTracks.length} total (${tracksWithPreview} with preview, ${tracksWithoutPreview} without preview)`);
     }
 
-    // If we still don't have enough tracks, use any available track with preview URL
+    // If we still don't have enough tracks, allow reusing tracks but still exclude mock tracks
     if (availableTracks.length === 0) {
       console.log(
-        `[TRACK_SYNC] No unused tracks available, reusing tracks with preview URLs`
+        `[TRACK_SYNC] No unused tracks available, reusing real tracks (excluding mock tracks)`
       );
       availableTracks = game.consolidatedPlaylist.filter(
-        (item) => item.track.previewUrl
+        (item) => !item.track.isMockTrack // Only exclude mock tracks
       );
+      
+      if (availableTracks.length > 0) {
+        console.log(`[TRACK_SYNC] Reusing from ${availableTracks.length} real tracks`);
+      }
     }
 
     // If we still don't have tracks, this is a critical error
@@ -1328,7 +1366,11 @@ io.on("connection", (socket) => {
     );
 
     if (selectedTrack.track.isMockTrack) {
-      console.log(`[TRACK_SYNC] USING MOCK TRACK for round ${roundNumber}`);
+      console.log(`[TRACK_SYNC] ❌ ERROR: MOCK TRACK SELECTED - This should not happen!`);
+    } else if (!selectedTrack.track.previewUrl) {
+      console.log(`[TRACK_SYNC] ⚠️ WARNING: Selected track has no preview URL - players will not hear audio preview`);
+    } else {
+      console.log(`[TRACK_SYNC] ✅ Real track with preview URL selected`);
     }
 
     // Create the round song object
