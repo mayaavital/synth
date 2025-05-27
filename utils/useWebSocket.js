@@ -199,29 +199,31 @@ export const useWebSocket = () => {
       
       // Connection events
       newSocket.on('connect', () => {
-        console.log('Connected to WebSocket server!');
+        console.log(`Connected to WebSocket server at ${serverAddress}`);
+        console.log(`Socket ID: ${newSocket.id}`);
+        
+        // Clear timeout and error
         if (timeoutRef.current) {
           clearTimeout(timeoutRef.current);
         }
         
         setIsConnected(true);
-        globalConnected = true;
-        connectedRef.current = true;
-        
         setError(null);
-        globalError = null;
-        
-        // Reset connection error count
-        connectionErrorsRef.current = 0;
-        connectionErrorCount = 0;
-        
-        // Update socket references
         setSocket(newSocket);
-        globalSocket = newSocket;
-        setCurrentUser({ id: newSocket.id }); // Set current user with socket ID on connect
         
-        // Broadcast connection success to other components
-        DeviceEventEmitter.emit('websocket_connected', { socket: newSocket });
+        // Initialize currentUser with socket ID
+        const initialUser = { id: newSocket.id };
+        setCurrentUser(initialUser);
+        globalCurrentUser = initialUser;
+        
+        // Update global state
+        globalSocket = newSocket;
+        globalConnected = true;
+        globalError = null;
+        connectedRef.current = true;
+        connectionErrorsRef.current = 0;
+        
+        console.log('WebSocket connection established successfully');
       });
       
       newSocket.on('connect_error', (err) => {

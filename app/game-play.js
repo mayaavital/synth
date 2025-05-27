@@ -80,6 +80,7 @@ export default function GamePlay() {
     castVote,
     isConnected,
     currentUser, // Destructure currentUser
+    socket, // Destructure socket
   } = useWebSocket();
 
   // Track the last few trace IDs we've received to avoid infinite sync loops
@@ -923,26 +924,6 @@ export default function GamePlay() {
         setMaxRounds(data.maxRounds);
       }
 
-      // Count the number of mock tracks
-      // const mockTracks = data.playlist.filter(
-      //   (item) =>
-      //     item.track.songTitle === "Bohemian Rhapsody" ||
-      //     item.track.songTitle === "Don't Stop Believin'" ||
-      //     item.track.songTitle === "Billie Jean"
-      // );
-
-      // if (mockTracks.length > 0) {
-      //   console.warn(
-      //     `[TRACK_SYNC] WARNING: Received ${mockTracks.length} mock tracks from server!`
-      //   );
-      //   console.warn(
-      //     `[TRACK_SYNC] This is happening because the server couldn't find any tracks with preview URLs`
-      //   );
-      //   console.warn(
-      //     `[TRACK_SYNC] Try enriching tracks with Deezer before sending to server`
-      //   );
-      // }
-
       // Log all tracks for debugging purposes
       console.log("[TRACK_SYNC] Available tracks in playlist:");
       data.playlist.forEach((item, index) => {
@@ -975,8 +956,25 @@ export default function GamePlay() {
 
       setAllSongs(extractedSongs);
 
+      // For non-host devices, immediately set up the UI
+      if (!isHost && extractedSongs.length > 0) {
+        console.log("[NON-HOST] Setting up UI with received playlist");
+        
+        // Set the first song as current song for UI display
+        const firstSong = extractedSongs[0];
+        setCurrentSong(firstSong);
+        
+        // Enable voting immediately for non-host devices
+        setCanVote(true);
+        setVoteProgress(100);
+        
+        // Set game stage to playing
+        setGameStage("playing");
+      }
+
       // Force loading to complete if needed
       if (isLoading) {
+        console.log("[TRACK_SYNC] Playlist received, completing loading");
         setIsLoading(false);
         setGameStage("playing");
       }
@@ -1693,7 +1691,7 @@ export default function GamePlay() {
   useEffect(() => {
     if (isLoading) {
       console.log(
-        "Loading timeout started - will auto-advance in 5 seconds if still loading"
+        "Loading timeout started - will auto-advance in 3 seconds if still loading"
       );
       const loadingTimeout = setTimeout(() => {
         if (isLoading) {
@@ -1716,29 +1714,26 @@ export default function GamePlay() {
             setAllSongs(extractedSongs);
           }
 
-          // If we still have no songs, use mock songs
-          // if (allSongs.length === 0) {
-          //   console.log("No songs loaded, using mock songs");
-          //   setAllSongs(mockSongs);
-          // }
-
-          // Check if we already have a current song
-          if (!currentSong && allSongs.length > 0) {
-            console.log("Setting a current song since none is loaded");
-            setCurrentSong(allSongs[0]);
+          // For non-host devices, ensure we have a current song to display
+          if (!isHost && !currentSong && allSongs.length > 0) {
+            console.log("[NON-HOST] Setting first song for UI display");
+            const firstSong = allSongs[0];
+            setCurrentSong(firstSong);
+            setCanVote(true);
+            setVoteProgress(100);
           }
         }
-      }, 5000); // Reduced from 10000 to 5000 (5 seconds)
+      }, 3000); // Reduced from 5000 to 3000 (3 seconds)
 
       return () => clearTimeout(loadingTimeout);
     }
-  }, [isLoading, allSongs, consolidatedPlaylist, mockSongs]);
+  }, [isLoading, allSongs, consolidatedPlaylist, currentSong, isHost]);
 
   // Add an additional timeout for the host specifically
   useEffect(() => {
     if (isHost && isLoading) {
       console.log(
-        "[HOST] Special host loading check - will verify in 3 seconds"
+        "[HOST] Special host loading check - will verify in 2 seconds"
       );
       const hostLoadingTimeout = setTimeout(() => {
         console.log("[HOST] Checking if host is still loading...");
@@ -1762,12 +1757,7 @@ export default function GamePlay() {
               },
             }));
             setAllSongs(extractedSongs);
-          } 
-          
-          // else if (allSongs.length === 0) {
-          //   console.log("[HOST] No songs found, using mock songs for host");
-          //   setAllSongs(mockSongs);
-          // }
+          }
 
           // Make sure we have a current song
           if (!currentSong && allSongs.length > 0) {
@@ -1777,7 +1767,7 @@ export default function GamePlay() {
             loadAndPlaySong(firstSong);
           }
         }
-      }, 3000); // Check after 3 seconds
+      }, 2000); // Reduced from 3000 to 2000 (2 seconds)
 
       return () => clearTimeout(hostLoadingTimeout);
     }
@@ -1786,7 +1776,6 @@ export default function GamePlay() {
     isLoading,
     allSongs,
     consolidatedPlaylist,
-    mockSongs,
     currentSong,
   ]);
 
@@ -1969,6 +1958,34 @@ export default function GamePlay() {
     } catch (error) {
       console.error("Error loading played songs from storage:", error);
     }
+  };
+
+  // Helper function to group songs by player
+  const groupSongsByPlayer = (songs, players) => {
+    if (!songs || !players || songs.length === 0 || players.length === 0) {
+      return {};
+    }
+
+    const grouped = {};
+    
+    // Initialize each player with an empty array
+    players.forEach(player => {
+      grouped[player.id] = [];
+    });
+
+    // Distribute songs evenly among players
+    songs.forEach((song, index) => {
+      const playerIndex = index % players.length;
+      const player = players[playerIndex];
+      if (player && grouped[player.id]) {
+        grouped[player.id].push({
+          ...song,
+          assignedToPlayer: player
+        });
+      }
+    });
+
+    return grouped;
   };
 
   if (isLoading) {
