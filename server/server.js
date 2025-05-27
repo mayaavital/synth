@@ -1548,7 +1548,18 @@ io.on("connection", (socket) => {
   // Handle player vote
 
   socket.on("cast_vote", (data) => {
-    const { gameId, votedForPlayerId, votedForUsername } = data;
+    const { 
+      gameId, 
+      // votedForPlayerId, // This is from selectedPlayerObj.id
+      // votedForUsername, // This is selectedPlayer (username)
+      // --- Fields from the votePayload sent by client ---
+      votedForPlayerId, // ID of the player being voted for
+      votedForUsername, // Username of the player being voted for
+      voterUsername,    // Username of the player casting the vote
+      voterSocketId,    // Socket ID of the player casting the vote (this is the key)
+      voterPlayerId,    // Player ID of the player casting the vote (should be same as voterSocketId)
+      currentRound: voteRound // Round number from client
+    } = data;
 
     if (!activeGames[gameId]) {
       socket.emit("error", { message: "Game not found" });
@@ -1556,7 +1567,16 @@ io.on("connection", (socket) => {
     }
 
     const game = activeGames[gameId];
-    const currentRound = game.currentRound;
+    const currentRound = game.currentRound; // Use server's current round for consistency
+
+    // Validate client round with server round
+    if (voteRound !== currentRound) {
+      console.warn(
+        `[PLAYER_MAPPING] Vote received for round ${voteRound} but server is on ${currentRound}. Ignoring vote from ${voterSocketId}.`
+      );
+      socket.emit("error", { message: `Vote for wrong round. Server is on ${currentRound}.` });
+      return;
+    }
 
     // Record who this player voted for with better player ID handling
     if (!game.votes) {
@@ -1571,7 +1591,7 @@ io.on("connection", (socket) => {
       // First check our username mapping (most reliable)
       if (
         gameUsernameMappings[gameId] &&
-        gameUsernameMappings[gameId][votedForUsername]
+        gameUsernameMappings[gameId][votedForUsername] // votedForUsername is the one being voted for
       ) {
         targetPlayerId = gameUsernameMappings[gameId][votedForUsername];
         console.log(
@@ -1596,23 +1616,27 @@ io.on("connection", (socket) => {
     }
 
     // Store target player ID and username together for better debugging and validation
-    game.votes[socket.id] = {
-      id: targetPlayerId,
-      username: votedForUsername,
+    // Use voterSocketId as the key for the vote, as it's the actual sender's ID
+    game.votes[voterSocketId] = {
+      id: targetPlayerId, // ID of the player they voted for
+      username: votedForUsername, // Username of the player they voted for
     };
 
     // Log which username is voting for which username (for clearer logs)
-    const voterUsername = getUsernameById(gameId, voterId) || game.players.find(p => p.id === voterId)?.username;
-        if (voterUsername) {
-          game.votes[voterUsername] = { id: targetPlayerId, username: votedForUsername };
-        }
+    // const voterUsername = getUsernameById(gameId, voterId) || game.players.find(p => p.id === voterId)?.username;
+    // Use voterUsername directly from the payload
+    const resolvedVoterUsername = gameUsernameMappings[gameId]?.[voterSocketId] || voterUsername || game.players.find(p => p.id === voterSocketId)?.username || "Unknown Voter";
+
+    // if (voterUsername) { // This was voterUsername, not resolvedVoterUsername
+    //   game.votes[voterUsername] = { id: targetPlayerId, username: votedForUsername };
+    // }
     const votedForUsernameResolved =
       votedForUsername ||
       game.players.find((p) => p.id === targetPlayerId)?.username ||
       "Unknown";
 
     console.log(
-      `[PLAYER_MAPPING] Player "${voterUsername}" (${socket.id}) voted for "${votedForUsernameResolved}" (${targetPlayerId}) in round ${currentRound}`
+      `[PLAYER_MAPPING] Player "${resolvedVoterUsername}" (${voterSocketId}) voted for "${votedForUsernameResolved}" (${targetPlayerId}) in round ${currentRound}`
     );
 
     // Try to get the correct player for this round with improved lookup
@@ -1698,9 +1722,9 @@ io.on("connection", (socket) => {
       totalPlayers,
       round: currentRound,
       player: {
-        id: socket.id,
+        id: voterSocketId, // Use voterSocketId from payload
         username:
-          game.players.find((p) => p.id === socket.id)?.username || "Unknown",
+          resolvedVoterUsername, // Use the resolved voter username
       },
     });
 
@@ -1719,16 +1743,18 @@ io.on("connection", (socket) => {
       }
 
       // Award points for correct guesses ONLY (as requested by user)
-      Object.entries(game.votes).forEach(([voterId, votedForData]) => {
+      Object.entries(game.votes).forEach(([currentVoterId, votedForData]) => {
         // Extract vote info - handle both object and string formats
         const votedForId =
           typeof votedForData === "object" ? votedForData.id : votedForData;
-        const votedForUsername =
-          typeof votedForData === "object" ? votedForData.username : null;
+        const currentVoterActualUsername =
+          gameUsernameMappings[gameId]?.[currentVoterId] || // Get username from mapping first
+          game.players.find((p) => p.id === currentVoterId)?.username || // Then from players list
+          currentVoterId; // Fallback to ID if username not found
 
         // Log raw vote data for debugging
         console.log(
-          `[VOTE_DEBUG] Vote in round ${currentRound}: voter=${voterId}, votedFor=${JSON.stringify(
+          `[VOTE_DEBUG] Vote in round ${currentRound}: voter=${currentVoterId}, votedFor=${JSON.stringify(
             votedForData
           )}`
         );
@@ -1743,9 +1769,10 @@ io.on("connection", (socket) => {
         let usernameMatch = false;
 
         // Get voter username for logging
-        const voterUsername =
-          getUsernameById(gameId, voterId) ||
-          game.players.find((p) => p.id === voterId)?.username;
+        // const voterUsername =
+        //   getUsernameById(gameId, voterId) ||
+        //   game.players.find((p) => p.id === voterId)?.username;
+        // Use currentVoterActualUsername defined above
 
         // Get username of voted-for player
         const votedForUsernameResolved =
@@ -1765,23 +1792,26 @@ io.on("connection", (socket) => {
 
         // Award point if either matching method succeeds (as long as player isn't voting for themselves)
         if ((directIdMatch || usernameMatch)) {
-          game.scores[voterUsername] = (game.scores[voterUsername] || 0) + 1;
-          console.log("game.scores", game.scores);
+          // game.scores[voterUsername] = (game.scores[voterUsername] || 0) + 1;
+          // Use currentVoterId (which is the socket ID) for game.scores key as per existing logic
+          // but ensure points are mapped to username correctly later for scoresWithUsernames
+          game.scores[currentVoterId] = (game.scores[currentVoterId] || 0) + 1;
+          console.log("game.scores based on ID:", game.scores);
           // Add more detailed logging using username mappings
           console.log(
-            `[PLAYER_MAPPING] Player "${voterUsername}" earned 1 point for correctly guessing "${correctPlayerUsername}" (match type: ${
+            `[PLAYER_MAPPING] Player "${currentVoterActualUsername}" (${currentVoterId}) earned 1 point for correctly guessing "${correctPlayerUsername}" (match type: ${
               directIdMatch ? "ID" : "username"
             })`
           );
         } else {
           // Log why no point was awarded for debugging
-          if (voterId === correctPlayerId) {
+          if (currentVoterId === correctPlayerId) {
             console.log(
-              `[PLAYER_MAPPING] No point for "${voterUsername}": Cannot vote for yourself`
+              `[PLAYER_MAPPING] No point for "${currentVoterActualUsername}" (${currentVoterId}): Cannot vote for yourself`
             );
           } else if (!directIdMatch && !usernameMatch) {
             console.log(
-              `[PLAYER_MAPPING] No point for "${voterUsername}": Voted for ${votedForUsernameResolved} but correct was ${correctPlayerUsername}`
+              `[PLAYER_MAPPING] No point for "${currentVoterActualUsername}" (${currentVoterId}): Voted for ${votedForUsernameResolved} but correct was ${correctPlayerUsername}`
             );
           }
         }

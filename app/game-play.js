@@ -79,6 +79,7 @@ export default function GamePlay() {
     nextRound: sendNextRound,
     castVote,
     isConnected,
+    currentUser, // Destructure currentUser
   } = useWebSocket();
 
   // Track the last few trace IDs we've received to avoid infinite sync loops
@@ -196,6 +197,9 @@ export default function GamePlay() {
   // Add state for tracking whether tracks have been shared
   const [hasSharedTracks, setHasSharedTracks] = useState(false);
 
+  // Add state to ensure params are loaded before initializing game
+  const [paramsReady, setParamsReady] = useState(false);
+
   // Get game details from params
   const gameName = params.gameName || "Game Name";
   const playerCount = parseInt(params.playerCount) || 4;
@@ -203,6 +207,16 @@ export default function GamePlay() {
   // Update to read the multiplayer flag from params
   const isMultiplayer = params.isMultiplayer === "true";
   const isHost = params.isHost === "true";
+
+  // Add a useEffect to set paramsReady when navigation params are stable
+  useEffect(() => {
+    if (
+      typeof params.isMultiplayer === "string" &&
+      typeof params.isHost === "string"
+    ) {
+      setParamsReady(true);
+    }
+  }, [params.isMultiplayer, params.isHost]);
 
   // Parse player data from params if available
   let playerData = [];
@@ -364,317 +378,115 @@ export default function GamePlay() {
     }
   }, [allSongs, isMultiplayer, emit, hasSharedTracks, shareTracks]);
 
-  // Fetch songs when component mounts - but only once
+  // Initialize game
   useEffect(() => {
-    // Skip if we've already fetched songs or if still loading
-    if (allSongs.length > 0 || isLoading || !isInitialized) {
-      return;
-    }
-
-    const fetchSongs = async () => {
+    const initializeGame = async () => {
       setIsLoading(true);
       setError(null);
-      console.log("Starting fetchSongs function");
-      console.log(
-        "Token initialized:",
-        isInitialized,
-        "Token available:",
-        !!token
-      );
+      try {
+        // Ensure Spotify token is valid before fetching songs
+        if (!isInitialized || !token || !isTokenValid()) {
+          console.log("Waiting for Spotify token initialization or validation...");
+          // Attempt to get a valid token if not already initialized or valid
+          if (!isInitialized) {
+            await getSpotifyAuth(); // This should trigger initialization
+          } else if (!token || !isTokenValid()) {
+            await getValidToken();
+          }
 
-      let currentToken = token;
-
-      // If we have a token, make sure it's valid before using it
-      if (token) {
-        try {
-          console.log("Validating token...");
-          // This will either return the valid token or refresh it automatically
-          currentToken = await getValidToken();
-          console.log(
-            "Using valid token for API request:",
-            currentToken ? "Token received" : "No token received"
-          );
-        } catch (error) {
-          console.error("Error validating/refreshing token:", error);
-          currentToken = null;
+          // If still no valid token, return and wait
+          if (!token || !isTokenValid()) {
+            console.log("Token still not valid after attempt, will retry.");
+            return; // Rely on the isInitialized/token useEffect to re-trigger
+          }
         }
-      } else {
-        console.log("No initial token available after initialization");
 
-        // Give user option to authenticate if no token is available
-        Alert.alert(
-          "Spotify Authentication Needed",
-          "No Spotify token available. Would you like to connect to Spotify?",
-          [
-            {
-              text: "Use Sample Songs",
-              onPress: () => console.log("Using sample songs only"),
-              style: "cancel",
-            },
-            {
-              text: "Connect to Spotify",
-              onPress: async () => {
-                try {
-                  setIsLoading(false); // Reset loading state
-                  await getSpotifyAuth(); // Start auth process
-                  // Note: After successful auth, the token will be set and this effect will run again
-                } catch (authError) {
-                  console.error("Authentication error:", authError);
-                  setIsLoading(false);
-                  setError("Authentication failed. Using sample songs.");
-                }
-              },
-            },
-          ]
-        );
-      }
+        let fetchedSongs = [];
+        let fetchedPlayerSongs = {};
 
-      let tracks;
-
-      // If we don't have a valid token, use mock data
-      if (!currentToken) {
-        console.log("No valid Spotify token, using mock song data");
-        console.log("Mock songs available:", mockSongs?.length || 0);
-        tracks = null;
-      } else {
-        try {
-          // First try getting recently played tracks as they often have preview URLs
-          console.log("Fetching recently played tracks...");
-          try {
-            tracks = await getMyRecentlyPlayedTracks(currentToken);
+        // Fetch songs only if not multiplayer or if it is multiplayer and this client is the host
+        // And only if songs haven't been fetched yet
+        if (paramsReady && !hasFetchedSongs) {
+          if (isMultiplayer && isHost) {
+            // Host fetches songs and shares them
             console.log(
-              "Successfully fetched recently played tracks:",
-              tracks?.length || 0
+              "[TRACK_SYNC] Host is fetching and preparing to share songs."
             );
-          } catch (recentError) {
-            console.error(
-              "Error fetching recently played tracks:",
-              recentError
-            );
-            tracks = null;
-          }
+            fetchedSongs = await fetchSongs();
+            setAllSongs(fetchedSongs); // Host sets allSongs for its own use
+            fetchedPlayerSongs = groupSongsByPlayer(fetchedSongs, players);
+            setPlayerSongs(fetchedPlayerSongs); // Host sets playerSongs
 
-          // If no recent tracks or error, try the album tracks
-          if (!tracks || tracks.length === 0) {
-            console.log("Fetching tracks from specified album:", ALBUM_ID);
-            tracks = await getAlbumTracks(ALBUM_ID, currentToken);
-            console.log(
-              "Successfully fetched album tracks:",
-              tracks?.length || 0
-            );
-          }
-
-          if (!tracks || tracks.length === 0) {
-            console.log("No tracks found, using mock data");
-            console.log("Mock songs available:", mockSongs?.length || 0);
-            tracks = null;
+            // Share these songs with other clients via WebSocket
+            if (emit && fetchedSongs.length > 0 && !hasSharedTracks) {
+              console.log(
+                `[TRACK_SYNC] Host emitting shared_playlist with ${fetchedSongs.length} songs`
+              );
+              emit(EVENTS.SHARE_PLAYLIST, {
+                gameId,
+                tracks: fetchedSongs,
+                playerSongs: fetchedPlayerSongs, // Send player-grouped songs as well
+                maxRounds: maxRounds, // Send current maxRounds
+              });
+              setHasSharedTracks(true); // Mark tracks as shared
+            }
+          } else if (!isMultiplayer) {
+            // Single player fetches songs
+            console.log("[TRACK_SYNC] Single player: fetching songs.");
+            fetchedSongs = await fetchSongs();
+            setAllSongs(fetchedSongs);
+            fetchedPlayerSongs = groupSongsByPlayer(fetchedSongs, players);
+            setPlayerSongs(fetchedPlayerSongs);
+            // In single-player, select song for round 1 immediately
+            selectSongForRound(1, fetchedSongs);
           } else {
-            // Debug all tracks and their preview URLs
-            console.log("=== TRACK PREVIEW URL DEBUG ===");
-            tracks.forEach((track, index) => {
-              console.log(
-                `Track ${index + 1}: ${track.songTitle} - Preview URL: ${
-                  track.previewUrl || "None"
-                }`
-              );
-            });
-
-            // NOTE: Spotify preview URLs are now deprecated
+            // Non-host multiplayer client, waits for shared_playlist event
             console.log(
-              "Spotify preview URLs are deprecated - we will rely on Deezer for audio playback"
-            );
-
-            // IMPORTANT CHANGE: Always try to enrich all tracks with Deezer
-            console.log(
-              "Enriching all tracks with Deezer preview URLs BEFORE filtering"
-            );
-
-            try {
-              // Try to enrich all tracks with Deezer preview URLs
-              // Take more tracks to increase chances of finding ones with preview URLs
-              const tracksToTry = tracks.slice(0, 20); // Increased from 15 to 20 tracks to process
-              console.log(
-                `Attempting to enrich ${tracksToTry.length} tracks with Deezer`
-              );
-
-              // Use enrichTracksWithDeezerPreviews to get Deezer previews
-              const deezerEnrichedTracks = await enrichTracksWithDeezerPreviews(
-                tracksToTry
-              );
-
-              // Filter tracks that now have preview URLs
-              const validDeezerTracks = deezerEnrichedTracks.filter(
-                (track) => track.previewUrl
-              );
-
-              console.log(
-                `Found ${validDeezerTracks.length} tracks with Deezer preview URLs out of ${deezerEnrichedTracks.length} processed`
-              );
-
-              if (validDeezerTracks.length >= 2) {
-                console.log(
-                  "Using tracks with Deezer preview URLs as they're available"
-                );
-                tracks = validDeezerTracks;
-                console.log(
-                  "Sample enriched track:",
-                  JSON.stringify({
-                    title: tracks[0].songTitle,
-                    preview: tracks[0].previewUrl?.substring(0, 30) + "...",
-                    source: "Deezer",
-                  })
-                );
-              } else {
-                // If we don't have enough tracks with preview URLs,
-                // still use whatever we got from Deezer (even if just 1)
-                console.log(
-                  "Not enough tracks with Deezer preview URLs, using what we have"
-                );
-                tracks =
-                  validDeezerTracks.length > 0
-                    ? validDeezerTracks
-                    : deezerEnrichedTracks.slice(0, 10);
-              }
-            } catch (deezerError) {
-              console.error("Error enriching tracks with Deezer:", deezerError);
-
-              // Still use the tracks we have
-              console.log("Using available tracks despite Deezer error");
-              tracks = tracks.slice(0, 15);
-            }
-
-            // This flag helps debug whether tracks are being enriched properly
-            const hasPreviewUrls = tracks.some((track) => !!track.previewUrl);
-            console.log(
-              `Tracks now have preview URLs: ${hasPreviewUrls ? "YES" : "NO"}`
-            );
-            if (hasPreviewUrls) {
-              const previewCount = tracks.filter(
-                (track) => !!track.previewUrl
-              ).length;
-              console.log(
-                `${previewCount}/${tracks.length} tracks have preview URLs`
-              );
-            }
-
-            // Add additional data fields as needed
-            tracks = tracks.map((track) => ({
-              ...track,
-              uri: track.uri || null,
-              externalUrl: track.externalUrl || null,
-              _debug: {
-                title: track.songTitle,
-                artists: track.songArtists,
-                duration: track.duration,
-                albumArt: track.imageUrl ? "Available" : "Unavailable",
-                previewUrl: track.previewUrl ? "Available" : "Unavailable",
-                source: track.previewUrl ? "Deezer" : "Spotify",
-              },
-            }));
-
-            console.log(
-              "Sample track data:",
-              JSON.stringify(tracks[0], null, 2)
+              "[TRACK_SYNC] Non-host client: waiting for shared playlist from host."
             );
           }
-        } catch (apiError) {
-          console.error("Error fetching from Spotify API:", apiError);
-          console.log("Using fallback mock data");
-          console.log("Mock songs available:", mockSongs?.length || 0);
-          tracks = null;
-
-          // Handle API errors
-          if (apiError?.response?.status === 401) {
-            console.log("Authentication error (401)");
-            // We don't need to handle token refresh here since getValidToken already did that
-            // Just notify the user and use mock data
-            Alert.alert(
-              "Spotify Authentication Issue",
-              "There was a problem with your Spotify authentication. Using sample songs instead.",
-              [{ text: "OK" }]
-            );
-          } else if (apiError?.response?.status === 403) {
-            console.log("Authorization error (403): Missing required scope");
-            Alert.alert(
-              "Permission Error",
-              "This app needs permission to access your tracks. Please reconnect to Spotify with all permissions.",
-              [{ text: "OK", onPress: () => handleReturnToLobby() }]
-            );
-          } else if (apiError?.response?.status === 429) {
-            console.log("Rate limit reached (429)");
-            Alert.alert(
-              "Too Many Requests",
-              "You've made too many requests to Spotify. Please try again later.",
-              [{ text: "OK" }]
-            );
-          }
+          setHasFetchedSongs(true); // Mark that fetching (or decision not to fetch) has occurred
         }
-      }
 
-      // Final check to make sure we have tracks to use
-      if (!tracks || tracks.length === 0) {
-        console.error("No tracks available, even after trying mock data!");
-        // Create emergency fallback track if all else fails
-        tracks = [
-          {
-            songTitle: "Emergency Fallback Song",
-            songArtists: ["Synth App"],
-            albumName: "Fallback Album",
-            imageUrl: "https://via.placeholder.com/300",
-            duration: 30000,
-            previewUrl: null, // No audio available for fallback
-            uri: null,
-            externalUrl: null,
-          },
-        ];
-
-        setError("Could not load song data. Using emergency fallback.");
-      }
-
-      console.log(`Using ${tracks.length} tracks for the game`);
-      console.log(
-        `Tracks with preview URLs: ${
-          tracks.filter((t) => !!t.previewUrl).length
-        }/${tracks.length}`
-      );
-
-      // Process the tracks for the game
-      const processedSongs = tracks.slice(0, 15).map((track) => ({
-        ...track,
-        // We'll assign players to songs when they are selected for a round, not in advance
-      }));
-
-      setAllSongs(processedSongs);
-      selectSongForRound(1, processedSongs);
-      setIsLoading(false);
-      setGameStage("playing");
-      setHasFetchedSongs(true);
-
-      // If we're in multiplayer, ensure we're sending tracks with preview URLs to the server
-      if (isMultiplayer && emit) {
-        const tracksWithPreviews = processedSongs.filter(
-          (track) => !!track.previewUrl
+        // Load played songs from AsyncStorage
+        await loadPlayedSongs();
+      } catch (e) {
+        console.error("Error initializing game:", e);
+        setError(
+          e.message || "An unknown error occurred during game initialization."
         );
-        if (tracksWithPreviews.length > 0) {
-          console.log(
-            `[TRACK_SYNC] Sending ${tracksWithPreviews.length} tracks with preview URLs to server`
-          );
-          // Only send tracks that have preview URLs to avoid server using mock tracks
-          return tracksWithPreviews;
-        } else {
-          console.warn(
-            "[TRACK_SYNC] No tracks with preview URLs to send to server!"
-          );
-          return processedSongs;
+        // Fallback to mock songs if there is an error
+        if (!isMultiplayer) { // Only use mock songs for single player on error
+          setAllSongs(mockSongs);
+          selectSongForRound(1, mockSongs);
+        }
+      } finally {
+        // Only set loading to false if we are not a non-host waiting for tracks
+        if (!(isMultiplayer && !isHost && !hasSharedTracks)) {
+          setIsLoading(false);
+        }
+        // If we are a non-host and tracks have been shared, also stop loading
+        if (isMultiplayer && !isHost && hasSharedTracks) {
+           setIsLoading(false);
         }
       }
-
-      return processedSongs;
     };
 
-    // Only fetch songs once and after auth is initialized
-    fetchSongs();
-  }, [token, players, hasFetchedSongs, isInitialized]);
+    if (isInitialized && paramsReady) { // Depend on paramsReady here
+      initializeGame();
+    }
+  }, [
+    isInitialized,
+    token,
+    paramsReady, // Add paramsReady to dependency array
+    gameId,
+    isMultiplayer,
+    isHost,
+    emit,
+    hasFetchedSongs,
+    hasSharedTracks,
+    maxRounds // ensure re-run if maxRounds changes from server
+  ]); // Added playerTracks to dependencies
 
   // Improve Audio resource management
   // Unload audio resources properly when unmounting
@@ -2360,6 +2172,9 @@ export default function GamePlay() {
           playerPoints={playerPoints}
           castVote={castVote}
           allVotesCast={allVotesCast}
+          socket={socket} // Pass the whole socket object as before
+          currentUserId={currentUser?.id} // Pass currentUserId
+          currentUsername={currentUser?.username} // Pass currentUsername (will be undefined for now)
         />
       )}
 

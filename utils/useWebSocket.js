@@ -56,12 +56,14 @@ let globalConnected = false;
 let globalError = null;
 let globalServerUrl = null;
 let connectionErrorCount = 0;
+let globalCurrentUser = null; // Add global state for currentUser
 
 export const useWebSocket = () => {
   const [socket, setSocket] = useState(globalSocket);
   const [isConnected, setIsConnected] = useState(globalConnected);
   const [error, setError] = useState(globalError);
   const [serverUrl, setServerUrl] = useState(globalServerUrl);
+  const [currentUser, setCurrentUser] = useState(globalCurrentUser); // Add currentUser state
   const timeoutRef = useRef(null);
   const connectedRef = useRef(globalConnected);
   const connectionErrorsRef = useRef(connectionErrorCount);
@@ -73,7 +75,8 @@ export const useWebSocket = () => {
     globalError = error;
     globalServerUrl = serverUrl;
     connectionErrorCount = connectionErrorsRef.current;
-  }, [socket, isConnected, error, serverUrl, connectionErrorsRef.current]);
+    globalCurrentUser = currentUser; // Store currentUser globally
+  }, [socket, isConnected, error, serverUrl, connectionErrorsRef.current, currentUser]);
   
   // Get the server URL
   const getServerUrl = useCallback(async () => {
@@ -215,6 +218,7 @@ export const useWebSocket = () => {
         // Update socket references
         setSocket(newSocket);
         globalSocket = newSocket;
+        setCurrentUser({ id: newSocket.id }); // Set current user with socket ID on connect
         
         // Broadcast connection success to other components
         DeviceEventEmitter.emit('websocket_connected', { socket: newSocket });
@@ -655,8 +659,9 @@ export const useWebSocket = () => {
     isConnected,
     error,
     serverUrl,
-    connect,
-    disconnect,
+    currentUser, // Return currentUser
+    connect, // Expose connect function
+    disconnect, // Expose disconnect function
     on,
     emit,
     // Game-specific functions

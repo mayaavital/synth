@@ -21,6 +21,8 @@ const VotingStage = ({
   playerPoints,
   allVotesCast,
   socket,
+  currentUserId,
+  currentUsername,
 }) => {
   const [voteLocked, setVoteLocked] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
@@ -425,18 +427,17 @@ const VotingStage = ({
       [selectedPlayer]: [...(prev[selectedPlayer] || []), newVote],
     }));
 
-    // Find the current player (the one casting the vote)
-    // Use the socket ID to find our player in the players array
-    const currentPlayer = players.find((p) => p && p.id === socket?.id);
-    const currentUsername = currentPlayer?.username || "Unknown Player";
+    // Use direct props for voter identity
+    const voterId = currentUserId || socket?.id; // Fallback to socket.id if currentUserId is not yet available
+    const voterName = currentUsername || players.find(p => p.id === voterId)?.username || "Unknown Player";
 
     // Update points for the current player if they made a correct guess
     if (isCorrectGuess) {
       console.log(
-        `Round ${currentRound}: ${currentUsername} made a correct guess and earned a point!`
+        `Round ${currentRound}: ${voterName} made a correct guess and earned a point!`
       );
       console.log(
-        `Current player ID: ${currentPlayer?.id}, socket ID: ${socket?.id}`
+        `Current player ID: ${voterId}, socket ID: ${socket?.id}`
       );
       console.log(
         `Correct player: ${currentSong?.assignedToPlayer?.username}, ID: ${currentSong?.assignedToPlayer?.id}`
@@ -461,16 +462,16 @@ const VotingStage = ({
           const votePayload = {
             votedForPlayerId: selectedPlayerObj?.id,
             votedForUsername: selectedPlayer,
-            voterUsername: currentUsername,
-            voterSocketId: socket?.id,
-            voterPlayerId: currentPlayer?.id,
+            voterUsername: voterName, // Use voterName from props/fallback
+            voterSocketId: voterId, // Use voterId from props/fallback
+            voterPlayerId: voterId, // Use voterId for playerId as well
             currentRound: currentRound, // Include round information
           };
 
           // Log player relationships for debugging
           console.log(`Round ${currentRound}: Vote relationships check:`);
           console.log(
-            `- I am ${currentUsername} (ID: ${currentPlayer?.id}, socket: ${socket?.id})`
+            `- I am ${voterName} (ID: ${voterId}, socket: ${socket?.id})` // Log consistently
           );
           console.log(
             `- Voting for ${selectedPlayer} (ID: ${selectedPlayerObj?.id})`
