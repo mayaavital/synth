@@ -883,17 +883,28 @@ io.on("connection", (socket) => {
           return;
         }
 
+        // IMPORTANT: Filter out known mock tracks by title
+        if (isMockTrackByTitle(track.songTitle)) {
+          console.log(`[TRACK_SYNC] ❌ BLOCKING MOCK TRACK: "${track.songTitle}" - this track is on the mock track blacklist`);
+          return;
+        }
+
+        // Check if this is a client-side mock track from Deezer enrichment
+        const isClientMockTrack = track.isMockTrack === true;
+        
+        if (isClientMockTrack) {
+          console.log(`[TRACK_SYNC] ❌ BLOCKING CLIENT MOCK TRACK: "${track.songTitle}" - marked as mock by client`);
+          return;
+        }
+
         // Check for preview URL
         const hasPreviewUrl =
           track.previewUrl && typeof track.previewUrl === "string";
         
-        // Check if this is a client-side mock track from Deezer enrichment
-        const isClientMockTrack = track.isMockTrack === true;
-        
         console.log(
-          `[TRACK_SYNC] Track "${track.songTitle}" has ${
-            hasPreviewUrl ? "VALID" : "NO"
-          } preview URL${isClientMockTrack ? " (CLIENT MOCK TRACK)" : ""}, but keeping it anyway`
+          `[TRACK_SYNC] ✅ ACCEPTING REAL TRACK: "${track.songTitle}" - ${
+            hasPreviewUrl ? "with preview URL" : "without preview URL"
+          }`
         );
 
         // Normalize track format
@@ -1034,142 +1045,27 @@ io.on("connection", (socket) => {
     sharePlaylistWithClients(gameId);
   }
 
-  function addMockTracksToGame(game, tracksToAdd = null) {
-    const mockTracks = [
-      {
-        songTitle: "Bohemian Rhapsody",
-        songArtists: ["Queen"],
-        albumName: "A Night at the Opera",
-        imageUrl:
-          "https://i.scdn.co/image/ab67616d0000b2739f39192f4f0fae773d3f8a95",
-        previewUrl:
-          "https://p.scdn.co/mp3-preview/1f3bd078c7ad27b427fa210f6efd957fc5eecea0",
-        duration: 354000,
-        isMockTrack: true,
-      },
-      {
-        songTitle: "Don't Stop Believin'",
-        songArtists: ["Journey"],
-        albumName: "Escape",
-        imageUrl:
-          "https://i.scdn.co/image/ab67616d0000b273c5653f9038e42efad2f8def2",
-        previewUrl:
-          "https://p.scdn.co/mp3-preview/21b9abd3cd2eea634e17a917196fdd5ba2e82670",
-        duration: 251000,
-        isMockTrack: true,
-      },
-      {
-        songTitle: "Billie Jean",
-        songArtists: ["Michael Jackson"],
-        albumName: "Thriller",
-        imageUrl:
-          "https://i.scdn.co/image/ab67616d0000b2734121faee8df82c526cbab2be",
-        previewUrl:
-          "https://p.scdn.co/mp3-preview/f504e6b8e037771318656394f532dede4f9bcaea",
-        duration: 294000,
-        isMockTrack: true,
-      },
-      {
-        songTitle: "Sweet Child O' Mine",
-        songArtists: ["Guns N' Roses"],
-        albumName: "Appetite for Destruction",
-        imageUrl:
-          "https://i.scdn.co/image/ab67616d0000b273e44963b8bb127552ac0090e0",
-        previewUrl:
-          "https://p.scdn.co/mp3-preview/9af2ebe7ff34dbdbcb042fba67b81bcdd6f9dbe3",
-        duration: 356000,
-        isMockTrack: true,
-      },
-      {
-        songTitle: "I Want It That Way",
-        songArtists: ["Backstreet Boys"],
-        albumName: "Millennium",
-        imageUrl:
-          "https://i.scdn.co/image/ab67616d0000b27384c52f39de3a4e687424f622",
-        previewUrl:
-          "https://p.scdn.co/mp3-preview/c9a980c0a1e48b84795c2c28ab212a476d5dae43",
-        duration: 213000,
-        isMockTrack: true,
-      },
-    ];
+  // MOCK TRACKS COMPLETELY DISABLED - addMockTracksToGame function removed
+  // This ensures no mock tracks can ever be added to games
 
-    // If we already have real tracks, check how many mock tracks to add
-    if (tracksToAdd) {
-      console.log(
-        `[TRACK_SYNC] Adding ${tracksToAdd} mock tracks to supplement real tracks`
-      );
+  // List of known mock track titles that should never be used
+  const KNOWN_MOCK_TRACK_TITLES = [
+    "Bohemian Rhapsody",
+    "Don't Stop Believin'", 
+    "Billie Jean",
+    "Sweet Child O' Mine",
+    "I Want It That Way",
+    "Blinding Lights",
+    "Shape of You",
+    "Hotel California"
+  ];
 
-      const availableMockTracks = [...mockTracks].slice(0, tracksToAdd);
-      const players = game.players.slice(); // Create a copy so we can shuffle
-      shuffleArray(players);
-
-      // Assign mock tracks to players
-      for (let i = 0; i < availableMockTracks.length; i++) {
-        const playerIndex = i % players.length;
-        const player = players[playerIndex];
-
-        game.consolidatedPlaylist.push({
-          track: availableMockTracks[i],
-          owner: {
-            id: player.id,
-            username: player.username,
-          },
-        });
-
-        console.log(
-          `[TRACK_SYNC] Added mock track "${availableMockTracks[i].songTitle}" assigned to ${player.username}`
-        );
-      }
-    } else {
-      // If we need only mock tracks, create a full playlist
-      const playerCount = game.players.length;
-      const tracksPerPlayer = Math.max(Math.ceil(3 / playerCount), 1); // At least 3 rounds total
-      const totalMockTracksNeeded = Math.min(
-        playerCount * tracksPerPlayer,
-        mockTracks.length
-      );
-
-      console.log(
-        `[TRACK_SYNC] Creating mock playlist with ${totalMockTracksNeeded} tracks for ${playerCount} players`
-      );
-
-      // Create a copy of players array so we can shuffle
-      const players = game.players.slice();
-
-      // Use Fisher-Yates shuffle
-      shuffleArray(players);
-
-      // Assign tracks to players for balanced gameplay
-      game.consolidatedPlaylist = [];
-
-      for (let i = 0; i < totalMockTracksNeeded; i++) {
-        const playerIndex = i % players.length;
-        const player = players[playerIndex];
-
-        if (i < mockTracks.length) {
-          game.consolidatedPlaylist.push({
-            track: mockTracks[i],
-            owner: {
-              id: player.id,
-              username: player.username,
-            },
-          });
-
-          console.log(
-            `[TRACK_SYNC] Added mock track "${mockTracks[i].songTitle}" assigned to ${player.username}`
-          );
-        }
-      }
-
-      // Respect the configured maxRounds
-      const configuredMaxRounds = game.maxRounds || 3;
-      game.maxRounds = Math.min(totalMockTracksNeeded, 5, configuredMaxRounds); // Limit mock games to 5 rounds or configured max
-      console.log(
-        `[TRACK_SYNC] Set max rounds to ${game.maxRounds} based on available mock tracks and configured max of ${configuredMaxRounds}`
-      );
-    }
-
-    return game.consolidatedPlaylist;
+  // Function to check if a track is a mock track by title
+  function isMockTrackByTitle(trackTitle) {
+    if (!trackTitle) return false;
+    return KNOWN_MOCK_TRACK_TITLES.some(mockTitle => 
+      trackTitle.toLowerCase().trim() === mockTitle.toLowerCase().trim()
+    );
   }
 
   function sharePlaylistWithClients(gameId) {
@@ -1291,7 +1187,8 @@ io.on("connection", (socket) => {
       (item) =>
         !usedTrackIds.includes(item.track.trackId) &&
         !usedTrackIds.includes(item.track.songTitle) &&
-        !item.track.isMockTrack && // Prefer real tracks first
+        !item.track.isMockTrack && // Still exclude mock tracks
+        !isMockTrackByTitle(item.track.songTitle) && // EXTRA: Filter by known mock titles
         item.track.previewUrl // Must have a preview URL
     );
 
@@ -1306,7 +1203,8 @@ io.on("connection", (socket) => {
         (item) =>
           !usedTrackIds.includes(item.track.trackId) &&
           !usedTrackIds.includes(item.track.songTitle) &&
-          !item.track.isMockTrack // Still exclude mock tracks
+          !item.track.isMockTrack && // Still exclude mock tracks
+          !isMockTrackByTitle(item.track.songTitle) // EXTRA: Filter by known mock titles
       );
       
       const tracksWithPreview = availableTracks.filter((item) => !!item.track.previewUrl).length;
@@ -1320,7 +1218,7 @@ io.on("connection", (socket) => {
         `[TRACK_SYNC] No unused tracks available, reusing real tracks (excluding mock tracks)`
       );
       availableTracks = game.consolidatedPlaylist.filter(
-        (item) => !item.track.isMockTrack // Only exclude mock tracks
+        (item) => !item.track.isMockTrack && !isMockTrackByTitle(item.track.songTitle) // Only exclude mock tracks
       );
       
       if (availableTracks.length > 0) {

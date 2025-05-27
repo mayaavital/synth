@@ -294,6 +294,21 @@ export const getDeezerTrackById = async (trackId) => {
  * @returns {Object} - Formatted track object
  */
 export const formatDeezerTrack = (deezerTrack, isMockData = false) => {
+  // SAFETY CHECK: Never allow known mock tracks to be formatted
+  const mockTrackTitles = [
+    "Blinding Lights", "Shape of You", "Bohemian Rhapsody", "Billie Jean", "Hotel California",
+    "Don't Stop Believin'", "Sweet Child O' Mine", "I Want It That Way"
+  ];
+  
+  const isKnownMockTrack = mockTrackTitles.some(mockTitle => 
+    deezerTrack.title && deezerTrack.title.toLowerCase().trim() === mockTitle.toLowerCase().trim()
+  );
+  
+  if (isKnownMockTrack) {
+    console.log(`🚫 BLOCKING KNOWN MOCK TRACK from formatDeezerTrack: "${deezerTrack.title}"`);
+    return null; // Return null instead of formatted track
+  }
+
   return {
     songTitle: deezerTrack.title,
     songArtists: deezerTrack.artist ? [deezerTrack.artist.name] : [],
@@ -305,14 +320,14 @@ export const formatDeezerTrack = (deezerTrack, isMockData = false) => {
     externalUrl: deezerTrack.link,
     trackId: deezerTrack.id.toString(),
     platformSource: 'deezer',
-    isMockTrack: isMockData, // IMPORTANT: Mark mock tracks properly
+    isMockTrack: false, // EXPLICITLY mark as NOT a mock track since we filtered them out
     _debug: {
       title: deezerTrack.title,
       artists: [deezerTrack.artist?.name],
       duration: deezerTrack.duration * 1000,
       albumArt: deezerTrack.album?.cover_medium ? "Available" : "Unavailable",
       previewUrl: deezerTrack.preview ? "Available" : "Unavailable",
-      isMockData: isMockData,
+      isMockData: false, // Always false since we block mock tracks
     }
   };
 };
@@ -365,11 +380,17 @@ export const findDeezerTrackFromSpotify = async (spotifyTrack) => {
           console.log(`Preview URL available: ${bestMatch.preview ? 'YES' : 'NO'}`);
           
           // Check if this is a mock track by comparing with known mock track titles
-          const mockTrackTitles = ["Blinding Lights", "Shape of You", "Bohemian Rhapsody", "Billie Jean", "Hotel California"];
-          const isMockData = mockTrackTitles.includes(bestMatch.title);
+          const mockTrackTitles = [
+            "Blinding Lights", "Shape of You", "Bohemian Rhapsody", "Billie Jean", "Hotel California",
+            "Don't Stop Believin'", "Sweet Child O' Mine", "I Want It That Way"
+          ];
+          const isMockData = mockTrackTitles.some(mockTitle => 
+            bestMatch.title.toLowerCase().trim() === mockTitle.toLowerCase().trim()
+          );
           
           if (isMockData) {
-            console.log(`⚠️ WARNING: Using mock Deezer track "${bestMatch.title}" as fallback`);
+            console.log(`⚠️ WARNING: Detected mock Deezer track "${bestMatch.title}" - REJECTING to ensure only real tracks are used`);
+            continue; // Skip this mock track and try next search strategy
           }
           
           return formatDeezerTrack(bestMatch, isMockData);
@@ -509,73 +530,6 @@ export const enrichTracksWithDeezerPreviews = async (spotifyTracks) => {
 };
 
 /**
- * Fallback function for React Native environments where CORS proxies don't work
- * Returns mock data with preview URLs for testing
- * @param {string} query - Search query
- * @param {number} limit - Number of results to return
- * @returns {Promise<Array>} - Array of mock track objects
- */
-const getMockDeezerTracks = async (query, limit = 10) => {
-  // Mock tracks that simulate Deezer API responses
-  const mockTracks = [
-    {
-      id: 1,
-      title: "Blinding Lights",
-      artist: "The Weeknd",
-      album: "After Hours",
-      duration: 200,
-      preview: "https://cdns-preview-d.dzcdn.net/stream/c-deda7fa9316d9e9e880d2c6207e92260-8.mp3",
-      link: "https://www.deezer.com/track/1",
-    },
-    {
-      id: 2,
-      title: "Shape of You",
-      artist: "Ed Sheeran", 
-      album: "÷ (Divide)",
-      duration: 233,
-      preview: "https://cdns-preview-d.dzcdn.net/stream/c-deda7fa9316d9e9e880d2c6207e92260-9.mp3",
-      link: "https://www.deezer.com/track/2",
-    },
-    {
-      id: 3,
-      title: "Bohemian Rhapsody",
-      artist: "Queen",
-      album: "A Night at the Opera",
-      duration: 355,
-      preview: "https://cdns-preview-d.dzcdn.net/stream/c-deda7fa9316d9e9e880d2c6207e92260-10.mp3",
-      link: "https://www.deezer.com/track/3",
-    },
-    {
-      id: 4,
-      title: "Billie Jean",
-      artist: "Michael Jackson",
-      album: "Thriller",
-      duration: 294,
-      preview: "https://cdns-preview-d.dzcdn.net/stream/c-deda7fa9316d9e9e880d2c6207e92260-11.mp3",
-      link: "https://www.deezer.com/track/4",
-    },
-    {
-      id: 5,
-      title: "Hotel California",
-      artist: "Eagles",
-      album: "Hotel California",
-      duration: 391,
-      preview: "https://cdns-preview-d.dzcdn.net/stream/c-deda7fa9316d9e9e880d2c6207e92260-12.mp3",
-      link: "https://www.deezer.com/track/5",
-    }
-  ];
-
-  console.log(`Using mock Deezer tracks for React Native (query: "${query}")`);
-  
-  // Simple search filtering - match query against title or artist
-  const queryLower = query.toLowerCase();
-  const filteredTracks = mockTracks.filter(track => 
-    track.title.toLowerCase().includes(queryLower) ||
-    track.artist.toLowerCase().includes(queryLower)
-  );
-  
-  // If no matches, return first few tracks anyway
-  const tracksToReturn = filteredTracks.length > 0 ? filteredTracks : mockTracks;
-  
-  return tracksToReturn.slice(0, limit);
-}; 
+ * Mock track functionality completely removed to ensure no mock tracks are ever used
+ * Previously this file contained getMockDeezerTracks function which has been eliminated
+ */ 
