@@ -12,6 +12,7 @@ import {
   FlatList,
   TextInput,
   Modal,
+  ScrollView,
 } from "react-native";
 import { useNavigation, useRouter, useLocalSearchParams } from "expo-router";
 import { useState, useEffect, useRef, useCallback } from "react";
@@ -779,209 +780,217 @@ export default function MultiplayerGame() {
   }, [isConnected, gameId, username, joinGame]);
 
   const renderInitialScreen = () => (
-    <View style={styles.contentContainer}>
-      <View style={styles.logoContainer}>
-        <Image
-          source={require("../assets/newTitle.png")}
-          style={styles.logo}
-          resizeMode="contain"
-        />
-      </View>
+    <ScrollView contentContainerStyle={styles.scrollContainer}>
+      <View style={styles.contentContainer}>
+        <View style={styles.logoContainer}>
+          <Image
+            source={require("../assets/newTitle.png")}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+        </View>
 
-      <Text style={styles.welcomeText}>Welcome to Synth Multiplayer!</Text>
+        <Text style={styles.welcomeText}>Welcome to Synth Multiplayer!</Text>
 
-      <Text style={styles.infoText}>
-        Play with friends on the same WiFi network.
-      </Text>
+        <Text style={styles.infoText}>
+          Play with friends on the same WiFi network.
+        </Text>
 
-      <View style={styles.buttonsContainer}>
-        <Pressable style={styles.primaryButton} onPress={handleConnect}>
-          <Text style={styles.primaryButtonText}>Connect to Server</Text>
-        </Pressable>
-      </View>
+        <View style={styles.buttonsContainer}>
+          <Pressable style={styles.primaryButton} onPress={handleConnect}>
+            <Text style={styles.primaryButtonText}>Connect to Server</Text>
+          </Pressable>
+        </View>
 
-      {/* Server configuration modal */}
-      <Modal
-        visible={showServerInput}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowServerInput(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Server Configuration</Text>
+        {/* Server configuration modal */}
+        <Modal
+          visible={showServerInput}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowServerInput(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Server Configuration</Text>
 
-            <Text style={styles.inputLabel}>Server URL</Text>
-            <TextInput
-              style={styles.input}
-              value={serverUrl}
-              onChangeText={setServerUrl}
-              placeholder="http://10.27.147.68:3000"
-              placeholderTextColor="#888"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
+              <Text style={styles.inputLabel}>Server URL</Text>
+              <TextInput
+                style={styles.input}
+                value={serverUrl}
+                onChangeText={setServerUrl}
+                placeholder="http://10.27.147.68:3000"
+                placeholderTextColor="#888"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
 
-            <Text style={styles.modalHelpText}>
-              Enter the IP address of the device running the server. Make sure
-              both devices are on the same WiFi network.
-            </Text>
+              <Text style={styles.modalHelpText}>
+                Enter the IP address of the device running the server. Make sure
+                both devices are on the same WiFi network.
+              </Text>
 
-            <View style={styles.modalButtons}>
-              <Pressable
-                style={styles.modalCancelButton}
-                onPress={() => setShowServerInput(false)}
-              >
-                <Text style={styles.modalCancelButtonText}>Cancel</Text>
-              </Pressable>
+              <View style={styles.modalButtons}>
+                <Pressable
+                  style={styles.modalCancelButton}
+                  onPress={() => setShowServerInput(false)}
+                >
+                  <Text style={styles.modalCancelButtonText}>Cancel</Text>
+                </Pressable>
 
-              <Pressable
-                style={styles.modalSaveButton}
-                onPress={() => {
-                  setShowServerInput(false);
-                  handleConnect();
-                }}
-              >
-                <Text style={styles.modalSaveButtonText}>Save & Connect</Text>
-              </Pressable>
+                <Pressable
+                  style={styles.modalSaveButton}
+                  onPress={() => {
+                    setShowServerInput(false);
+                    handleConnect();
+                  }}
+                >
+                  <Text style={styles.modalSaveButtonText}>Save & Connect</Text>
+                </Pressable>
+              </View>
             </View>
           </View>
-        </View>
-      </Modal>
-    </View>
+        </Modal>
+      </View>
+    </ScrollView>
   );
 
   const renderConnectingScreen = () => (
-    <View style={styles.contentContainer}>
-      <Text style={styles.titleText}>Connected!</Text>
+    <ScrollView contentContainerStyle={styles.scrollContainer}>
+      <View style={styles.contentContainer}>
+        <Text style={styles.titleText}>Connected!</Text>
 
-      <Text style={styles.inputLabel}>Your Name</Text>
-      <TextInput
-        style={styles.input}
-        value={username}
-        onChangeText={setUsername}
-        placeholder="Enter your name"
-        placeholderTextColor="#888"
-      />
+        <Text style={styles.inputLabel}>Your Name</Text>
+        <TextInput
+          style={styles.input}
+          value={username}
+          onChangeText={setUsername}
+          placeholder="Enter your name"
+          placeholderTextColor="#888"
+        />
 
-      <View style={styles.optionsContainer}>
-        <Pressable
-          style={styles.optionButton}
-          onPress={() => setConnectionStep("host")}
-        >
-          <Ionicons name="add-circle" size={24} color="#8E44AD" />
-          <Text style={styles.optionButtonText}>Create a Game</Text>
-        </Pressable>
+        <View style={styles.optionsContainer}>
+          <Pressable
+            style={styles.optionButton}
+            onPress={() => setConnectionStep("host")}
+          >
+            <Ionicons name="add-circle" size={24} color="#8E44AD" />
+            <Text style={styles.optionButtonText}>Create a Game</Text>
+          </Pressable>
 
-        <Pressable
-          style={styles.optionButton}
-          onPress={() => setConnectionStep("join")}
-        >
-          <Ionicons name="log-in" size={24} color="#8E44AD" />
-          <Text style={styles.optionButtonText}>Join a Game</Text>
-        </Pressable>
+          <Pressable
+            style={styles.optionButton}
+            onPress={() => setConnectionStep("join")}
+          >
+            <Ionicons name="log-in" size={24} color="#8E44AD" />
+            <Text style={styles.optionButtonText}>Join a Game</Text>
+          </Pressable>
+        </View>
       </View>
-    </View>
+    </ScrollView>
   );
 
   const renderHostScreen = () => (
-    <View style={styles.contentContainer}>
-      <Text style={styles.titleText}>Create a Game</Text>
+    <ScrollView contentContainerStyle={styles.scrollContainer}>
+      <View style={styles.contentContainer}>
+        <Text style={styles.titleText}>Create a Game</Text>
 
-      <Text style={styles.inputLabel}>Game Name</Text>
-      <TextInput
-        style={styles.input}
-        value={gameName}
-        onChangeText={setGameName}
-        placeholder="Enter game name"
-        placeholderTextColor="#888"
-      />
+        <Text style={styles.inputLabel}>Game Name</Text>
+        <TextInput
+          style={styles.input}
+          value={gameName}
+          onChangeText={setGameName}
+          placeholder="Enter game name"
+          placeholderTextColor="#888"
+        />
 
-      <Text style={styles.inputLabel}>Number of Rounds</Text>
-      <View style={styles.roundsSelector}>
-        {[2, 3, 4, 5, 6, 7, 8].map((num) => (
-          <TouchableOpacity
-            key={num}
-            style={[
-              styles.roundButton,
-              selectedRounds === num && styles.roundButtonSelected,
-            ]}
-            onPress={() => setSelectedRounds(num)}
-          >
-            <Text
+        <Text style={styles.inputLabel}>Number of Rounds</Text>
+        <View style={styles.roundsSelector}>
+          {[2, 3, 4, 5, 6, 7, 8].map((num) => (
+            <TouchableOpacity
+              key={num}
               style={[
-                styles.roundButtonText,
-                selectedRounds === num && styles.roundButtonTextSelected,
+                styles.roundButton,
+                selectedRounds === num && styles.roundButtonSelected,
               ]}
+              onPress={() => setSelectedRounds(num)}
             >
-              {num}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+              <Text
+                style={[
+                  styles.roundButtonText,
+                  selectedRounds === num && styles.roundButtonTextSelected,
+                ]}
+              >
+                {num}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
 
-      <Pressable
-        style={[
-          styles.primaryButton,
-          !gameName.trim() && styles.disabledButton,
-        ]}
-        onPress={handleCreateGame}
-        disabled={!gameName.trim()}
-      >
-        <Text style={styles.primaryButtonText}>Create Game</Text>
-      </Pressable>
-    </View>
+        <Pressable
+          style={[
+            styles.primaryButton,
+            !gameName.trim() && styles.disabledButton,
+          ]}
+          onPress={handleCreateGame}
+          disabled={!gameName.trim()}
+        >
+          <Text style={styles.primaryButtonText}>Create Game</Text>
+        </Pressable>
+      </View>
+    </ScrollView>
   );
 
   const renderJoinScreen = () => (
-    <View style={styles.contentContainer}>
-      <Text style={styles.titleText}>Join a Game</Text>
+    <ScrollView contentContainerStyle={styles.scrollContainer}>
+      <View style={styles.contentContainer}>
+        <Text style={styles.titleText}>Join a Game</Text>
 
-      <View style={styles.connectionStatusContainer}>
-        <View
-          style={[
-            styles.connectionIndicator,
-            isConnected ? styles.connectionActive : styles.connectionInactive,
-          ]}
+        <View style={styles.connectionStatusContainer}>
+          <View
+            style={[
+              styles.connectionIndicator,
+              isConnected ? styles.connectionActive : styles.connectionInactive,
+            ]}
+          />
+          <Text style={styles.connectionStatusText}>
+            {isConnected ? "Connected to server" : "Not connected"}
+          </Text>
+        </View>
+
+        <Text style={styles.inputLabel}>Game Code</Text>
+        <TextInput
+          style={styles.input}
+          value={joinCode}
+          onChangeText={(text) => setJoinCode(text.toUpperCase())}
+          placeholder="Enter game code"
+          placeholderTextColor="#888"
+          autoCapitalize="characters"
+          autoCorrect={false}
+          maxLength={20}
+          onSubmitEditing={handleJoinGame}
         />
-        <Text style={styles.connectionStatusText}>
-          {isConnected ? "Connected to server" : "Not connected"}
-        </Text>
-      </View>
 
-      <Text style={styles.inputLabel}>Game Code</Text>
-      <TextInput
-        style={styles.input}
-        value={joinCode}
-        onChangeText={(text) => setJoinCode(text.toUpperCase())}
-        placeholder="Enter game code"
-        placeholderTextColor="#888"
-        autoCapitalize="characters"
-        autoCorrect={false}
-        maxLength={20}
-        onSubmitEditing={handleJoinGame}
-      />
-
-      <Pressable
-        style={[
-          styles.primaryButton,
-          (!joinCode.trim() || !isConnected) && styles.disabledButton,
-        ]}
-        onPress={handleJoinGame}
-        disabled={!joinCode.trim() || !isConnected}
-      >
-        <Text style={styles.primaryButtonText}>Join Game</Text>
-      </Pressable>
-
-      {!isConnected && (
         <Pressable
-          style={styles.reconnectButton}
-          onPress={() => handleConnect()}
+          style={[
+            styles.primaryButton,
+            (!joinCode.trim() || !isConnected) && styles.disabledButton,
+          ]}
+          onPress={handleJoinGame}
+          disabled={!joinCode.trim() || !isConnected}
         >
-          <Text style={styles.reconnectButtonText}>Reconnect to Server</Text>
+          <Text style={styles.primaryButtonText}>Join Game</Text>
         </Pressable>
-      )}
-    </View>
+
+        {!isConnected && (
+          <Pressable
+            style={styles.reconnectButton}
+            onPress={() => handleConnect()}
+          >
+            <Text style={styles.reconnectButtonText}>Reconnect to Server</Text>
+          </Pressable>
+        )}
+      </View>
+    </ScrollView>
   );
 
   const renderLobbyScreen = () => {
@@ -991,131 +1000,133 @@ export default function MultiplayerGame() {
     )}&gameName=${encodeURIComponent(gameState.name || gameName)}`;
 
     return (
-      <View style={styles.contentContainer}>
-        <View style={styles.lobbyHeader}>
-          <Text style={styles.lobbyTitle}>{gameState.name || gameName}</Text>
-          <View style={styles.gameCodeContainer}>
-            <Text style={styles.gameCodeLabel}>GAME CODE</Text>
-            <Text style={styles.gameCode}>{gameId}</Text>
-            <Pressable
-              style={styles.qrButton}
-              onPress={() => setShowQrCode(true)}
-            >
-              <Ionicons name="qr-code" size={20} color="#FFC857" />
-              <Text style={styles.qrButtonText}>Show QR</Text>
-            </Pressable>
-          </View>
-          <View style={styles.roundInfoContainer}>
-            <Text style={styles.gameInfoLabel}>Rounds: </Text>
-            <Text style={styles.gameInfoValue}>
-              {gameState.maxRounds || selectedRounds}
-            </Text>
-          </View>
-        </View>
-
-        {/* QR Code Modal */}
-        <Modal
-          visible={showQrCode}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={() => setShowQrCode(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.qrModalContent}>
-              <Text style={styles.modalTitle}>Join Game</Text>
-              <Text style={styles.qrInstructions}>
-                Scan this code with another device to join
-              </Text>
-
-              <View style={styles.qrCodeContainer}>
-                <QRCode
-                  value={joinUrl}
-                  size={200}
-                  backgroundColor="white"
-                  color="black"
-                />
-              </View>
-
-              <View style={styles.gameInfoContainer}>
-                <Text style={styles.gameInfoLabel}>Game Code:</Text>
-                <Text style={styles.gameInfoValue}>{gameId}</Text>
-              </View>
-
-              <Text style={styles.manualInstructions}>
-                On your device, enter this code in the "Join Game" screen
-              </Text>
-
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
+        <View style={styles.contentContainer}>
+          <View style={styles.lobbyHeader}>
+            <Text style={styles.lobbyTitle}>{gameState.name || gameName}</Text>
+            <View style={styles.gameCodeContainer}>
+              <Text style={styles.gameCodeLabel}>GAME CODE</Text>
+              <Text style={styles.gameCode}>{gameId}</Text>
               <Pressable
-                style={styles.modalCloseButton}
-                onPress={() => setShowQrCode(false)}
+                style={styles.qrButton}
+                onPress={() => setShowQrCode(true)}
               >
-                <Text style={styles.modalCloseButtonText}>Close</Text>
+                <Ionicons name="qr-code" size={20} color="#FFC857" />
+                <Text style={styles.qrButtonText}>Show QR</Text>
               </Pressable>
             </View>
-          </View>
-        </Modal>
-
-        <View style={styles.playersContainer}>
-          <View style={styles.playersHeaderRow}>
-            <Text style={styles.playersTitle}>Players</Text>
-            <TouchableOpacity
-              style={styles.refreshButton}
-              onPress={refreshGameState}
-            >
-              <Ionicons name="refresh" size={20} color="#8E44AD" />
-              <Text style={styles.refreshButtonText}>Refresh</Text>
-            </TouchableOpacity>
-          </View>
-
-          <FlatList
-            data={players}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <View style={styles.playerItem}>
-                <View style={styles.playerIconContainer}>
-                  <Text style={styles.playerIcon}>
-                    {item.username.charAt(0).toUpperCase()}
-                  </Text>
-                </View>
-                <Text style={styles.playerName}>{item.username}</Text>
-                {item.ready && (
-                  <Ionicons name="checkmark-circle" size={24} color="#4BB543" />
-                )}
-                {gameState.host === item.id && (
-                  <Text style={styles.hostBadge}>Host</Text>
-                )}
-              </View>
-            )}
-            style={styles.playersList}
-          />
-        </View>
-
-        <View style={styles.lobbyButtonsContainer}>
-          {isHost ? (
-            <Pressable
-              style={[
-                styles.startButton,
-                (!allPlayersReady || players.length < 2) &&
-                  styles.disabledButton,
-              ]}
-              onPress={handleStartGame}
-              disabled={!allPlayersReady || players.length < 2}
-            >
-              <Text style={styles.startButtonText}>Start Game</Text>
-            </Pressable>
-          ) : (
-            <Pressable
-              style={[styles.readyButton, isReady && styles.readyButtonActive]}
-              onPress={handleReady}
-              disabled={isReady}
-            >
-              <Text style={styles.readyButtonText}>
-                {isReady ? "Ready!" : "Ready Up"}
+            <View style={styles.roundInfoContainer}>
+              <Text style={styles.gameInfoLabel}>Rounds: </Text>
+              <Text style={styles.gameInfoValue}>
+                {gameState.maxRounds || selectedRounds}
               </Text>
-            </Pressable>
-          )}
+            </View>
+          </View>
+
+          {/* QR Code Modal */}
+          <Modal
+            visible={showQrCode}
+            transparent={true}
+            animationType="fade"
+            onRequestClose={() => setShowQrCode(false)}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.qrModalContent}>
+                <Text style={styles.modalTitle}>Join Game</Text>
+                <Text style={styles.qrInstructions}>
+                  Scan this code with another device to join
+                </Text>
+
+                <View style={styles.qrCodeContainer}>
+                  <QRCode
+                    value={joinUrl}
+                    size={200}
+                    backgroundColor="white"
+                    color="black"
+                  />
+                </View>
+
+                <View style={styles.gameInfoContainer}>
+                  <Text style={styles.gameInfoLabel}>Game Code:</Text>
+                  <Text style={styles.gameInfoValue}>{gameId}</Text>
+                </View>
+
+                <Text style={styles.manualInstructions}>
+                  On your device, enter this code in the "Join Game" screen
+                </Text>
+
+                <Pressable
+                  style={styles.modalCloseButton}
+                  onPress={() => setShowQrCode(false)}
+                >
+                  <Text style={styles.modalCloseButtonText}>Close</Text>
+                </Pressable>
+              </View>
+            </View>
+          </Modal>
+
+          <View style={styles.playersContainer}>
+            <View style={styles.playersHeaderRow}>
+              <Text style={styles.playersTitle}>Players</Text>
+              <TouchableOpacity
+                style={styles.refreshButton}
+                onPress={refreshGameState}
+              >
+                <Ionicons name="refresh" size={20} color="#8E44AD" />
+                <Text style={styles.refreshButtonText}>Refresh</Text>
+              </TouchableOpacity>
+            </View>
+
+            <FlatList
+              data={players}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <View style={styles.playerItem}>
+                  <View style={styles.playerIconContainer}>
+                    <Text style={styles.playerIcon}>
+                      {item.username.charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                  <Text style={styles.playerName}>{item.username}</Text>
+                  {item.ready && (
+                    <Ionicons name="checkmark-circle" size={24} color="#4BB543" />
+                  )}
+                  {gameState.host === item.id && (
+                    <Text style={styles.hostBadge}>Host</Text>
+                  )}
+                </View>
+              )}
+              style={styles.playersList}
+            />
+          </View>
+
+          <View style={styles.lobbyButtonsContainer}>
+            {isHost ? (
+              <Pressable
+                style={[
+                  styles.startButton,
+                  (!allPlayersReady || players.length < 2) &&
+                    styles.disabledButton,
+                ]}
+                onPress={handleStartGame}
+                disabled={!allPlayersReady || players.length < 2}
+              >
+                <Text style={styles.startButtonText}>Start Game</Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                style={[styles.readyButton, isReady && styles.readyButtonActive]}
+                onPress={handleReady}
+                disabled={isReady}
+              >
+                <Text style={styles.readyButtonText}>
+                  {isReady ? "Ready!" : "Ready Up"}
+                </Text>
+              </Pressable>
+            )}
+          </View>
         </View>
-      </View>
+      </ScrollView>
     );
   };
 
@@ -1123,31 +1134,35 @@ export default function MultiplayerGame() {
   const renderContent = () => {
     if (loading) {
       return (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#8E44AD" />
-          <Text style={styles.loadingText}>Loading...</Text>
-        </View>
+        <ScrollView contentContainerStyle={styles.scrollContainer}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#8E44AD" />
+            <Text style={styles.loadingText}>Loading...</Text>
+          </View>
+        </ScrollView>
       );
     }
 
     if (error) {
       return (
-        <View style={styles.errorContainer}>
-          <Ionicons name="alert-circle" size={64} color="#FF6B6B" />
-          <Text style={styles.errorText}>{error}</Text>
+        <ScrollView contentContainerStyle={styles.scrollContainer}>
+          <View style={styles.errorContainer}>
+            <Ionicons name="alert-circle" size={64} color="#FF6B6B" />
+            <Text style={styles.errorText}>{error}</Text>
 
-          <Pressable
-            style={styles.retryButton}
-            onPress={() => {
-              setError(null);
-              if (connectionStep === "initial") {
-                handleConnect();
-              }
-            }}
-          >
-            <Text style={styles.retryButtonText}>Retry</Text>
-          </Pressable>
-        </View>
+            <Pressable
+              style={styles.retryButton}
+              onPress={() => {
+                setError(null);
+                if (connectionStep === "initial") {
+                  handleConnect();
+                }
+              }}
+            >
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </Pressable>
+          </View>
+        </ScrollView>
       );
     }
 
@@ -1695,5 +1710,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 8,
     marginBottom: 8,
+  },
+  scrollContainer: {
+    flexGrow: 1,
   },
 });

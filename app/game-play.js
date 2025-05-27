@@ -2554,7 +2554,8 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     height: "100%",
-    backgroundColor: "#5D5D5D", // Darker shade for incomplete
+    borderWidth: 0,
+    backgroundColor: "transparent", // Darker shade for incomplete
     transition: "width 0.3s",
   },
   voteProgressComplete: {

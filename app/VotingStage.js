@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, Pressable, Image, Alert } from "react-native";
+import { View, Text, Pressable, Image, Alert, ScrollView } from "react-native";
 import { votingStyles } from "../assets/styles/votingStyles";
 import LeaderboardScreen from "./LeaderboardScreen";
 
@@ -557,104 +557,106 @@ const VotingStage = ({
   }
 
   return (
-    <View style={votingStyles.votingContainer}>
-      <Text style={votingStyles.votingInstructions}>
-        Who do you think listened to this song?
-      </Text>
+    <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
+      <View style={votingStyles.votingContainer}>
+        <Text style={votingStyles.votingInstructions}>
+          Who do you think listened to this song?
+        </Text>
 
-      <View style={votingStyles.playersGrid}>
-        {players
-          .filter((player) => player !== undefined)
-          .map((player) => {
-            // Determine style based on selection and result
-            const isSelected = selectedPlayer === player.username;
-            const isCorrect =
-              currentSong?.assignedToPlayer?.username === player.username;
-            const wasVoted = isSelected && showVoteResult;
+        <View style={votingStyles.playersGrid}>
+          {players
+            .filter((player) => player !== undefined)
+            .map((player) => {
+              // Determine style based on selection and result
+              const isSelected = selectedPlayer === player.username;
+              const isCorrect =
+                currentSong?.assignedToPlayer?.username === player.username;
+              const wasVoted = isSelected && showVoteResult;
 
-            // Determine the button style for dynamic feedback
-            let buttonStyle = votingStyles.playerVoteButton;
-            if (showVoteResult) {
-              if (wasVoted) {
-                if (isCorrect) {
+              // Determine the button style for dynamic feedback
+              let buttonStyle = votingStyles.playerVoteButton;
+              if (showVoteResult) {
+                if (wasVoted) {
+                  if (isCorrect) {
+                    buttonStyle = [
+                      votingStyles.playerVoteButton,
+                      votingStyles.correctVoteButton,
+                    ];
+                  } else {
+                    buttonStyle = [
+                      votingStyles.playerVoteButton,
+                      votingStyles.incorrectVoteButton,
+                    ];
+                  }
+                } else if (isCorrect) {
+                  // Show correct answer even if not selected
                   buttonStyle = [
                     votingStyles.playerVoteButton,
                     votingStyles.correctVoteButton,
                   ];
-                } else {
-                  buttonStyle = [
-                    votingStyles.playerVoteButton,
-                    votingStyles.incorrectVoteButton,
-                  ];
                 }
-              } else if (isCorrect) {
-                // Show correct answer even if not selected
+              } else if (isSelected) {
                 buttonStyle = [
                   votingStyles.playerVoteButton,
-                  votingStyles.correctVoteButton,
+                  { borderColor: "#6C3EB6", borderWidth: 3 },
                 ];
               }
-            } else if (isSelected) {
-              buttonStyle = [
-                votingStyles.playerVoteButton,
-                { borderColor: "#6C3EB6", borderWidth: 3 },
-              ];
-            }
 
-            return (
-              <Pressable
-                key={
-                  player.id ||
-                  `player-${player.username || Math.random().toString()}`
-                }
-                style={buttonStyle}
-                onPress={() => {
-                  if (voteLocked || showVoteResult) return;
-                  setSelectedPlayer(player.username);
-                }}
-              >
-                <View style={votingStyles.profileImageContainer}>
-                  <View style={votingStyles.profileBackground}>
-                    <Image
-                      source={getProfileImage(player)}
-                      style={votingStyles.profileImage}
-                    />
+              return (
+                <Pressable
+                  key={
+                    player.id ||
+                    `player-${player.username || Math.random().toString()}`
+                  }
+                  style={buttonStyle}
+                  onPress={() => {
+                    if (voteLocked || showVoteResult) return;
+                    setSelectedPlayer(player.username);
+                  }}
+                >
+                  <View style={votingStyles.profileImageContainer}>
+                    <View style={votingStyles.profileBackground}>
+                      <Image
+                        source={getProfileImage(player)}
+                        style={votingStyles.profileImage}
+                      />
+                    </View>
                   </View>
-                </View>
-                <Text style={votingStyles.playerVoteName}>
-                  {getDisplayName(player)}
+                  <Text style={votingStyles.playerVoteName}>
+                    {getDisplayName(player)}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          {/* Overlay when vote is locked but results not shown 
+              Show whenever the player has voted (voteLocked) and we're not showing results yet */}
+          {voteLocked && !showVoteResult && (
+            <View style={votingStyles.voteLockedOverlay}>
+              <View style={votingStyles.lockedMessageContainer}>
+                <Text style={votingStyles.lockIcon}>🔒</Text>
+                <Text style={votingStyles.lockedMessage}>
+                  Your vote{"\n"}is locked!
                 </Text>
-              </Pressable>
-            );
-          })}
-        {/* Overlay when vote is locked but results not shown 
-            Show whenever the player has voted (voteLocked) and we're not showing results yet */}
-        {voteLocked && !showVoteResult && (
-          <View style={votingStyles.voteLockedOverlay}>
-            <View style={votingStyles.lockedMessageContainer}>
-              <Text style={votingStyles.lockIcon}>🔒</Text>
-              <Text style={votingStyles.lockedMessage}>
-                Your vote{"\n"}is locked!
-              </Text>
+              </View>
             </View>
+          )}
+        </View>
+        {/* Submit button, only show if vote not locked and a player is selected */}
+        {!voteLocked && !showVoteResult && selectedPlayer && (
+          <Pressable style={votingStyles.submitButton} onPress={handleSubmitVote}>
+            <Text style={votingStyles.submitButtonText}>Submit</Text>
+          </Pressable>
+        )}
+        {/* Waiting banner at the bottom */}
+        {voteLocked && !showVoteResult && (
+          <View style={votingStyles.waitingBanner}>
+            <Text style={votingStyles.waitingBannerText}>
+              {allVotesCast ? "Results coming..." : "Waiting for all votes…"}
+            </Text>
           </View>
         )}
       </View>
-      {/* Submit button, only show if vote not locked and a player is selected */}
-      {!voteLocked && !showVoteResult && selectedPlayer && (
-        <Pressable style={votingStyles.submitButton} onPress={handleSubmitVote}>
-          <Text style={votingStyles.submitButtonText}>Submit</Text>
-        </Pressable>
-      )}
-      {/* Waiting banner at the bottom */}
-      {voteLocked && !showVoteResult && (
-        <View style={votingStyles.waitingBanner}>
-          <Text style={votingStyles.waitingBannerText}>
-            {allVotesCast ? "Results coming..." : "Waiting for all votes…"}
-          </Text>
-        </View>
-      )}
-    </View>
+    </ScrollView>
   );
 };
 
