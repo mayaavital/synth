@@ -467,7 +467,7 @@ export default function GamePlay() {
           if (!tracks || tracks.length === 0) {
             console.log("No tracks found, using mock data");
             console.log("Mock songs available:", mockSongs?.length || 0);
-            tracks = mockSongs;
+            tracks = null;
           } else {
             // Debug all tracks and their preview URLs
             console.log("=== TRACK PREVIEW URL DEBUG ===");
@@ -1905,10 +1905,10 @@ export default function GamePlay() {
           }
 
           // If we still have no songs, use mock songs
-          if (allSongs.length === 0) {
-            console.log("No songs loaded, using mock songs");
-            setAllSongs(mockSongs);
-          }
+          // if (allSongs.length === 0) {
+          //   console.log("No songs loaded, using mock songs");
+          //   setAllSongs(mockSongs);
+          // }
 
           // Check if we already have a current song
           if (!currentSong && allSongs.length > 0) {
@@ -1950,10 +1950,12 @@ export default function GamePlay() {
               },
             }));
             setAllSongs(extractedSongs);
-          } else if (allSongs.length === 0) {
-            console.log("[HOST] No songs found, using mock songs for host");
-            setAllSongs(mockSongs);
-          }
+          } 
+          
+          // else if (allSongs.length === 0) {
+          //   console.log("[HOST] No songs found, using mock songs for host");
+          //   setAllSongs(mockSongs);
+          // }
 
           // Make sure we have a current song
           if (!currentSong && allSongs.length > 0) {

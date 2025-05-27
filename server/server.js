@@ -1247,20 +1247,57 @@ io.on("connection", (socket) => {
       console.log(
         `[TRACK_SYNC] Using existing song selection for round ${roundNumber}`
       );
-      startRoundWithSong(gameId, roundNumber, game.roundSongs[roundNumber]);
+      
+      // Handle both storage structures when reusing existing song
+      const existingRoundData = game.roundSongs[roundNumber];
+      const song = existingRoundData.song || existingRoundData; // Get the actual song data
+      
+      // Ensure the song has all required properties for startRoundWithSong
+      const songForRound = {
+        songTitle: song.songTitle || song.title || "Unknown Song",
+        songArtists: song.songArtists || song.artists || ["Unknown Artist"],
+        albumName: song.albumName || "Unknown Album", 
+        imageUrl: song.imageUrl || "https://via.placeholder.com/300",
+        previewUrl: song.previewUrl,
+        hasPreviewUrl: !!song.previewUrl,
+        externalUrl: song.externalUrl,
+        trackId: song.trackId || song.songTitle || song.title,
+        roundTraceId: song.roundTraceId || `REUSE_ROUND_${gameId}_${roundNumber}_${Date.now()}`,
+        assignedToPlayer: song.assignedToPlayer || existingRoundData.owner
+      };
+      
+      console.log(`[TRACK_SYNC] Reusing song: "${songForRound.songTitle}" for round ${roundNumber}`);
+      startRoundWithSong(gameId, roundNumber, songForRound);
       return;
     }
 
     // 2. Try to select a new song by prioritizing real tracks over mock tracks
 
+    // Debug: Log current roundSongs structure
+    console.log(`[TRACK_SYNC] Current roundSongs structure:`, Object.keys(game.roundSongs || {}).map(roundNum => {
+      const roundData = game.roundSongs[roundNum];
+      const songData = roundData.song || roundData;
+      return {
+        round: roundNum,
+        songTitle: songData.songTitle || songData.title || 'Unknown',
+        trackId: songData.trackId || 'No ID',
+        hasNestedStructure: !!roundData.song
+      };
+    }));
+
     // Get all available tracks that haven't been used in previous rounds
-    const usedTrackIds = Object.values(game.roundSongs || {}).map(
-      (song) => song.trackId || song.title
-    );
+    const usedTrackIds = Object.values(game.roundSongs || {}).map((roundSongData) => {
+      // Handle both storage structures:
+      // 1. Flat structure: roundSongData has songTitle, trackId directly
+      // 2. Nested structure: roundSongData.song has songTitle, trackId
+      const songData = roundSongData.song || roundSongData;
+      return songData.trackId || songData.songTitle || songData.title;
+    }).filter(Boolean); // Remove any undefined/null values
 
     // Log what we're filtering with
     console.log(`[TRACK_SYNC] Total available tracks: ${game.consolidatedPlaylist.length}`);
     console.log(`[TRACK_SYNC] Used track IDs from previous rounds: ${usedTrackIds.length}`);
+    console.log(`[TRACK_SYNC] Used tracks: ${usedTrackIds.join(', ')}`);
 
     // Filter available tracks: first real tracks, then fallback to mock if needed
     let availableTracks = game.consolidatedPlaylist.filter(
@@ -1377,7 +1414,16 @@ io.on("connection", (socket) => {
     if (!game.roundSongs) {
       game.roundSongs = {};
     }
-    game.roundSongs[roundNumber] = roundSong;
+    
+    // Use the same nested structure as round 1 auto-start for consistency
+    game.roundSongs[roundNumber] = {
+      song: roundSong,
+      owner: {
+        username: selectedTrack.owner.username,
+        id: selectedTrack.owner.id,
+      },
+      roundTraceId: roundSong.roundTraceId,
+    };
 
     // Start the round with this song
     startRoundWithSong(gameId, roundNumber, roundSong);
