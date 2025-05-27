@@ -1068,6 +1068,86 @@ io.on("connection", (socket) => {
     );
   }
 
+  // Helper function to get username by player ID/socket ID
+  function getUsernameById(gameId, playerId) {
+    const game = activeGames[gameId];
+    if (!game) return null;
+
+    // First check the gameUsernameMappings (most reliable)
+    if (gameUsernameMappings[gameId]) {
+      for (const [username, socketId] of Object.entries(gameUsernameMappings[gameId])) {
+        if (socketId === playerId) {
+          return username;
+        }
+      }
+    }
+
+    // Fallback to searching players list
+    const player = game.players.find((p) => p && p.id === playerId);
+    return player ? player.username : null;
+  }
+
+  // Helper function to get player ID by username
+  function getPlayerIdByUsername(gameId, username) {
+    const game = activeGames[gameId];
+    if (!game) return null;
+
+    // First check the gameUsernameMappings (most reliable)
+    if (gameUsernameMappings[gameId] && gameUsernameMappings[gameId][username]) {
+      return gameUsernameMappings[gameId][username];
+    }
+
+    // Fallback to searching players list
+    const player = game.players.find((p) => p && p.username === username);
+    return player ? player.id : null;
+  }
+
+  // Helper function to get comprehensive player mappings for client-side use
+  function getPlayerMappings(gameId) {
+    const game = activeGames[gameId];
+    if (!game) return {};
+
+    // Create comprehensive mappings for clients
+    const socketIdToUsername = {};
+    const playerIdToUsername = {};
+    const usernameToIds = {};
+
+    // Build mappings from gameUsernameMappings (most reliable)
+    if (gameUsernameMappings[gameId]) {
+      Object.entries(gameUsernameMappings[gameId]).forEach(([username, socketId]) => {
+        socketIdToUsername[socketId] = username;
+        playerIdToUsername[socketId] = username;
+        
+        if (!usernameToIds[username]) {
+          usernameToIds[username] = [];
+        }
+        usernameToIds[username].push(socketId);
+      });
+    }
+
+    // Also add from players list for redundancy
+    game.players.forEach((player) => {
+      if (player && player.id && player.username) {
+        socketIdToUsername[player.id] = player.username;
+        playerIdToUsername[player.id] = player.username;
+        
+        if (!usernameToIds[player.username]) {
+          usernameToIds[player.username] = [];
+        }
+        if (!usernameToIds[player.username].includes(player.id)) {
+          usernameToIds[player.username].push(player.id);
+        }
+      }
+    });
+
+    return {
+      socketIdToUsername,
+      playerIdToUsername,
+      usernameToIds,
+      playerMappings: gameUsernameMappings[gameId] || {} // Backward compatibility
+    };
+  }
+
   function sharePlaylistWithClients(gameId) {
     const game = activeGames[gameId];
 

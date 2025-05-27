@@ -435,7 +435,7 @@ export default function GamePlay() {
       if (!currentToken) {
         console.log("No valid Spotify token, using mock song data");
         console.log("Mock songs available:", mockSongs?.length || 0);
-        tracks = mockSongs;
+        tracks = null;
       } else {
         try {
           // First try getting recently played tracks as they often have preview URLs
@@ -581,7 +581,7 @@ export default function GamePlay() {
           console.error("Error fetching from Spotify API:", apiError);
           console.log("Using fallback mock data");
           console.log("Mock songs available:", mockSongs?.length || 0);
-          tracks = mockSongs;
+          tracks = null;
 
           // Handle API errors
           if (apiError?.response?.status === 401) {
