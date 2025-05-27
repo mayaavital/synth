@@ -1112,24 +1112,24 @@ export default function GamePlay() {
       }
 
       // Count the number of mock tracks
-      const mockTracks = data.playlist.filter(
-        (item) =>
-          item.track.songTitle === "Bohemian Rhapsody" ||
-          item.track.songTitle === "Don't Stop Believin'" ||
-          item.track.songTitle === "Billie Jean"
-      );
+      // const mockTracks = data.playlist.filter(
+      //   (item) =>
+      //     item.track.songTitle === "Bohemian Rhapsody" ||
+      //     item.track.songTitle === "Don't Stop Believin'" ||
+      //     item.track.songTitle === "Billie Jean"
+      // );
 
-      if (mockTracks.length > 0) {
-        console.warn(
-          `[TRACK_SYNC] WARNING: Received ${mockTracks.length} mock tracks from server!`
-        );
-        console.warn(
-          `[TRACK_SYNC] This is happening because the server couldn't find any tracks with preview URLs`
-        );
-        console.warn(
-          `[TRACK_SYNC] Try enriching tracks with Deezer before sending to server`
-        );
-      }
+      // if (mockTracks.length > 0) {
+      //   console.warn(
+      //     `[TRACK_SYNC] WARNING: Received ${mockTracks.length} mock tracks from server!`
+      //   );
+      //   console.warn(
+      //     `[TRACK_SYNC] This is happening because the server couldn't find any tracks with preview URLs`
+      //   );
+      //   console.warn(
+      //     `[TRACK_SYNC] Try enriching tracks with Deezer before sending to server`
+      //   );
+      // }
 
       // Log all tracks for debugging purposes
       console.log("[TRACK_SYNC] Available tracks in playlist:");
