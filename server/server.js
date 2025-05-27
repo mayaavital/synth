@@ -547,10 +547,13 @@ io.on("connection", (socket) => {
             const round1TraceId = `ROUND_${gameId}_1_${Date.now()}`;
             activeGames[gameId].currentRoundTraceId = round1TraceId;
 
-            // Get the first song from the playlist
-            const firstSong = activeGames[gameId].consolidatedPlaylist[0].track;
+            // Get a random song from the playlist for round 1 (instead of always using first)
+            const randomIndex = Math.floor(Math.random() * activeGames[gameId].consolidatedPlaylist.length);
+            const firstSong = activeGames[gameId].consolidatedPlaylist[randomIndex].track;
             const firstSongOwner =
-              activeGames[gameId].consolidatedPlaylist[0].owner;
+              activeGames[gameId].consolidatedPlaylist[randomIndex].owner;
+
+            console.log(`[TRACK_SYNC] Selected random song for round 1: "${firstSong.songTitle}" (index ${randomIndex}/${activeGames[gameId].consolidatedPlaylist.length})`);
 
             // Create the song with trace ID
             const songWithTraceId = {
@@ -577,7 +580,7 @@ io.on("connection", (socket) => {
               roundTraceId: round1TraceId,
               // Add username mappings to ensure clients can match socket IDs to usernames
               playerMappings: gameUsernameMappings[gameId] || {},
-              maxRounds: game.maxRounds, // Include maxRounds in every round_started event
+              maxRounds: activeGames[gameId].maxRounds, // Include maxRounds in every round_started event
             });
 
             console.log(`[TRACK_SYNC] Round 1 auto-started for game ${gameId}`);
@@ -660,9 +663,13 @@ io.on("connection", (socket) => {
       const round1TraceId = `ROUND_${gameId}_1_${Date.now()}`;
       activeGames[gameId].currentRoundTraceId = round1TraceId;
 
-      // Get the first song from the playlist
-      const firstSong = activeGames[gameId].consolidatedPlaylist[0].track;
-      const firstSongOwner = activeGames[gameId].consolidatedPlaylist[0].owner;
+      // Get a random song from the playlist for round 1 (instead of always using first)
+      const randomIndex = Math.floor(Math.random() * activeGames[gameId].consolidatedPlaylist.length);
+      const firstSong = activeGames[gameId].consolidatedPlaylist[randomIndex].track;
+      const firstSongOwner =
+        activeGames[gameId].consolidatedPlaylist[randomIndex].owner;
+
+      console.log(`[TRACK_SYNC] Selected random song for round 1: "${firstSong.songTitle}" (index ${randomIndex}/${activeGames[gameId].consolidatedPlaylist.length})`);
 
       // Create the song with trace ID
       const songWithTraceId = {
@@ -689,7 +696,7 @@ io.on("connection", (socket) => {
         roundTraceId: round1TraceId,
         // Add username mappings to ensure clients can match socket IDs to usernames
         playerMappings: gameUsernameMappings[gameId] || {},
-        maxRounds: game.maxRounds, // Include maxRounds in every round_started event
+        maxRounds: activeGames[gameId].maxRounds, // Include maxRounds in every round_started event
       });
 
       console.log(`[TRACK_SYNC] Round 1 auto-started for game ${gameId}`);
@@ -1201,9 +1208,12 @@ io.on("connection", (socket) => {
       `[TRACK_SYNC] Playlist shared, game ready for play with ${game.maxRounds} rounds`
     );
 
-    // If this is a fresh game, start round 1
-    if (!game.currentRound || game.currentRound < 1) {
+    // If this is a fresh game and no round has started yet, start round 1
+    if ((!game.currentRound || game.currentRound < 1) && !game.roundSongs[1]) {
+      console.log(`[TRACK_SYNC] Starting fresh round 1 from playlist sharing`);
       selectRandomSongForRound(gameId, 1);
+    } else if (game.currentRound >= 1 && game.roundSongs[game.currentRound]) {
+      console.log(`[TRACK_SYNC] Round ${game.currentRound} already in progress, not selecting new song`);
     }
   }
 
@@ -1334,9 +1344,32 @@ io.on("connection", (socket) => {
       console.log(
         `[TRACK_SYNC] No unused tracks available, reusing real tracks (excluding mock tracks)`
       );
+      
+      // SMART REUSE: First try to avoid the most recently used tracks (especially the current round's track)
+      const recentTrackIds = usedTrackIds.slice(-2); // Last 2 used tracks to avoid
+      console.log(`[TRACK_SYNC] Trying to avoid recently used tracks: ${recentTrackIds.join(', ')}`);
+      
       availableTracks = game.consolidatedPlaylist.filter(
-        (item) => !item.track.isMockTrack && !isMockTrackByTitle(item.track.songTitle) // Only exclude mock tracks
+        (item) => 
+          !item.track.isMockTrack && 
+          !isMockTrackByTitle(item.track.songTitle) &&
+          !recentTrackIds.includes(item.track.trackId) &&
+          !recentTrackIds.includes(item.track.songTitle)
       );
+      
+      // If that's still empty, allow reusing any track except mock tracks
+      if (availableTracks.length === 0) {
+        console.log(
+          `[TRACK_SYNC] No tracks available even avoiding recent ones, allowing any real track reuse`
+        );
+        availableTracks = game.consolidatedPlaylist.filter(
+          (item) => !item.track.isMockTrack && !isMockTrackByTitle(item.track.songTitle) // Only exclude mock tracks
+        );
+      } else {
+        console.log(
+          `[TRACK_SYNC] Found ${availableTracks.length} real tracks that avoid the last ${recentTrackIds.length} used tracks`
+        );
+      }
       
       if (availableTracks.length > 0) {
         console.log(`[TRACK_SYNC] Reusing from ${availableTracks.length} real tracks`);
@@ -2142,7 +2175,7 @@ io.on("connection", (socket) => {
 
       // Force sync with more aggressive timing:
       // 1. Always force sync immediately if significant inconsistency (less than half playing same song)
-      // 2. Force sync for any inconsistency if we haven't forced recently (last 3 seconds)
+      // 2. Force sync for any inconsistency if we haven't forced recently (last 8 seconds)
       // 3. Force sync if it's the first inconsistency for this round regardless of timing
 
       const significantInconsistency = maxClients < clientIds.length / 2;
@@ -2152,18 +2185,18 @@ io.on("connection", (socket) => {
 
       const now = Date.now();
       const recentSync =
-        game.lastForceSyncTime && now - game.lastForceSyncTime <= 3000;
+        game.lastForceSyncTime && now - game.lastForceSyncTime <= 8000;
 
       if (
         significantInconsistency ||
-        isFirstInconsistencyForRound ||
-        !recentSync
+        (isFirstInconsistencyForRound && !recentSync) ||
+        (!recentSync && maxClients === 1) // Only if no recent sync and only 1 client has majority
       ) {
         // Record that we detected an inconsistency for this round
         game.lastInconsistencyDetectedForRound = game.currentRound;
 
         console.log(
-          `[TRACK_SYNC] CRITICAL: Detected song inconsistency in game ${gameId}. Forcing sync...`
+          `[TRACK_SYNC] CRITICAL: Detected song inconsistency in game ${gameId}. Forcing sync... (Significant: ${significantInconsistency}, First: ${isFirstInconsistencyForRound}, Recent: ${recentSync})`
         );
         forceSongSync(gameId);
       } else {
@@ -2172,7 +2205,7 @@ io.on("connection", (socket) => {
           1000
         ).toFixed(3);
         console.log(
-          `[TRACK_SYNC] Skipping force sync - last sync was ${timeSinceLastSync} seconds ago`
+          `[TRACK_SYNC] Skipping force sync - last sync was ${timeSinceLastSync} seconds ago (conditions: sig=${significantInconsistency}, first=${isFirstInconsistencyForRound}, recent=${recentSync})`
         );
       }
     }
@@ -2245,15 +2278,19 @@ io.on("connection", (socket) => {
         `[TRACK_SYNC] Round mismatch detected: Client reports round ${roundNumber}, game is on round ${game.currentRound}`
       );
 
-      // Only sync if we haven't just done so very recently (within 1 second)
+      // Only sync if we haven't just done so very recently (within 5 seconds, increased from 1)
       const now = Date.now();
-      if (!game.lastForceSyncTime || now - game.lastForceSyncTime > 1000) {
+      if (!game.lastForceSyncTime || now - game.lastForceSyncTime > 5000) {
         console.log(
-          `[TRACK_SYNC] Force syncing client to correct round immediately`
+          `[TRACK_SYNC] Force syncing client to correct round after 5s debounce`
         );
         // Force sync to ensure client is on the right round
         forceSongSync(gameId);
         return;
+      } else {
+        console.log(
+          `[TRACK_SYNC] Skipping round mismatch sync - too recent (${(now - game.lastForceSyncTime)/1000}s ago)`
+        );
       }
     }
 
@@ -2312,18 +2349,22 @@ io.on("connection", (socket) => {
               `[TRACK_SYNC] Song mismatch: Client playing "${songTitle}", expected "${expectedTitle}" for round ${roundNumber}`
             );
 
-            // Only sync if we haven't just done so very recently (within 1 second)
+            // Only sync if we haven't just done so very recently (within 5 seconds, increased from 1)
             const now = Date.now();
             if (
               !game.lastForceSyncTime ||
-              now - game.lastForceSyncTime > 1000
+              now - game.lastForceSyncTime > 5000
             ) {
               console.log(
-                `[TRACK_SYNC] Force syncing client to correct song immediately`
+                `[TRACK_SYNC] Force syncing client to correct song after 5s debounce`
               );
               // Force sync to ensure client plays the right song
               forceSongSync(gameId);
               return;
+            } else {
+              console.log(
+                `[TRACK_SYNC] Skipping song mismatch sync - too recent (${(now - game.lastForceSyncTime)/1000}s ago)`
+              );
             }
           }
         }
@@ -2463,10 +2504,13 @@ io.on("connection", (socket) => {
         // This helps new clients joining mid-round
         if (isFirstReport) {
           console.log(
-            `[TRACK_SYNC] First song report from client ${socket.id}, forcing immediate sync`
+            `[TRACK_SYNC] First song report from client ${socket.id}, scheduling consistency check instead of immediate sync`
           );
-          forceSongSync(gameId);
-          return;
+          // Schedule a consistency check instead of immediate force sync
+          setTimeout(() => {
+            checkSongConsistency(gameId);
+          }, 3000);
+          // Don't return here - let the normal flow continue
         }
 
         // IMPORTANT: Lower the threshold for force sync (3 seconds instead of 5)
@@ -2474,7 +2518,7 @@ io.on("connection", (socket) => {
         const now = Date.now();
         const lastForceSyncTime = game.lastForceSyncTime || 0;
 
-        if (now - lastForceSyncTime > 3000) {
+        if (now - lastForceSyncTime > 8000) {
           console.log(
             `[TRACK_SYNC] Detailed song comparison for game ${gameId}:`
           );
@@ -2502,7 +2546,7 @@ io.on("connection", (socket) => {
           console.log(
             `[TRACK_SYNC] Skipping force sync - last sync was ${
               (now - lastForceSyncTime) / 1000
-            } seconds ago`
+            } seconds ago (waiting for 8s debounce)`
           );
         }
       }
