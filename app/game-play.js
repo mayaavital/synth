@@ -1892,6 +1892,85 @@ export default function GamePlay() {
     enableAudioContext();
   }, [isHost]);
 
+  // Define fetchSongs and loadPlayedSongs here
+  const fetchSongs = async () => {
+    let rawSongs = [];
+    try {
+      // Try to get recently played tracks first
+      rawSongs = await getMyRecentlyPlayedTracks(token);
+
+      if (!rawSongs || rawSongs.length < 5) {
+        console.log(
+          "Not enough recently played tracks, fetching from album..."
+        );
+        // If not enough, get album tracks (ensure ALBUM_ID is defined)
+        const albumSongs = await getAlbumTracks(ALBUM_ID, token);
+        if (albumSongs) {
+          rawSongs = rawSongs ? [...rawSongs, ...albumSongs] : albumSongs;
+          // Remove duplicates based on songTitle and artist
+          rawSongs = rawSongs.filter(
+            (song, index, self) =>
+              index ===
+              self.findIndex(
+                (s) =>
+                  s.songTitle === song.songTitle &&
+                  JSON.stringify(s.songArtists) ===
+                    JSON.stringify(song.songArtists)
+              )
+          );
+        }
+      }
+
+      // If still not enough songs, use mock songs to fill up
+      if (rawSongs.length < 5) {
+        console.log("Still not enough songs, adding mock songs...");
+        const needed = 5 - rawSongs.length;
+        // Add unique mock songs that are not already in rawSongs
+        const mockSongsToAdd = mockSongs
+          .filter(
+            (mockSong) =>
+              !rawSongs.some(
+                (s) =>
+                  s.songTitle === mockSong.songTitle &&
+                  JSON.stringify(s.songArtists) ===
+                    JSON.stringify(mockSong.songArtists)
+              )
+          )
+          .slice(0, needed);
+        rawSongs.push(...mockSongsToAdd);
+      }
+
+      // Ensure all songs have preview URLs, enriching with Deezer if necessary
+      const enrichedSongs = await enrichTracksWithDeezerPreviews(rawSongs);
+      console.log(
+        `Fetched and enriched ${enrichedSongs.length} songs. ${
+          enrichedSongs.filter((s) => s.previewUrl).length
+        } have preview URLs.`
+      );
+      return enrichedSongs.slice(0, 20); // Limit to 20 songs
+    } catch (error) {
+      console.error("Error fetching songs:", error);
+      handleTokenError(error); // Handle token errors specifically
+      // Fallback to mock songs if there is an unrecoverable error
+      return mockSongs.slice(0, 20);
+    }
+  };
+
+  const loadPlayedSongs = async () => {
+    try {
+      const storedPlayedSongs = await AsyncStorage.getItem("playedSongs");
+      if (storedPlayedSongs) {
+        const parsedSongs = JSON.parse(storedPlayedSongs);
+        console.log(
+          `Loaded ${parsedSongs.length} previously played songs from storage`
+        );
+        setPlayedSongs(parsedSongs);
+      }
+    } catch (error) {
+      console.error("Error loading played songs from storage:", error);
+    }
+  };
+
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container}>
