@@ -420,7 +420,7 @@ export default function GamePlay() {
 
             // Share these songs with other clients via WebSocket
             if (emit && fetchedSongs.length > 0 && !hasSharedTracks) {
-              console.log(
+            console.log(
                 `[TRACK_SYNC] Host emitting shared_playlist with ${fetchedSongs.length} songs`
               );
               emit(EVENTS.SHARE_PLAYLIST, {
@@ -442,7 +442,7 @@ export default function GamePlay() {
             selectSongForRound(1, fetchedSongs);
           } else {
             // Non-host multiplayer client, waits for shared_playlist event
-            console.log(
+              console.log(
               "[TRACK_SYNC] Non-host client: waiting for shared playlist from host."
             );
           }
@@ -468,7 +468,7 @@ export default function GamePlay() {
         }
         // If we are a non-host and tracks have been shared, also stop loading
         if (isMultiplayer && !isHost && hasSharedTracks) {
-           setIsLoading(false);
+      setIsLoading(false);
         }
       }
     };
@@ -1757,7 +1757,7 @@ export default function GamePlay() {
               },
             }));
             setAllSongs(extractedSongs);
-          }
+          } 
 
           // Make sure we have a current song
           if (!currentSong && allSongs.length > 0) {
