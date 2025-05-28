@@ -18,10 +18,11 @@ import { useEffect, useState } from "react";
 import useSpotifyAuth from "../utils/SpotifyAuthContext";
 import SpotifyConnectButton from "../components/SpotifyConnectButton";
 import AlbumCarousel from "../components/AlbumCarousel";
+import analytics from '@react-native-firebase/analytics';
 //import * as Analytics from "expo-firebase-analytics";
 // Import the functions you need from the SDKs you need
- import { initializeApp } from "firebase/app";
- import { getAnalytics, logEvent } from "firebase/analytics";
+//  import { initializeApp } from "firebase/app";
+//  import { getAnalytics, logEvent } from "firebase/analytics";
 // TODO: Add SDKs for Firebase products that you want to use
 // https://firebase.google.com/docs/web/setup#available-libraries
 
@@ -67,9 +68,10 @@ const firebaseConfig = {
   appId: "1:681571197393:web:21ebf6102f5239372740f0",
   measurementId: "G-ND9VF6MRB4",
 };
+// Initialize Firebase
 
-let app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app); // Initialize Firebase Analytics
+// let app = initializeApp(firebaseConfig);
+// const analytics = getAnalytics(app); // Initialize Firebase Analytics
 
 // Initialize Firebase
 
@@ -388,9 +390,8 @@ export default function home() {
               console.log("Logging event");
 
               try {
-                logEvent(analytics, 'button_click', {
-                    "button_name": "previous game"
-                });
+                await analytics().logEvent('previous_game', {
+                })
                 console.log("Event logged successfully");
               } catch (error) {
                 console.error("Error logging event:", error);
