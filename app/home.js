@@ -388,9 +388,10 @@ export default function home() {
               console.log("Logging event");
 
               try {
-
-                // Example: Logging a custom event
-                await Analytics.logEvent("previous_game", undefined);
+                logEvent(analytics, 'previous_game', {
+                  content_type: 'image',
+                  content_id: 'P12453'
+                });
               } catch (error) {
                 console.error("Error logging event:", error);
               }
