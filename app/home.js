@@ -20,9 +20,8 @@ import SpotifyConnectButton from "../components/SpotifyConnectButton";
 import AlbumCarousel from "../components/AlbumCarousel";
 //import * as Analytics from "expo-firebase-analytics";
 // Import the functions you need from the SDKs you need
-// import { initializeApp } from "firebase/app";
-// import { getAnalytics, logEvent } from "firebase/analytics";
-// const analytics = getAnalytics(app);
+ import { initializeApp } from "firebase/app";
+ import { getAnalytics, logEvent } from "firebase/analytics";
 // TODO: Add SDKs for Firebase products that you want to use
 // https://firebase.google.com/docs/web/setup#available-libraries
 
@@ -69,10 +68,8 @@ const firebaseConfig = {
   measurementId: "G-ND9VF6MRB4",
 };
 
-//let app = firebase.initializeApp(firebaseConfig);
-
-//const app = initializeApp(firebaseConfig);
-// const analytics = getAnalytics(app); // Initialize Firebase Analytics
+let app = firebase.initializeApp(firebaseConfig);
+const analytics = getAnalytics(app); // Initialize Firebase Analytics
 
 // Initialize Firebase
 
@@ -392,7 +389,7 @@ export default function home() {
 
               try {
                 // Example: Logging a custom event
-                await Analytics.logEvent("select_content", undefined);
+                await Analytics.logEvent("previous_game", undefined);
               } catch (error) {
                 console.error("Error logging event:", error);
               }

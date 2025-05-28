@@ -1446,6 +1446,8 @@ io.on("connection", (socket) => {
       username: votedForUsername,
     };
 
+    /*
+
     // Log which username is voting for which username (for clearer logs)
     const voterUsername = getUsernameById(gameId, voterId) || game.players.find(p => p.id === voterId)?.username;
         if (voterUsername) {
@@ -1459,6 +1461,7 @@ io.on("connection", (socket) => {
     console.log(
       `[PLAYER_MAPPING] Player "${voterUsername}" (${socket.id}) voted for "${votedForUsernameResolved}" (${targetPlayerId}) in round ${currentRound}`
     );
+    */
 
     // Try to get the correct player for this round with improved lookup
     let correctPlayerId = null;
