@@ -27,6 +27,7 @@ import {
   getSpotifyUserProfile,
 } from "../utils/apiOptions";
 import useSpotifyAuth from "../utils/useSpotifyAuth";
+import RoundsDial from './components/RoundsDial';
 
 const windowWidth = Dimensions.get("window").width;
 const windowHeight = Dimensions.get("window").height;
@@ -459,7 +460,7 @@ export default function MultiplayerGame() {
 
           if (tracks && tracks.length > 0) {
             // Convert to the format expected by the multiplayer game
-            tracksToProcess = tracks.slice(0, 5).map((track) => ({
+            tracksToProcess = tracks.slice(0, 10).map((track) => ({
               songTitle: track.songTitle,
               songArtists: track.songArtists.map(
                 (artist) => artist.name || artist
@@ -903,28 +904,12 @@ export default function MultiplayerGame() {
           placeholderTextColor="#888"
         />
 
-        <Text style={styles.inputLabel}>Number of Rounds</Text>
-        <View style={styles.roundsSelector}>
-          {[2, 3, 4, 5, 6, 7, 8].map((num) => (
-            <TouchableOpacity
-              key={num}
-              style={[
-                styles.roundButton,
-                selectedRounds === num && styles.roundButtonSelected,
-              ]}
-              onPress={() => setSelectedRounds(num)}
-            >
-              <Text
-                style={[
-                  styles.roundButtonText,
-                  selectedRounds === num && styles.roundButtonTextSelected,
-                ]}
-              >
-                {num}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        <RoundsDial
+          value={selectedRounds}
+          onValueChange={setSelectedRounds}
+          minValue={2}
+          maxValue={20}
+        />
 
         <Pressable
           style={[
@@ -1681,29 +1666,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginBottom: 20,
     textAlign: "center",
-  },
-  roundsSelector: {
-    flexDirection: "row",
-    justifyContent: "space-evenly",
-    marginBottom: 20,
-  },
-  roundButton: {
-    backgroundColor: "#222",
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#444",
-  },
-  roundButtonSelected: {
-    backgroundColor: "#8E44AD",
-  },
-  roundButtonText: {
-    color: "#CCC",
-    fontSize: 16,
-  },
-  roundButtonTextSelected: {
-    color: "white",
-    fontWeight: "bold",
   },
   roundInfoContainer: {
     flexDirection: "row",

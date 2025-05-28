@@ -158,7 +158,7 @@ io.on("connection", (socket) => {
 
     // IMPORTANT: Store host tracks immediately if provided
     if (hostTracks.length > 0) {
-      activeGames[gameId].playerTracks[socket.id] = hostTracks.slice(0, 5); // Limit to 5 tracks
+      activeGames[gameId].playerTracks[socket.id] = hostTracks.slice(0, 10); // Limit to 10 tracks
 
       // Log a sample track
       if (hostTracks[0]) {
@@ -197,10 +197,10 @@ io.on("connection", (socket) => {
         activeGames[gameId].playerTracks = {};
       }
 
-      // Store the host's tracks, limited to 5 tracks
+      // Store the host's tracks, limited to 10 tracks
       activeGames[gameId].playerTracks[socket.id] = gameData.hostTracks.slice(
         0,
-        5
+        10
       );
 
       // Log a sample track for debugging
@@ -348,8 +348,8 @@ io.on("connection", (socket) => {
           activeGames[gameId].playerTracks = {};
         }
 
-        // Store the player's tracks, limited to 5 tracks
-        activeGames[gameId].playerTracks[socket.id] = playerTracks.slice(0, 5);
+        // Store the player's tracks, limited to 10 tracks
+        activeGames[gameId].playerTracks[socket.id] = playerTracks.slice(0, 10);
 
         // Acknowledge tracks were received
         socket.emit("player_tracks_received", {
@@ -412,8 +412,8 @@ io.on("connection", (socket) => {
           activeGames[gameId].playerTracks = {};
         }
 
-        // Store the player's tracks, limited to 5 tracks
-        activeGames[gameId].playerTracks[socket.id] = playerTracks.slice(0, 5);
+        // Store the player's tracks, limited to 10 tracks
+        activeGames[gameId].playerTracks[socket.id] = playerTracks.slice(0, 10);
 
         // Acknowledge tracks were received
         socket.emit("player_tracks_received", {
@@ -490,51 +490,9 @@ io.on("connection", (socket) => {
               `[TRACK_SYNC] Auto-starting round 1 for game ${gameId}`
             );
 
-            // Set up game for round 1
-            activeGames[gameId].currentRound = 1;
-
-            // Create trace ID for round 1
-            const round1TraceId = `ROUND_${gameId}_1_${Date.now()}`;
-            activeGames[gameId].currentRoundTraceId = round1TraceId;
-
-            // Get the first song from the playlist
-            const firstSong = activeGames[gameId].consolidatedPlaylist[0].track;
-            const firstSongOwner =
-              activeGames[gameId].consolidatedPlaylist[0].owner;
-
-            // Create the song with trace ID
-            const songWithTraceId = {
-              ...firstSong,
-              roundTraceId: round1TraceId,
-            };
-
-            // Store the song in round data
-            if (!activeGames[gameId].roundSongs) {
-              activeGames[gameId].roundSongs = {};
-            }
-
-            activeGames[gameId].roundSongs[1] = {
-              song: songWithTraceId,
-              owner: firstSongOwner,
-              roundTraceId: round1TraceId,
-            };
-
-            // Send round started event to all clients
-            io.to(gameId).emit("round_started", {
-              gameId,
-              roundNumber: 1,
-              song: songWithTraceId,
-              roundTraceId: round1TraceId,
-              // Add username mappings to ensure clients can match socket IDs to usernames
-              playerMappings: gameUsernameMappings[gameId] || {},
-              maxRounds: game.maxRounds, // Include maxRounds in every round_started event
-            });
-
-            console.log(`[TRACK_SYNC] Round 1 auto-started for game ${gameId}`);
-          } else {
-            console.error(
-              `[TRACK_SYNC] Cannot auto-start round 1: No consolidated playlist available`
-            );
+            // Use the proper song selection function instead of just taking the first song
+            // This ensures proper song assignment and prevents audio issues
+            selectRandomSongForRound(gameId, 1);
           }
         }
       }
@@ -603,46 +561,9 @@ io.on("connection", (socket) => {
     ) {
       console.log(`[TRACK_SYNC] Auto-starting round 1 for game ${gameId}`);
 
-      // Set up game for round 1
-      activeGames[gameId].currentRound = 1;
-
-      // Create trace ID for round 1
-      const round1TraceId = `ROUND_${gameId}_1_${Date.now()}`;
-      activeGames[gameId].currentRoundTraceId = round1TraceId;
-
-      // Get the first song from the playlist
-      const firstSong = activeGames[gameId].consolidatedPlaylist[0].track;
-      const firstSongOwner = activeGames[gameId].consolidatedPlaylist[0].owner;
-
-      // Create the song with trace ID
-      const songWithTraceId = {
-        ...firstSong,
-        roundTraceId: round1TraceId,
-      };
-
-      // Store the song in round data
-      if (!activeGames[gameId].roundSongs) {
-        activeGames[gameId].roundSongs = {};
-      }
-
-      activeGames[gameId].roundSongs[1] = {
-        song: songWithTraceId,
-        owner: firstSongOwner,
-        roundTraceId: round1TraceId,
-      };
-
-      // Send round started event to all clients
-      io.to(gameId).emit("round_started", {
-        gameId,
-        roundNumber: 1,
-        song: songWithTraceId,
-        roundTraceId: round1TraceId,
-        // Add username mappings to ensure clients can match socket IDs to usernames
-        playerMappings: gameUsernameMappings[gameId] || {},
-        maxRounds: game.maxRounds, // Include maxRounds in every round_started event
-      });
-
-      console.log(`[TRACK_SYNC] Round 1 auto-started for game ${gameId}`);
+      // Use the proper song selection function instead of just taking the first song
+      // This ensures proper song assignment and prevents audio issues
+      selectRandomSongForRound(gameId, 1);
     }
   });
 
@@ -773,7 +694,7 @@ io.on("connection", (socket) => {
       console.warn(
         `[TRACK_SYNC] WARNING: Game ${gameId} has no player tracks, using fallback tracks only`
       );
-      addMockTracksToGame(game);
+      // addMockTracksToGame(game);
       sharePlaylistWithClients(gameId);
       return;
     }
@@ -897,7 +818,7 @@ io.on("connection", (socket) => {
       console.log(
         `[TRACK_SYNC] No tracks have preview URLs, using fallback tracks`
       );
-      addMockTracksToGame(game);
+      // addMockTracksToGame(game);
     } else if (game.consolidatedPlaylist.length < game.players.length * 2) {
       // If we don't have enough tracks for each player to have at least 2
       console.log(
@@ -907,25 +828,25 @@ io.on("connection", (socket) => {
       // Add just enough mock tracks to supplement
       const tracksToAdd =
         game.players.length * 2 - game.consolidatedPlaylist.length;
-      addMockTracksToGame(game, tracksToAdd);
+      // addMockTracksToGame(game, tracksToAdd);
     }
 
     // Finalize the number of rounds based on available tracks
     const availableTracks = game.consolidatedPlaylist.length;
-    const recommendedRounds = Math.min(availableTracks, 10); // Cap at 10 rounds
-
-    // Ensure at least 3 rounds if possible, respect the configured maxRounds
     const configuredMaxRounds = game.maxRounds || 3;
 
-    if (availableTracks >= 3) {
-      // Use the minimum of: available tracks, configured max rounds
-      game.maxRounds = Math.min(recommendedRounds, configuredMaxRounds);
+    // Always respect the user's configured maxRounds
+    // If we have fewer tracks than rounds, we'll cycle through tracks
+    if (availableTracks >= 1) {
+      // Keep the user's selected rounds, don't limit based on available tracks
+      game.maxRounds = configuredMaxRounds;
     } else {
-      game.maxRounds = availableTracks;
+      // Only limit if we have no tracks at all
+      game.maxRounds = 0;
     }
 
     console.log(
-      `[TRACK_SYNC] Set max rounds to ${game.maxRounds} based on available tracks and configured max of ${configuredMaxRounds}`
+      `[TRACK_SYNC] Set max rounds to ${game.maxRounds} (user selected ${configuredMaxRounds}) with ${availableTracks} available tracks`
     );
 
     // Log the final playlist for debugging
@@ -961,141 +882,9 @@ io.on("connection", (socket) => {
   }
 
   function addMockTracksToGame(game, tracksToAdd = null) {
-    const mockTracks = [
-      {
-        songTitle: "Bohemian Rhapsody",
-        songArtists: ["Queen"],
-        albumName: "A Night at the Opera",
-        imageUrl:
-          "https://i.scdn.co/image/ab67616d0000b2739f39192f4f0fae773d3f8a95",
-        previewUrl:
-          "https://p.scdn.co/mp3-preview/1f3bd078c7ad27b427fa210f6efd957fc5eecea0",
-        duration: 354000,
-        isMockTrack: true,
-      },
-      {
-        songTitle: "Don't Stop Believin'",
-        songArtists: ["Journey"],
-        albumName: "Escape",
-        imageUrl:
-          "https://i.scdn.co/image/ab67616d0000b273c5653f9038e42efad2f8def2",
-        previewUrl:
-          "https://p.scdn.co/mp3-preview/21b9abd3cd2eea634e17a917196fdd5ba2e82670",
-        duration: 251000,
-        isMockTrack: true,
-      },
-      {
-        songTitle: "Billie Jean",
-        songArtists: ["Michael Jackson"],
-        albumName: "Thriller",
-        imageUrl:
-          "https://i.scdn.co/image/ab67616d0000b2734121faee8df82c526cbab2be",
-        previewUrl:
-          "https://p.scdn.co/mp3-preview/f504e6b8e037771318656394f532dede4f9bcaea",
-        duration: 294000,
-        isMockTrack: true,
-      },
-      {
-        songTitle: "Sweet Child O' Mine",
-        songArtists: ["Guns N' Roses"],
-        albumName: "Appetite for Destruction",
-        imageUrl:
-          "https://i.scdn.co/image/ab67616d0000b273e44963b8bb127552ac0090e0",
-        previewUrl:
-          "https://p.scdn.co/mp3-preview/9af2ebe7ff34dbdbcb042fba67b81bcdd6f9dbe3",
-        duration: 356000,
-        isMockTrack: true,
-      },
-      {
-        songTitle: "I Want It That Way",
-        songArtists: ["Backstreet Boys"],
-        albumName: "Millennium",
-        imageUrl:
-          "https://i.scdn.co/image/ab67616d0000b27384c52f39de3a4e687424f622",
-        previewUrl:
-          "https://p.scdn.co/mp3-preview/c9a980c0a1e48b84795c2c28ab212a476d5dae43",
-        duration: 213000,
-        isMockTrack: true,
-      },
-    ];
-
-    // If we already have real tracks, check how many mock tracks to add
-    if (tracksToAdd) {
-      console.log(
-        `[TRACK_SYNC] Adding ${tracksToAdd} mock tracks to supplement real tracks`
-      );
-
-      const availableMockTracks = [...mockTracks].slice(0, tracksToAdd);
-      const players = game.players.slice(); // Create a copy so we can shuffle
-      shuffleArray(players);
-
-      // Assign mock tracks to players
-      for (let i = 0; i < availableMockTracks.length; i++) {
-        const playerIndex = i % players.length;
-        const player = players[playerIndex];
-
-        game.consolidatedPlaylist.push({
-          track: availableMockTracks[i],
-          owner: {
-            id: player.id,
-            username: player.username,
-          },
-        });
-
-        console.log(
-          `[TRACK_SYNC] Added mock track "${availableMockTracks[i].songTitle}" assigned to ${player.username}`
-        );
-      }
-    } else {
-      // If we need only mock tracks, create a full playlist
-      const playerCount = game.players.length;
-      const tracksPerPlayer = Math.max(Math.ceil(3 / playerCount), 1); // At least 3 rounds total
-      const totalMockTracksNeeded = Math.min(
-        playerCount * tracksPerPlayer,
-        mockTracks.length
-      );
-
-      console.log(
-        `[TRACK_SYNC] Creating mock playlist with ${totalMockTracksNeeded} tracks for ${playerCount} players`
-      );
-
-      // Create a copy of players array so we can shuffle
-      const players = game.players.slice();
-
-      // Use Fisher-Yates shuffle
-      shuffleArray(players);
-
-      // Assign tracks to players for balanced gameplay
-      game.consolidatedPlaylist = [];
-
-      for (let i = 0; i < totalMockTracksNeeded; i++) {
-        const playerIndex = i % players.length;
-        const player = players[playerIndex];
-
-        if (i < mockTracks.length) {
-          game.consolidatedPlaylist.push({
-            track: mockTracks[i],
-            owner: {
-              id: player.id,
-              username: player.username,
-            },
-          });
-
-          console.log(
-            `[TRACK_SYNC] Added mock track "${mockTracks[i].songTitle}" assigned to ${player.username}`
-          );
-        }
-      }
-
-      // Respect the configured maxRounds
-      const configuredMaxRounds = game.maxRounds || 3;
-      game.maxRounds = Math.min(totalMockTracksNeeded, 5, configuredMaxRounds); // Limit mock games to 5 rounds or configured max
-      console.log(
-        `[TRACK_SYNC] Set max rounds to ${game.maxRounds} based on available mock tracks and configured max of ${configuredMaxRounds}`
-      );
-    }
-
-    return game.consolidatedPlaylist;
+    // Mock tracks are disabled - we only want real user tracks
+    console.log(`[TRACK_SYNC] Mock tracks are disabled - not adding any mock tracks to game`);
+    return game.consolidatedPlaylist || [];
   }
 
   function sharePlaylistWithClients(gameId) {
@@ -1203,12 +992,8 @@ io.on("connection", (socket) => {
 
     // 2. Try to select a new song by prioritizing real tracks over mock tracks
 
-    // Get all available tracks that haven't been used in previous rounds
-    const usedTrackIds = Object.values(game.roundSongs || {}).map(
-      (song) => song.trackId || song.title
-    );
-
-    console.log(`[TRACK_SYNC] Used track IDs from previous rounds:`, usedTrackIds);
+    // For a fresh game or new round, we should allow all songs to be available
+    // Don't filter based on previous rounds - allow song reuse if needed
     console.log(`[TRACK_SYNC] Total tracks in consolidated playlist: ${game.consolidatedPlaylist.length}`);
 
     // Count real vs mock tracks in playlist
@@ -1216,36 +1001,32 @@ io.on("connection", (socket) => {
     const mockTracks = game.consolidatedPlaylist.filter(item => item.track.isMockTrack);
     console.log(`[TRACK_SYNC] Playlist contains ${realTracks.length} real tracks and ${mockTracks.length} mock tracks`);
 
-    // Filter available tracks: first real tracks, then fallback to mock if needed
+    // Use all available real tracks with preview URLs first
     let availableTracks = game.consolidatedPlaylist.filter(
       (item) => {
-        const trackId = item.track.trackId || item.track.songTitle;
-        const isUsed = usedTrackIds.includes(trackId);
         const isReal = !item.track.isMockTrack;
         const hasPreview = !!item.track.previewUrl;
         
-        console.log(`[TRACK_SYNC] Checking track "${item.track.songTitle}": used=${isUsed}, real=${isReal}, hasPreview=${hasPreview}`);
+        console.log(`[TRACK_SYNC] Checking track "${item.track.songTitle}": real=${isReal}, hasPreview=${hasPreview}`);
         
-        return !isUsed && isReal && hasPreview;
+        return isReal && hasPreview;
       }
     );
 
-    console.log(`[TRACK_SYNC] Found ${availableTracks.length} unused real tracks with preview URLs`);
+    console.log(`[TRACK_SYNC] Found ${availableTracks.length} real tracks with preview URLs`);
 
     // If we don't have enough real tracks, include mock tracks too
     if (availableTracks.length === 0) {
       console.log(
-        `[TRACK_SYNC] No unused real tracks with preview URLs available, including mock tracks`
+        `[TRACK_SYNC] No real tracks with preview URLs available, including mock tracks`
       );
       availableTracks = game.consolidatedPlaylist.filter(
         (item) => {
-          const trackId = item.track.trackId || item.track.songTitle;
-          const isUsed = usedTrackIds.includes(trackId);
           const hasPreview = !!item.track.previewUrl;
           
-          console.log(`[TRACK_SYNC] Checking track (including mocks) "${item.track.songTitle}": used=${isUsed}, hasPreview=${hasPreview}`);
+          console.log(`[TRACK_SYNC] Checking track (including mocks) "${item.track.songTitle}": hasPreview=${hasPreview}`);
           
-          return !isUsed && hasPreview;
+          return hasPreview;
         }
       );
     }
@@ -1253,7 +1034,7 @@ io.on("connection", (socket) => {
     // If we still don't have enough tracks, use any available track with preview URL
     if (availableTracks.length === 0) {
       console.log(
-        `[TRACK_SYNC] No unused tracks available, reusing tracks with preview URLs`
+        `[TRACK_SYNC] No tracks with preview URLs available, using all tracks`
       );
       availableTracks = game.consolidatedPlaylist.filter(
         (item) => item.track.previewUrl
@@ -1822,7 +1603,7 @@ io.on("connection", (socket) => {
     }
 
     // Check if we've already used all songs and need to recycle
-    const maxRounds = Math.min(game.maxRounds || 3, availableSongs.length);
+    // Allow cycling through songs if we have more rounds than tracks
     const currentRoundIndex = (game.currentRound - 1) % availableSongs.length;
 
     // Log if we're starting to recycle songs
