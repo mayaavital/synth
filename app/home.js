@@ -18,7 +18,8 @@ import { useEffect, useState } from "react";
 import useSpotifyAuth from "../utils/SpotifyAuthContext";
 import SpotifyConnectButton from "../components/SpotifyConnectButton";
 import AlbumCarousel from "../components/AlbumCarousel";
-import * as Analytics from "expo-firebase-analytics";
+import analytics from '@react-native-firebase/analytics';
+//import * as Analytics from "expo-firebase-analytics";
 // Import the functions you need from the SDKs you need
 //  import { initializeApp } from "firebase/app";
 //  import { getAnalytics, logEvent } from "firebase/analytics";
