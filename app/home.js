@@ -388,10 +388,10 @@ export default function home() {
               console.log("Logging event");
 
               try {
-                logEvent(analytics, 'previous_game', {
-                  content_type: 'image',
-                  content_id: 'P12453'
+                logEvent(analytics, 'button_click', {
+                    "button_name": "previous game"
                 });
+                console.log("Event logged successfully");
               } catch (error) {
                 console.error("Error logging event:", error);
               }
