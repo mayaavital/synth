@@ -1208,14 +1208,29 @@ io.on("connection", (socket) => {
       (song) => song.trackId || song.title
     );
 
+    console.log(`[TRACK_SYNC] Used track IDs from previous rounds:`, usedTrackIds);
+    console.log(`[TRACK_SYNC] Total tracks in consolidated playlist: ${game.consolidatedPlaylist.length}`);
+
+    // Count real vs mock tracks in playlist
+    const realTracks = game.consolidatedPlaylist.filter(item => !item.track.isMockTrack);
+    const mockTracks = game.consolidatedPlaylist.filter(item => item.track.isMockTrack);
+    console.log(`[TRACK_SYNC] Playlist contains ${realTracks.length} real tracks and ${mockTracks.length} mock tracks`);
+
     // Filter available tracks: first real tracks, then fallback to mock if needed
     let availableTracks = game.consolidatedPlaylist.filter(
-      (item) =>
-        !usedTrackIds.includes(item.track.trackId) &&
-        !usedTrackIds.includes(item.track.songTitle) &&
-        !item.track.isMockTrack && // Prefer real tracks first
-        item.track.previewUrl // Must have a preview URL
+      (item) => {
+        const trackId = item.track.trackId || item.track.songTitle;
+        const isUsed = usedTrackIds.includes(trackId);
+        const isReal = !item.track.isMockTrack;
+        const hasPreview = !!item.track.previewUrl;
+        
+        console.log(`[TRACK_SYNC] Checking track "${item.track.songTitle}": used=${isUsed}, real=${isReal}, hasPreview=${hasPreview}`);
+        
+        return !isUsed && isReal && hasPreview;
+      }
     );
+
+    console.log(`[TRACK_SYNC] Found ${availableTracks.length} unused real tracks with preview URLs`);
 
     // If we don't have enough real tracks, include mock tracks too
     if (availableTracks.length === 0) {
@@ -1223,10 +1238,15 @@ io.on("connection", (socket) => {
         `[TRACK_SYNC] No unused real tracks with preview URLs available, including mock tracks`
       );
       availableTracks = game.consolidatedPlaylist.filter(
-        (item) =>
-          !usedTrackIds.includes(item.track.trackId) &&
-          !usedTrackIds.includes(item.track.songTitle) &&
-          item.track.previewUrl // Must have a preview URL
+        (item) => {
+          const trackId = item.track.trackId || item.track.songTitle;
+          const isUsed = usedTrackIds.includes(trackId);
+          const hasPreview = !!item.track.previewUrl;
+          
+          console.log(`[TRACK_SYNC] Checking track (including mocks) "${item.track.songTitle}": used=${isUsed}, hasPreview=${hasPreview}`);
+          
+          return !isUsed && hasPreview;
+        }
       );
     }
 
@@ -1279,22 +1299,31 @@ io.on("connection", (socket) => {
 
     if (selectedTrack.track.isMockTrack) {
       console.log(`[TRACK_SYNC] USING MOCK TRACK for round ${roundNumber}`);
+    } else {
+      console.log(`[TRACK_SYNC] USING REAL TRACK for round ${roundNumber}`);
     }
 
     // Create the round song object
     const roundSong = {
       title: selectedTrack.track.songTitle,
+      songTitle: selectedTrack.track.songTitle, // Add both for compatibility
       artists: Array.isArray(selectedTrack.track.songArtists)
         ? selectedTrack.track.songArtists.join(", ")
         : selectedTrack.track.songArtists,
+      songArtists: selectedTrack.track.songArtists, // Keep original format too
       albumName: selectedTrack.track.albumName,
       hasPreviewUrl: !!selectedTrack.track.previewUrl,
       previewUrl: selectedTrack.track.previewUrl,
       imageUrl: selectedTrack.track.imageUrl,
       externalUrl: selectedTrack.track.externalUrl, // Ensure externalUrl is included
       assignedPlayer: selectedTrack.owner.username,
+      assignedToPlayer: { // Add structured player info
+        username: selectedTrack.owner.username,
+        id: selectedTrack.owner.id
+      },
       trackId: selectedTrack.track.trackId || selectedTrack.track.songTitle,
       roundTraceId: `ROUND_${gameId}_${roundNumber}_${Date.now()}`,
+      isMockTrack: !!selectedTrack.track.isMockTrack, // Include mock track flag
     };
 
     // Save this track as the round song
@@ -1613,12 +1642,12 @@ io.on("connection", (socket) => {
 
         // Award point if either matching method succeeds (as long as player isn't voting for themselves)
         if (directIdMatch || usernameMatch) {
-          // Store score using socket ID as key
-          game.scores[voterUsername] = (game.scores[voterUsername] || 0) + 1;
+          // Store score using socket ID as key for consistency with retrieval
+          game.scores[voterId] = (game.scores[voterId] || 0) + 1;
           console.log("game.scores", game.scores);
           // Add more detailed logging using username mappings
           console.log(
-            `[PLAYER_MAPPING] Player "${voterUsername}" earned 1 point for correctly guessing "${correctPlayerUsername}" (match type: ${
+            `[PLAYER_MAPPING] Player "${voterUsername}" (ID: ${voterId}) earned 1 point for correctly guessing "${correctPlayerUsername}" (match type: ${
               directIdMatch ? "ID" : "username"
             })`
           );
@@ -1661,6 +1690,10 @@ io.on("connection", (socket) => {
       console.log(
         `[TRACK_SYNC] Final scoresWithUsernames:`,
         scoresWithUsernames
+      );
+      console.log(
+        `[TRACK_SYNC] Raw game.scores by socket ID:`,
+        game.scores
       );
 
       // Check if this is the last round
