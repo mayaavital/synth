@@ -18,10 +18,10 @@ import { useEffect, useState } from "react";
 import useSpotifyAuth from "../utils/SpotifyAuthContext";
 import SpotifyConnectButton from "../components/SpotifyConnectButton";
 import AlbumCarousel from "../components/AlbumCarousel";
-//import * as Analytics from "expo-firebase-analytics";
+import * as Analytics from "expo-firebase-analytics";
 // Import the functions you need from the SDKs you need
- import { initializeApp } from "firebase/app";
- import { getAnalytics, logEvent } from "firebase/analytics";
+//  import { initializeApp } from "firebase/app";
+//  import { getAnalytics, logEvent } from "firebase/analytics";
 // TODO: Add SDKs for Firebase products that you want to use
 // https://firebase.google.com/docs/web/setup#available-libraries
 
@@ -388,9 +388,8 @@ export default function home() {
               console.log("Logging event");
 
               try {
-                logEvent(analytics, 'previous_game', {
-                    "button_name": "previous game"
-                });
+                await analytics().logEvent('previous_game', {
+                })
                 console.log("Event logged successfully");
               } catch (error) {
                 console.error("Error logging event:", error);
