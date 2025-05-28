@@ -388,6 +388,7 @@ export default function home() {
               console.log("Logging event");
 
               try {
+                // Log a custom event to Firebase Analytics
                 // Example: Logging a custom event
                 await Analytics.logEvent("previous_game", undefined);
               } catch (error) {
