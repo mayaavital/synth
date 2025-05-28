@@ -388,7 +388,7 @@ export default function home() {
               console.log("Logging event");
 
               try {
-                logEvent(analytics, 'button_click', {
+                logEvent(analytics, 'previous_game', {
                     "button_name": "previous game"
                 });
                 console.log("Event logged successfully");
