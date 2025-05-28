@@ -253,6 +253,82 @@ export default function GamePlay() {
     });
   }, [token, isInitialized, hasFetchedSongs]);
 
+  // Add a helper function to process player points updates consistently
+  const processPlayerPointsUpdate = useCallback((scoresData) => {
+    console.log("[TRACK_SYNC] Processing playerPoints update:", scoresData);
+    console.log("[TRACK_SYNC] Current players:", players);
+    
+    // Create a mapping of socket IDs to usernames for reliable score tracking
+    const socketIdToUsername = {};
+    players.forEach((player) => {
+      if (player && player.id && player.username) {
+        socketIdToUsername[player.id] = player.username;
+        console.log(`[TRACK_SYNC] Mapped socket ID ${player.id} to username ${player.username}`);
+      }
+    });
+    
+    console.log("[TRACK_SYNC] Socket ID to username mapping:", socketIdToUsername);
+    
+    // Initialize new scores object using usernames as keys
+    const updatedPoints = {};
+    
+    // Process the scores object from the server
+    console.log("[TRACK_SYNC] Processing scores object:", scoresData);
+    Object.entries(scoresData).forEach(([key, score]) => {
+      console.log(`[TRACK_SYNC] Processing score entry: ${key} = ${score}`);
+      
+      // First try direct username match (if server sent scoresWithUsernames)
+      const directUsernameMatch = players.find(p => p.username === key);
+      if (directUsernameMatch) {
+        console.log(`[TRACK_SYNC] Direct username match: ${key} = ${score}`);
+        updatedPoints[key] = score;
+        return;
+      }
+      
+      // Try to find the player by socket ID
+      let playerUsername = socketIdToUsername[key];
+      
+      if (!playerUsername) {
+        // Try to find the player by ID in players array with various comparisons
+        const player = players.find(
+          (p) =>
+            String(p.id) === String(key) || // Try string comparison
+            p.id === Number(key) || // Try number conversion
+            p.username === key // Username might be in ID field
+        );
+
+        if (player) {
+          playerUsername = player.username;
+          console.log(`[TRACK_SYNC] Found player by ID lookup: ${key} -> ${playerUsername}`);
+        } else {
+          console.warn(
+            `[TRACK_SYNC] Could not find player for key: ${key}`
+          );
+          playerUsername = key; // Use key as fallback
+        }
+      } else {
+        console.log(`[TRACK_SYNC] Mapped socket ID ${key} to username ${playerUsername}`);
+      }
+
+      // Update the score using username as key
+      updatedPoints[playerUsername] = score;
+    });
+    
+    // Add missing players with 0 points
+    players.forEach((player) => {
+      if (player && player.username && updatedPoints[player.username] === undefined) {
+        console.log(`[TRACK_SYNC] Added missing score for ${player.username}: 0`);
+        updatedPoints[player.username] = 0;
+      }
+    });
+
+    console.log("[TRACK_SYNC] Final processed scores:", updatedPoints);
+    console.log("[TRACK_SYNC] Updating playerPoints with processed scores");
+    setPlayerPoints(updatedPoints);
+    
+    return updatedPoints;
+  }, [players]);
+
   // Add this function to share tracks with the server
   const shareTracks = useCallback(
     async (tracksToShare) => {
@@ -1289,50 +1365,11 @@ export default function GamePlay() {
       if (data.scoresWithUsernames) {
         // Server provided username-mapped scores - use directly
         console.log("[TRACK_SYNC] Using scoresWithUsernames from server:", data.scoresWithUsernames);
-        setPlayerPoints(data.scoresWithUsernames);
+        processPlayerPointsUpdate(data.scoresWithUsernames);
       } else if (data.scores) {
         // Fallback to manual mapping if scoresWithUsernames not available
         console.log("[TRACK_SYNC] Manually mapping scores from server:", data.scores);
-        
-        // Create a mapping of player IDs to usernames for more reliable score tracking
-        const playerIdToUsername = {};
-        players.forEach((player) => {
-          playerIdToUsername[player.id] = player.username;
-        });
-
-        // Initialize new scores object using usernames as keys
-        const updatedPoints = {};
-
-        // Process the scores object from the server
-        Object.entries(data.scores).forEach(([playerId, score]) => {
-          // Try to find the player in several ways
-          let playerUsername = playerIdToUsername[playerId]; // Direct ID match
-
-          if (!playerUsername) {
-            // Try to find the player by ID in players array
-            const player = players.find(
-              (p) =>
-                String(p.id) === String(playerId) || // Try string comparison
-                p.id === Number(playerId) || // Try number conversion
-                p.username === playerId // Username might be in ID field
-            );
-
-            if (player) {
-              playerUsername = player.username;
-            } else {
-              console.warn(
-                `[TRACK_SYNC] Could not find player for ID: ${playerId}`
-              );
-              playerUsername = playerId; // Use ID as fallback
-            }
-          }
-
-          // Update the score using username as key
-          updatedPoints[playerUsername] = score;
-        });
-
-        console.log("[TRACK_SYNC] Updated player points:", updatedPoints);
-        setPlayerPoints(updatedPoints);
+        processPlayerPointsUpdate(data.scores);
       }
 
       // Update track assignments
@@ -1438,36 +1475,10 @@ export default function GamePlay() {
       // Handle scores if provided in force sync
       if (data.scoresWithUsernames) {
         console.log("[TRACK_SYNC] Force sync includes scoresWithUsernames:", data.scoresWithUsernames);
-        setPlayerPoints(data.scoresWithUsernames);
+        processPlayerPointsUpdate(data.scoresWithUsernames);
       } else if (data.scores) {
         console.log("[TRACK_SYNC] Force sync includes raw scores:", data.scores);
-        // Apply the same mapping logic as in vote results
-        const playerIdToUsername = {};
-        players.forEach((player) => {
-          playerIdToUsername[player.id] = player.username;
-        });
-
-        const updatedPoints = {};
-        Object.entries(data.scores).forEach(([playerId, score]) => {
-          let playerUsername = playerIdToUsername[playerId];
-          if (!playerUsername) {
-            const player = players.find(
-              (p) =>
-                String(p.id) === String(playerId) ||
-                p.id === Number(playerId) ||
-                p.username === playerId
-            );
-            if (player) {
-              playerUsername = player.username;
-            } else {
-              playerUsername = playerId;
-            }
-          }
-          updatedPoints[playerUsername] = score;
-        });
-        
-        console.log("[TRACK_SYNC] Force sync updated player points:", updatedPoints);
-        setPlayerPoints(updatedPoints);
+        processPlayerPointsUpdate(data.scores);
       }
 
       // Normalize song data with complete fields
