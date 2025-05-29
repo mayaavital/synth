@@ -2525,10 +2525,7 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   albumArtworkBackground: {
-    width: 300,
-    height: 300,
     borderRadius: 20,
-    padding: 6,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "transparent",
@@ -2540,8 +2537,8 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   albumCover: {
-    width: "100%",
-    height: "100%",
+    width: 300,
+    height: 300,
     borderRadius: 15,
   },
   songPlaybackInfo: {
