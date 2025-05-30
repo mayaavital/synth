@@ -282,6 +282,19 @@ export default function GameDetails() {
                   style={styles.spotifyButton}
                   onPress={() => {
 
+                    const dbRef = ref(getDatabase());
+
+                    get(child(dbRef, `${DATABASE_BRANCHES.ANALYTICS}/${"previous_add_song"}`)).then((snapshot) => {
+                    if (snapshot.exists()) {
+                      console.log(snapshot.val());
+                    } else {
+                      console.log("No data available");
+                    }
+                  }).catch((error) => {
+                    console.error(error);
+                  });
+                  /*
+
                     var prevGameRef = db.ref().child(DATABASE_BRANCHES.ANALYTICS).child("previous_add_song")
 
                     prevGameRef.once("value", async (snapshot) => {
@@ -302,6 +315,7 @@ export default function GameDetails() {
                     if (getExternalUrlForSong(song, song.roundNumber)) {
                       Linking.openURL(getExternalUrlForSong(song, song.roundNumber));
                     }
+                      */
                   }}
                 >
                   <Ionicons name="add" size={20} color="white" />
