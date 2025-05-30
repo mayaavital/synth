@@ -19,6 +19,24 @@ import useSpotifyAuth from "../utils/SpotifyAuthContext";
 import SpotifyConnectButton from "../components/SpotifyConnectButton";
 import AlbumCarousel from "../components/AlbumCarousel";
 import analytics from '@react-native-firebase/analytics';
+
+var admin = require("firebase-admin");
+var {
+  GameDataBranches,
+  UserDataBranches,
+  DATABASE_BRANCHES,
+} = require("../server/database-branches");
+
+var serviceAccount = require("../server/synth-database-firebase-adminsdk-fbsvc-b707949a55.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+  databaseURL: "https://synth-database-default-rtdb.firebaseio.com/",
+});
+
+// As an admin, the app has access to read and write all data, regardless of Security Rules
+var db = admin.database();
+
 //import * as Analytics from "expo-firebase-analytics";
 // Import the functions you need from the SDKs you need
 //  import { initializeApp } from "firebase/app";
@@ -387,16 +405,22 @@ export default function home() {
           <TouchableOpacity
             style={styles.card}
             onPress={async () => {
-              console.log("Logging event");
+              var prevGameRef = db.ref(DATABASE_BRANCHES.ANALYTICS).child("previous_game")
 
-              try {
-                await analytics().logEvent('previous_game', {
-                })
-                console.log("Event logged successfully");
-              } catch (error) {
-                console.error("Error logging event:", error);
+              prevGameRef.once("value", async (snapshot) => {
+                if (snapshot.exists()) {
+                  const gameData = snapshot.val();
+
+                  console.log("Previous game data:", gameData);
+
+                  prevGameRef.set({
+                    data: gameData.data + 1
+                  })
+                } else {
+                  console.log("No previous game data found.");
+                }
               }
-              console.log("Logging event");
+              );
               router.push("/previous-games");
             }}
           >

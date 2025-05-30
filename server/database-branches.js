@@ -4,11 +4,14 @@ const { Module } = require("module")
 DATABASE_BRANCHES = {
   ADMIN : 'admin',
   GAME : 'game',
-  USER : 'user'
+  USER : 'user',
+  ANALYTICS : 'analytics'
 }
 
 
 class GameDataBranches {
+
+  sta
 
     static GAME_BRANCHES = {
         METADATA : 'metadata',
