@@ -664,9 +664,24 @@ io.on("connection", (socket) => {
       }
     } else {
       console.log(
-        `[TRACK_SYNC] WARNING: Player ${player.username} shared no valid tracks`
+        `[TRACK_SYNC] Player ${player.username} shared no valid tracks (will use tracks from other players)`
       );
-      socket.emit("error", { message: "No valid tracks provided" });
+      
+      // Store empty array to indicate this player has attempted to share
+      game.playerTracks[player.id] = [];
+      
+      // Check if all players have now attempted to share tracks
+      const playersWithTracks = Object.keys(game.playerTracks).length;
+      const totalPlayers = game.players.length;
+
+      console.log(
+        `[TRACK_SYNC] ${playersWithTracks}/${totalPlayers} players have attempted to share tracks`
+      );
+
+      // If all players have attempted to share tracks, we can prepare the game
+      if (playersWithTracks === totalPlayers) {
+        prepareGameTracks(gameId);
+      }
     }
   });
 

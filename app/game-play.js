@@ -101,6 +101,7 @@ export default function GamePlay() {
         "https://p.scdn.co/mp3-preview/67f504bf5b86bdcaf197aef343c2413e8ec68b1d",
       uri: "spotify:track:0jXR9dJLlGpfYQrN0m1HLO",
       externalUrl: "https://open.spotify.com/track/0jXR9dJLlGpfYQrN0m1HLO",
+      isMockTrack: true,
     },
     {
       songTitle: "Bohemian Rhapsody",
@@ -113,6 +114,7 @@ export default function GamePlay() {
         "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview122/v4/29/96/51/2996514a-35cd-b092-c7f0-dd995b0e6071/mzaf_10909209324710493166.plus.aac.p.m4a",
       uri: "spotify:track:7tFiyTwD0nx5a1eklYtX2J",
       externalUrl: "https://open.spotify.com/track/7tFiyTwD0nx5a1eklYtX2J",
+      isMockTrack: true,
     },
     {
       songTitle: "Hotel California",
@@ -125,6 +127,7 @@ export default function GamePlay() {
         "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/cb/16/81/cb1681bb-a5a7-0b93-7ce0-0a55ab6dc9e5/mzaf_11284427653219671407.plus.aac.p.m4a",
       uri: "spotify:track:40riOy7x9W7GXjyGp4pjAv",
       externalUrl: "https://open.spotify.com/track/40riOy7x9W7GXjyGp4pjAv",
+      isMockTrack: true,
     },
   ];
 
@@ -343,13 +346,41 @@ export default function GamePlay() {
         `[TRACK_SYNC] Preparing to share ${tracksToShare.length} tracks with server`
       );
 
-      // Count how many have preview URLs already
-      const tracksWithPreview = tracksToShare.filter((t) => !!t.previewUrl);
+      // Filter out mock tracks before sharing with server
+      const realTracks = tracksToShare.filter((track) => {
+        const isMockTrack = 
+          track.songTitle === "Bohemian Rhapsody" ||
+          track.songTitle === "A Day in the Life" ||
+          track.songTitle === "Hotel California" ||
+          track.songTitle === "Emergency Fallback Song" ||
+          track.isMockTrack === true;
+        
+        if (isMockTrack) {
+          console.log(`[TRACK_SYNC] Filtering out mock track: ${track.songTitle}`);
+        }
+        
+        return !isMockTrack;
+      });
+
       console.log(
-        `[TRACK_SYNC] ${tracksWithPreview.length}/${tracksToShare.length} tracks already have preview URLs`
+        `[TRACK_SYNC] Filtered ${tracksToShare.length - realTracks.length} mock tracks, ${realTracks.length} real tracks remaining`
       );
 
-      let tracksToSend = tracksToShare;
+      // If we have no real tracks, don't share anything
+      if (realTracks.length === 0) {
+        console.log(
+          "[TRACK_SYNC] No real tracks to share - all tracks were mock tracks"
+        );
+        return;
+      }
+
+      // Count how many have preview URLs already
+      const tracksWithPreview = realTracks.filter((t) => !!t.previewUrl);
+      console.log(
+        `[TRACK_SYNC] ${tracksWithPreview.length}/${realTracks.length} real tracks have preview URLs`
+      );
+
+      let tracksToSend = realTracks;
 
       // If few or no tracks have preview URLs, try enriching with Deezer
       if (tracksWithPreview.length < 3) {
@@ -360,7 +391,7 @@ export default function GamePlay() {
         try {
           // Use enrichTracksWithDeezerPreviews to get Deezer previews
           const enrichedTracks = await enrichTracksWithDeezerPreviews(
-            tracksToShare
+            realTracks
           );
           const enrichedWithPreview = enrichedTracks.filter(
             (t) => !!t.previewUrl
@@ -387,7 +418,7 @@ export default function GamePlay() {
 
       // Send tracks to server
       console.log(
-        `[TRACK_SYNC] Sharing ${tracksToSend.length} tracks with server`
+        `[TRACK_SYNC] Sharing ${tracksToSend.length} real tracks with server`
       );
       console.log(
         `[TRACK_SYNC] ${
@@ -398,7 +429,7 @@ export default function GamePlay() {
       // Attempt to send tracks to server
       try {
         emit("share_tracks", { gameId, tracks: tracksToSend });
-        console.log("[TRACK_SYNC] Successfully shared tracks with server");
+        console.log("[TRACK_SYNC] Successfully shared real tracks with server");
       } catch (error) {
         console.error("[TRACK_SYNC] Error sharing tracks with server:", error);
       }
@@ -488,11 +519,11 @@ export default function GamePlay() {
 
       let tracks;
 
-      // If we don't have a valid token, use mock data
+      // If we don't have a valid token, use empty array instead of mock data
       if (!currentToken) {
-        console.log("No valid Spotify token, using mock song data");
-        console.log("Mock songs available:", mockSongs?.length || 0);
-        tracks = mockSongs;
+        console.log("No valid Spotify token, not using mock song data");
+        console.log("Will attempt to get tracks from other players in multiplayer");
+        tracks = []; // Use empty array instead of null
       } else {
         try {
           // First try getting recently played tracks as they often have preview URLs
@@ -522,9 +553,9 @@ export default function GamePlay() {
           }
 
           if (!tracks || tracks.length === 0) {
-            console.log("No tracks found, using mock data");
-            console.log("Mock songs available:", mockSongs?.length || 0);
-            tracks = mockSongs;
+            console.log("No tracks found from Spotify API");
+            console.log("Will attempt to get tracks from other players in multiplayer");
+            tracks = []; // Use empty array instead of null
           } else {
             // Debug all tracks and their preview URLs
             console.log("=== TRACK PREVIEW URL DEBUG ===");
@@ -636,18 +667,17 @@ export default function GamePlay() {
           }
         } catch (apiError) {
           console.error("Error fetching from Spotify API:", apiError);
-          console.log("Using fallback mock data");
-          console.log("Mock songs available:", mockSongs?.length || 0);
-          tracks = mockSongs;
+          console.log("Will attempt to get tracks from other players in multiplayer");
+          tracks = []; // Use empty array instead of null
 
           // Handle API errors
           if (apiError?.response?.status === 401) {
             console.log("Authentication error (401)");
             // We don't need to handle token refresh here since getValidToken already did that
-            // Just notify the user and use mock data
+            // Just notify the user and use empty array
             Alert.alert(
               "Spotify Authentication Issue",
-              "There was a problem with your Spotify authentication. Using sample songs instead.",
+              "There was a problem with your Spotify authentication. Will use tracks from other players.",
               [{ text: "OK" }]
             );
           } else if (apiError?.response?.status === 403) {
@@ -670,22 +700,34 @@ export default function GamePlay() {
 
       // Final check to make sure we have tracks to use
       if (!tracks || tracks.length === 0) {
-        console.error("No tracks available, even after trying mock data!");
-        // Create emergency fallback track if all else fails
-        tracks = [
-          {
-            songTitle: "Emergency Fallback Song",
-            songArtists: ["Synth App"],
-            albumName: "Fallback Album",
-            imageUrl: "https://via.placeholder.com/300",
-            duration: 30000,
-            previewUrl: null, // No audio available for fallback
-            uri: null,
-            externalUrl: null,
-          },
-        ];
+        console.log("No tracks available from this player");
+        if (isMultiplayer) {
+          console.log("In multiplayer mode - will use tracks from other players");
+          tracks = []; // Empty array for multiplayer
+        } else {
+          console.error("No tracks available for single player game!");
+          // Create emergency fallback track for single player only
+          tracks = [
+            {
+              songTitle: "Emergency Fallback Song",
+              songArtists: ["Synth App"],
+              albumName: "Fallback Album",
+              imageUrl: "https://via.placeholder.com/300",
+              duration: 30000,
+              previewUrl: null, // No audio available for fallback
+              uri: null,
+              externalUrl: null,
+              isMockTrack: true,
+            },
+          ];
 
-        setError("Could not load song data. Using emergency fallback.");
+          setError("Could not load song data. Using emergency fallback.");
+        }
+      }
+
+      // Ensure tracks is always an array
+      if (!tracks) {
+        tracks = [];
       }
 
       console.log(`Using ${tracks.length} tracks for the game`);
@@ -981,9 +1023,19 @@ export default function GamePlay() {
       return;
     }
 
-    if (!sound) return;
+    if (!sound) {
+      console.log("[TRACK_SYNC] No sound object available for playback control");
+      return;
+    }
 
     try {
+      // Check if sound is loaded before attempting to control it
+      const status = await sound.getStatusAsync();
+      if (!status.isLoaded) {
+        console.log("[TRACK_SYNC] Sound is not loaded, cannot control playback");
+        return;
+      }
+
       if (isPlaying) {
         await sound.pauseAsync();
       } else {
@@ -991,18 +1043,28 @@ export default function GamePlay() {
       }
     } catch (error) {
       console.error("Error toggling playback:", error);
-      // Try to recover from error
+      
+      // Only attempt recovery if we still have a sound object
       if (sound) {
         try {
-          // Attempt to reset the sound
-          await sound.stopAsync();
-          setTimeout(() => {
-            sound
-              .playAsync()
-              .catch((e) => console.error("Recovery failed:", e));
-          }, 500);
+          // Check if sound is still valid before attempting recovery
+          const status = await sound.getStatusAsync();
+          if (status.isLoaded) {
+            await sound.stopAsync();
+            // Give a brief delay before attempting to play again
+            setTimeout(() => {
+              sound
+                .playAsync()
+                .catch((e) => console.error("Recovery failed:", e));
+            }, 500);
+          } else {
+            console.log("[TRACK_SYNC] Sound is no longer loaded, skipping recovery");
+          }
         } catch (e) {
           console.error("Error in recovery attempt:", e);
+          // If recovery fails, reset the sound state
+          setSound(null);
+          setIsPlaying(false);
         }
       }
     }
@@ -1970,8 +2032,8 @@ export default function GamePlay() {
             }));
             setAllSongs(extractedSongs);
           } else if (allSongs.length === 0) {
-            console.log("[HOST] No songs found, using mock songs for host");
-            setAllSongs(mockSongs);
+            console.log("[HOST] No songs available for host device");
+            setAllSongs([]); // Use empty array instead of null
           }
 
           // Make sure we have a current song
