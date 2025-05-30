@@ -25,171 +25,21 @@ const ResultsStage = ({
 
   // Update displayPoints whenever playerPoints or players change
   useEffect(() => {
-    console.log("[TRACK_SYNC] Raw player points in results:", playerPoints);
+    console.log("[RESULTS] Raw player points:", playerPoints);
+    console.log("[RESULTS] Players:", players.map(p => p && { id: p.id, username: p.username }));
 
-    // Check if playerPoints has comprehensive mappings
-    if (playerPoints.scoresWithUsernames) {
-      console.log(
-        "[TRACK_SYNC] Using scoresWithUsernames directly:",
-        playerPoints.scoresWithUsernames
-      );
-      setDisplayPoints(playerPoints.scoresWithUsernames);
-      return;
-    }
-
-    // Check if playerPoints has new socketIdToUsername mapping
-    if (playerPoints.socketIdToUsername) {
-      console.log("[TRACK_SYNC] Using socketIdToUsername mapping from server");
-      const newDisplayPoints = {};
-
-      // Convert scores using the mapping
-      Object.entries(playerPoints.scores || {}).forEach(([socketId, score]) => {
-        const username = playerPoints.socketIdToUsername[socketId];
-        if (username) {
-          newDisplayPoints[username] = score;
-          console.log(
-            `[TRACK_SYNC] Mapped ${socketId} to ${username} with score ${score}`
-          );
-        }
-      });
-
-      // Check for any missing players and assign 0 points
-      players
-        .filter((player) => player && player.username)
-        .forEach((player) => {
-          if (newDisplayPoints[player.username] === undefined) {
-            newDisplayPoints[player.username] = 0;
-            console.log(
-              `[TRACK_SYNC] Added missing player ${player.username} with 0 points`
-            );
-          }
-        });
-
-      console.log(
-        "[TRACK_SYNC] Final scores using socketIdToUsername:",
-        newDisplayPoints
-      );
-      setDisplayPoints(newDisplayPoints);
-      return;
-    }
-
-    // Check for traditional playerMappings (backward compatibility)
-    if (playerPoints.playerMappings) {
-      console.log("[TRACK_SYNC] Using playerMappings provided by server");
-      const newDisplayPoints = {};
-
-      // Map socket IDs to usernames using the provided mapping
-      Object.entries(playerPoints.playerMappings).forEach(
-        ([username, socketId]) => {
-          if (
-            playerPoints.scores &&
-            playerPoints.scores[socketId] !== undefined
-          ) {
-            newDisplayPoints[username] = playerPoints.scores[socketId];
-            console.log(
-              `[TRACK_SYNC] Mapped ${socketId} to ${username} with score ${playerPoints.scores[socketId]}`
-            );
-          }
-        }
-      );
-
-      // Check for any missing players and assign 0 points
-      players
-        .filter((player) => player && player.username)
-        .forEach((player) => {
-          if (newDisplayPoints[player.username] === undefined) {
-            newDisplayPoints[player.username] = 0;
-            console.log(
-              `[TRACK_SYNC] Added missing player ${player.username} with 0 points`
-            );
-          }
-        });
-
-      console.log(
-        "[TRACK_SYNC] Final mapped display points:",
-        newDisplayPoints
-      );
-      setDisplayPoints(newDisplayPoints);
-      return;
-    }
-
-    // Fallback to manual mapping if server didn't provide mappings
-
-    // Create a direct map of all possible IDs to player usernames
-    const allIdToUsername = {};
-
-    // Log raw player data for debugging
-    console.log(
-      "[TRACK_SYNC] Raw player data:",
-      players.map((p) => p && { id: p.id, username: p.username })
-    );
-
-    // Create comprehensive player mappings both ways
-    players
-      .filter((player) => player !== undefined)
-      .forEach((player) => {
-        if (!player || !player.username) return;
-
-        // Map all forms of IDs to this username
-        if (player.id) {
-          // Try numeric ID
-          allIdToUsername[player.id] = player.username;
-
-          // Try string ID
-          allIdToUsername[String(player.id)] = player.username;
-        }
-
-        // Map socket ID-looking strings directly
-        if (typeof player.id === "string" && player.id.length > 10) {
-          allIdToUsername[player.id] = player.username;
-        }
-      });
-
-    console.log(
-      "[TRACK_SYNC] Complete ID to username mapping:",
-      allIdToUsername
-    );
-
-    // Now use this comprehensive mapping to build displayPoints
+    // Since processPlayerPointsUpdate in game-play.js already converts scores to username-based keys,
+    // we can use playerPoints directly
     const newDisplayPoints = {};
-
-    // First, add any direct username matches from playerPoints
-    Object.entries(playerPoints).forEach(([key, points]) => {
-      // If key is a username, use it directly
-      const player = players.find((p) => p && p.username === key);
-      if (player) {
-        newDisplayPoints[key] = points;
-        console.log(`[TRACK_SYNC] Direct username match: ${key} = ${points}`);
-        return;
-      }
-
-      // If key is an ID in our mapping, use the username from the mapping
-      if (allIdToUsername[key]) {
-        const username = allIdToUsername[key];
-        newDisplayPoints[username] = points;
-        console.log(
-          `[TRACK_SYNC] ID mapped to username: ${key} -> ${username} = ${points}`
-        );
-        return;
-      }
-    });
-
-    // Ensure all players have a score (default to 0 if not found)
+    
+    // Ensure all players have a score entry (default to 0)
     players
-      .filter((p) => p && p.username)
+      .filter(p => p && p.username)
       .forEach((player) => {
-        if (newDisplayPoints[player.username] === undefined) {
-          newDisplayPoints[player.username] = 0;
-          console.log(
-            `[TRACK_SYNC] Assigning default score of 0 to ${player.username}`
-          );
-        }
+        newDisplayPoints[player.username] = playerPoints[player.username] || 0;
       });
 
-    console.log(
-      "[TRACK_SYNC] Final display points in results:",
-      newDisplayPoints
-    );
+    console.log("[RESULTS] Final display points:", newDisplayPoints);
     setDisplayPoints(newDisplayPoints);
   }, [playerPoints, players]);
 
