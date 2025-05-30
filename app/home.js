@@ -398,18 +398,18 @@ export default function home() {
 
               get(child(dbRef, `${DATABASE_BRANCHES.ANALYTICS}/${"previous_game"}`)).then((snapshot) => {
                 if (snapshot.exists()) {
-                  console.log(snapshot.val()["data"]);
+                  console.log(snapshot.val()["value"]);
 
-                  var value = snapshot.val()["data"];
+                  var value = snapshot.val()["value"];
 
                   set(ref(dbRef,  `${DATABASE_BRANCHES.ANALYTICS}/${"previous_game"}`), {
-                    "previous_game": value + 1,
+                    "value": value + 1,
                   });
 
                 } else {
                   console.log("No data available");
                   set(ref(dbRef,  `${DATABASE_BRANCHES.ANALYTICS}/${"previous_game"}`), {
-                    "previous_game": 0,
+                    "value": 0,
                   });
                 }
               }).catch((error) => {
