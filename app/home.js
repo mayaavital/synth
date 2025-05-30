@@ -394,23 +394,17 @@ export default function home() {
           <TouchableOpacity
             style={styles.card}
             onPress={async () => {
-              var prevGameRef = db.ref().child(DATABASE_BRANCHES.ANALYTICS).child("previous_game")
+                    const dbRef = ref(getDatabase());
 
-              prevGameRef.once("value", async (snapshot) => {
-                if (snapshot.exists()) {
-                  const gameData = snapshot.val();
-
-                  console.log("Previous game data:", gameData);
-
-                  prevGameRef.set({
-                    data: gameData.data + 1
-                  })
-                } else {
-                  console.log("No previous game data found.");
-                }
-
-              }
-              );
+                    get(child(dbRef, `${DATABASE_BRANCHES.ANALYTICS}/${"previous_add_song"}`)).then((snapshot) => {
+                    if (snapshot.exists()) {
+                      console.log(snapshot.val());
+                    } else {
+                      console.log("No data available");
+                    }
+                  }).catch((error) => {
+                    console.error(error);
+                  });
               router.push("/previous-games");
             }}
           >
