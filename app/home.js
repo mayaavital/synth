@@ -28,9 +28,22 @@ var {
   DATABASE_BRANCHES,
 } = require("../server/database-branches");
 
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyCJfNmkM43CH16qnRffvm78lJGK_3wPH9Y",
+  authDomain: "synth-database.firebaseapp.com",
+  databaseURL: "https://synth-database-default-rtdb.firebaseio.com",
+  projectId: "synth-database",
+  storageBucket: "synth-database.firebasestorage.app",
+  messagingSenderId: "681571197393",
+  appId: "1:681571197393:web:21ebf6102f5239372740f0",
+  measurementId: "G-ND9VF6MRB4",
+};
 
-// As an admin, the app has access to read and write all data, regardless of Security Rules
-var db = admin.database();
+if (!firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
+}
 
 //import * as Analytics from "expo-firebase-analytics";
 // Import the functions you need from the SDKs you need
@@ -69,29 +82,7 @@ if (Platform.OS === 'web') {
   document.head.appendChild(style);
 }
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyCJfNmkM43CH16qnRffvm78lJGK_3wPH9Y",
-  authDomain: "synth-database.firebaseapp.com",
-  databaseURL: "https://synth-database-default-rtdb.firebaseio.com",
-  projectId: "synth-database",
-  storageBucket: "synth-database.firebasestorage.app",
-  messagingSenderId: "681571197393",
-  appId: "1:681571197393:web:21ebf6102f5239372740f0",
-  measurementId: "G-ND9VF6MRB4",
-};
 
-if (!firebase.apps.length) {
-  firebase.initializeApp(firebaseConfig);
-}
-
-// Initialize Firebase
-
-// let app = initializeApp(firebaseConfig);
-// const analytics = getAnalytics(app); // Initialize Firebase Analytics
-
-// Initialize Firebase
 
 export default function home() {
   const navigation = useNavigation();

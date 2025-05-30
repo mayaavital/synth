@@ -14,6 +14,31 @@ import {
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useNavigation } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import firebase from '@react-native-firebase/app';
+import database from '@react-native-firebase/database';
+
+var {
+  GameDataBranches,
+  UserDataBranches,
+  DATABASE_BRANCHES,
+} = require("../server/database-branches");
+
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyCJfNmkM43CH16qnRffvm78lJGK_3wPH9Y",
+  authDomain: "synth-database.firebaseapp.com",
+  databaseURL: "https://synth-database-default-rtdb.firebaseio.com",
+  projectId: "synth-database",
+  storageBucket: "synth-database.firebasestorage.app",
+  messagingSenderId: "681571197393",
+  appId: "1:681571197393:web:21ebf6102f5239372740f0",
+  measurementId: "G-ND9VF6MRB4",
+};
+
+if (!firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
+}
 
 export default function GameDetails() {
   const router = useRouter();
@@ -250,7 +275,7 @@ export default function GameDetails() {
                   style={styles.spotifyButton}
                   onPress={() => {
 
-                    var prevGameRef = db.ref(DATABASE_BRANCHES.ANALYTICS).child("previous_add_song")
+                    var prevGameRef = database().ref(DATABASE_BRANCHES.ANALYTICS).child("previous_add_song")
 
                     prevGameRef.once("value", async (snapshot) => {
                       if (snapshot.exists()) {
