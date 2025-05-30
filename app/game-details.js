@@ -15,7 +15,7 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { useNavigation } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { initializeApp } from "firebase/app";
-import { getDatabase } from "firebase/database";
+import { getDatabase, ref, child, get } from "firebase/database";
 
 
 // Your web app's Firebase configuration
@@ -32,7 +32,7 @@ const firebaseConfig = {
 };
 
 var app = initializeApp(firebaseConfig);
-var db = getDatabase(app);
+var db = getDatabase();
 
 
 var {
