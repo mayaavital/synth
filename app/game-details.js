@@ -14,9 +14,8 @@ import {
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useNavigation } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import database from '@react-native-firebase/database';
-
-import { getApp, initializeApp } from '@react-native-firebase/app';
+import { initializeApp } from "firebase/app";
+import { getDatabase } from "firebase/database";
 
 // web requires dynamic initialization on web prior to using firebase
 if (Platform.OS === 'web') {
@@ -27,8 +26,8 @@ if (Platform.OS === 'web') {
   initializeApp(firebaseConfig);
 }
 
-// ...now throughout your app, use firebase APIs normally, for example:
-const firebaseApp = getApp();
+var db = getDatabase();
+
 
 var {
   GameDataBranches,
@@ -288,7 +287,7 @@ export default function GameDetails() {
                   style={styles.spotifyButton}
                   onPress={() => {
 
-                    var prevGameRef = firebaseApp.database().ref(DATABASE_BRANCHES.ANALYTICS).child("previous_add_song")
+                    var prevGameRef = db.ref(DATABASE_BRANCHES.ANALYTICS).child("previous_add_song")
 
                     prevGameRef.once("value", async (snapshot) => {
                       if (snapshot.exists()) {
