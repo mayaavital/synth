@@ -35,7 +35,8 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1E1E1E"
       },
-      "package": "com.csprout3.synth"
+      "package": "com.csprout3.synth",
+      "googleServicesFile": "./google-services.json"
     },
     "plugins": [
       "expo-router",
