@@ -908,7 +908,7 @@ export default function MultiplayerGame() {
           value={selectedRounds}
           onValueChange={setSelectedRounds}
           minValue={2}
-          maxValue={5}
+          maxValue={10}
         />
 
         <Pressable
