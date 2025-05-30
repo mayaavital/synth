@@ -44,7 +44,7 @@ import { getAnalytics, logEvent } from "firebase/analytics";
 
 const ALBUM_ID = "2noRn2Aes5aoNVsU6iWThc";
 const MIN_PLAY_DURATION = 8000; // 8 seconds
-const DEFAULT_ROUNDS = 3; // Default number of rounds if server doesn't provide a value
+const DEFAULT_ROUNDS = 10; // Default number of rounds if server doesn't provide a value
 const MAX_SYNC_HISTORY = 10; // Number of trace IDs to keep track of
 
 //const analytics = getAnalytics(app);
