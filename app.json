@@ -42,7 +42,15 @@
       "expo-router",
       "expo-font",
       "@react-native-firebase/app",
-      "react-native-reanimated/plugin"
+      "@react-native-firebase/database",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static"
+          }
+        }
+      ]
     ],
     "extra": {
       "router": {
