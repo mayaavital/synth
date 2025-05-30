@@ -19,7 +19,7 @@ import useSpotifyAuth from "../utils/SpotifyAuthContext";
 import SpotifyConnectButton from "../components/SpotifyConnectButton";
 import AlbumCarousel from "../components/AlbumCarousel";
 import { initializeApp } from "firebase/app";
-import { getDatabase } from "firebase/database";
+import { getDatabase, ref, child, get, set } from "firebase/database";
 
 var {
   GameDataBranches,
@@ -394,23 +394,30 @@ export default function home() {
           <TouchableOpacity
             style={styles.card}
             onPress={async () => {
-              var prevGameRef = db.ref().child(DATABASE_BRANCHES.ANALYTICS).child("previous_game")
+              const dbRef = ref(db);
+              const prevGameRef = child(dbRef, `${DATABASE_BRANCHES.ANALYTICS}/previous_game`);
 
-              prevGameRef.once("value", async (snapshot) => {
+              try {
+                const snapshot = await get(prevGameRef);
                 if (snapshot.exists()) {
                   const gameData = snapshot.val();
-
                   console.log("Previous game data:", gameData);
 
-                  prevGameRef.set({
+                  // Update the data
+                  await set(prevGameRef, {
                     data: gameData.data + 1
-                  })
+                  });
                 } else {
                   console.log("No previous game data found.");
+                  // Initialize with default value if it doesn't exist
+                  await set(prevGameRef, {
+                    data: 1
+                  });
                 }
-
+              } catch (error) {
+                console.error("Error accessing previous game data:", error);
               }
-              );
+
               router.push("/previous-games");
             }}
           >
