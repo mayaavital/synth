@@ -419,6 +419,7 @@ export default function home() {
                 } else {
                   console.log("No previous game data found.");
                 }
+                
               }
               );
               router.push("/previous-games");
