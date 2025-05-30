@@ -14,6 +14,38 @@ import {
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useNavigation } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { initializeApp } from "firebase/app";
+import { getDatabase, ref, child, get } from "firebase/database";
+
+
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyCJfNmkM43CH16qnRffvm78lJGK_3wPH9Y",
+  authDomain: "synth-database.firebaseapp.com",
+  databaseURL: "https://synth-database-default-rtdb.firebaseio.com",
+  projectId: "synth-database",
+  storageBucket: "synth-database.firebasestorage.app",
+  messagingSenderId: "681571197393",
+  appId: "1:681571197393:web:21ebf6102f5239372740f0",
+  measurementId: "G-ND9VF6MRB4",
+};
+
+var app = initializeApp(firebaseConfig);
+var db = getDatabase();
+
+
+var {
+  GameDataBranches,
+  UserDataBranches,
+  DATABASE_BRANCHES,
+} = require("../server/database-branches");
+
+
+
+if (!firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
+}
 
 export default function GameDetails() {
   const router = useRouter();
@@ -25,22 +57,22 @@ export default function GameDetails() {
   // Set header options
   useEffect(() => {
     navigation.setOptions({
-        header: (props) => (
-            <View style={styles.header}>
-                <TouchableOpacity
-                    style={styles.menuButton}
-                    onPress={() => navigation.goBack()}
-                >
-                    <Ionicons name="arrow-back" size={28} color="white" />
-                </TouchableOpacity>
-                <View style={styles.headerTitleContainer}>
-                    <Text style={styles.headerTitle}>Game Details</Text>
-                </View>
-                <View style={[styles.placeholder, { width: 44 }]} />
-            </View>
-        ),
+      header: (props) => (
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.menuButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={28} color="white" />
+          </TouchableOpacity>
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerTitle}>Game Details</Text>
+          </View>
+          <View style={[styles.placeholder, { width: 44 }]} />
+        </View>
+      ),
     });
-}, [navigation]);
+  }, [navigation]);
 
   useEffect(() => {
     const fetchGameDetails = async () => {
@@ -238,7 +270,7 @@ export default function GameDetails() {
                   {song.songTitle || song.title || "Unknown Song"}
                 </Text>
                 <Text style={styles.reviewSongArtist}>
-                  {Array.isArray(song.songArtists) 
+                  {Array.isArray(song.songArtists)
                     ? song.songArtists.join(", ")
                     : Array.isArray(song.artists)
                       ? song.artists.join(", ")
@@ -246,12 +278,44 @@ export default function GameDetails() {
                 </Text>
               </View>
               <View style={styles.reviewPlayerInfo}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.spotifyButton}
                   onPress={() => {
+
+                    const dbRef = ref(getDatabase());
+
+                    get(child(dbRef, `${DATABASE_BRANCHES.ANALYTICS}/${"previous_add_song"}`)).then((snapshot) => {
+                    if (snapshot.exists()) {
+                      console.log(snapshot.val());
+                    } else {
+                      console.log("No data available");
+                    }
+                  }).catch((error) => {
+                    console.error(error);
+                  });
+                  /*
+
+                    var prevGameRef = db.ref().child(DATABASE_BRANCHES.ANALYTICS).child("previous_add_song")
+
+                    prevGameRef.once("value", async (snapshot) => {
+                      if (snapshot.exists()) {
+                        const gameData = snapshot.val();
+
+                        console.log("Previous game data:", gameData);
+
+                        prevGameRef.set({
+                          data: gameData.data + 1
+                        })
+                      } else {
+                        console.log("No previous game data found.");
+                      }
+
+                    }
+                    );
                     if (getExternalUrlForSong(song, song.roundNumber)) {
                       Linking.openURL(getExternalUrlForSong(song, song.roundNumber));
                     }
+                      */
                   }}
                 >
                   <Ionicons name="add" size={20} color="white" />

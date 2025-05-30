@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "681571197393",
+    "firebase_url": "https://synth-database-default-rtdb.firebaseio.com",
+    "project_id": "synth-database",
+    "storage_bucket": "synth-database.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:681571197393:android:175232a866463e6c2740f0",
+        "android_client_info": {
+          "package_name": "com.csprout3.synth"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAYaZyiiyJb_c5TvgwcCRbn_qqEd8p-ZWk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

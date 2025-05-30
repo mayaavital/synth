@@ -35,13 +35,20 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1E1E1E"
       },
-      "package": "com.csprout3.synth"
+      "package": "com.csprout3.synth",
+      "googleServicesFile": "./google-services.json"
     },
     "plugins": [
       "expo-router",
       "expo-font",
-      "@react-native-firebase/app",
-      "react-native-reanimated/plugin"
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static"
+          }
+        }
+      ]
     ],
     "extra": {
       "router": {

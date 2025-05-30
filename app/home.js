@@ -18,7 +18,31 @@ import { useEffect, useState } from "react";
 import useSpotifyAuth from "../utils/SpotifyAuthContext";
 import SpotifyConnectButton from "../components/SpotifyConnectButton";
 import AlbumCarousel from "../components/AlbumCarousel";
-import analytics from '@react-native-firebase/analytics';
+import { initializeApp } from "firebase/app";
+import { getDatabase } from "firebase/database";
+
+var {
+  GameDataBranches,
+  UserDataBranches,
+  DATABASE_BRANCHES,
+} = require("../server/database-branches");
+
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyCJfNmkM43CH16qnRffvm78lJGK_3wPH9Y",
+  authDomain: "synth-database.firebaseapp.com",
+  databaseURL: "https://synth-database-default-rtdb.firebaseio.com",
+  projectId: "synth-database",
+  storageBucket: "synth-database.firebasestorage.app",
+  messagingSenderId: "681571197393",
+  appId: "1:681571197393:web:21ebf6102f5239372740f0",
+  measurementId: "G-ND9VF6MRB4",
+};
+
+var app = initializeApp(firebaseConfig);
+var db = getDatabase(app);
+
 //import * as Analytics from "expo-firebase-analytics";
 // Import the functions you need from the SDKs you need
 //  import { initializeApp } from "firebase/app";
@@ -56,24 +80,7 @@ if (Platform.OS === 'web') {
   document.head.appendChild(style);
 }
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyCJfNmkM43CH16qnRffvm78lJGK_3wPH9Y",
-  authDomain: "synth-database.firebaseapp.com",
-  databaseURL: "https://synth-database-default-rtdb.firebaseio.com",
-  projectId: "synth-database",
-  storageBucket: "synth-database.firebasestorage.app",
-  messagingSenderId: "681571197393",
-  appId: "1:681571197393:web:21ebf6102f5239372740f0",
-  measurementId: "G-ND9VF6MRB4",
-};
-// Initialize Firebase
 
-// let app = initializeApp(firebaseConfig);
-// const analytics = getAnalytics(app); // Initialize Firebase Analytics
-
-// Initialize Firebase
 
 export default function home() {
   const navigation = useNavigation();
@@ -387,16 +394,23 @@ export default function home() {
           <TouchableOpacity
             style={styles.card}
             onPress={async () => {
-              console.log("Logging event");
+              var prevGameRef = db.ref().child(DATABASE_BRANCHES.ANALYTICS).child("previous_game")
 
-              try {
-                await analytics().logEvent('previous_game', {
-                })
-                console.log("Event logged successfully");
-              } catch (error) {
-                console.error("Error logging event:", error);
+              prevGameRef.once("value", async (snapshot) => {
+                if (snapshot.exists()) {
+                  const gameData = snapshot.val();
+
+                  console.log("Previous game data:", gameData);
+
+                  prevGameRef.set({
+                    data: gameData.data + 1
+                  })
+                } else {
+                  console.log("No previous game data found.");
+                }
+
               }
-              console.log("Logging event");
+              );
               router.push("/previous-games");
             }}
           >
