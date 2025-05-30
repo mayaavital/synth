@@ -18,9 +18,8 @@ import { useEffect, useState } from "react";
 import useSpotifyAuth from "../utils/SpotifyAuthContext";
 import SpotifyConnectButton from "../components/SpotifyConnectButton";
 import AlbumCarousel from "../components/AlbumCarousel";
-import analytics from '@react-native-firebase/analytics';
-import firebase from '@react-native-firebase/app';
-import database from '@react-native-firebase/database';
+import { initializeApp } from "firebase/app";
+import { getDatabase } from "firebase/database";
 
 var {
   GameDataBranches,
@@ -41,9 +40,8 @@ const firebaseConfig = {
   measurementId: "G-ND9VF6MRB4",
 };
 
-if (!firebase.apps.length) {
-  firebase.initializeApp(firebaseConfig);
-}
+var app = initializeApp(firebaseConfig);
+var db = getDatabase(app);
 
 //import * as Analytics from "expo-firebase-analytics";
 // Import the functions you need from the SDKs you need
@@ -396,7 +394,7 @@ export default function home() {
           <TouchableOpacity
             style={styles.card}
             onPress={async () => {
-              var prevGameRef = database().ref(DATABASE_BRANCHES.ANALYTICS).child("previous_game")
+              var prevGameRef = db.ref(DATABASE_BRANCHES.ANALYTICS).child("previous_game")
 
               prevGameRef.once("value", async (snapshot) => {
                 if (snapshot.exists()) {
