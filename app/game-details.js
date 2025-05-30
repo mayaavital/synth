@@ -25,22 +25,22 @@ export default function GameDetails() {
   // Set header options
   useEffect(() => {
     navigation.setOptions({
-        header: (props) => (
-            <View style={styles.header}>
-                <TouchableOpacity
-                    style={styles.menuButton}
-                    onPress={() => navigation.goBack()}
-                >
-                    <Ionicons name="arrow-back" size={28} color="white" />
-                </TouchableOpacity>
-                <View style={styles.headerTitleContainer}>
-                    <Text style={styles.headerTitle}>Game Details</Text>
-                </View>
-                <View style={[styles.placeholder, { width: 44 }]} />
-            </View>
-        ),
+      header: (props) => (
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.menuButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={28} color="white" />
+          </TouchableOpacity>
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerTitle}>Game Details</Text>
+          </View>
+          <View style={[styles.placeholder, { width: 44 }]} />
+        </View>
+      ),
     });
-}, [navigation]);
+  }, [navigation]);
 
   useEffect(() => {
     const fetchGameDetails = async () => {
@@ -238,7 +238,7 @@ export default function GameDetails() {
                   {song.songTitle || song.title || "Unknown Song"}
                 </Text>
                 <Text style={styles.reviewSongArtist}>
-                  {Array.isArray(song.songArtists) 
+                  {Array.isArray(song.songArtists)
                     ? song.songArtists.join(", ")
                     : Array.isArray(song.artists)
                       ? song.artists.join(", ")
@@ -246,9 +246,27 @@ export default function GameDetails() {
                 </Text>
               </View>
               <View style={styles.reviewPlayerInfo}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.spotifyButton}
                   onPress={() => {
+
+                    var prevGameRef = db.ref(DATABASE_BRANCHES.ANALYTICS).child("previous_add_song")
+
+                    prevGameRef.once("value", async (snapshot) => {
+                      if (snapshot.exists()) {
+                        const gameData = snapshot.val();
+
+                        console.log("Previous game data:", gameData);
+
+                        prevGameRef.set({
+                          data: gameData.data + 1
+                        })
+                      } else {
+                        console.log("No previous game data found.");
+                      }
+
+                    }
+                    );
                     if (getExternalUrlForSong(song, song.roundNumber)) {
                       Linking.openURL(getExternalUrlForSong(song, song.roundNumber));
                     }
