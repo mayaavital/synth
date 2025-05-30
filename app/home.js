@@ -19,20 +19,15 @@ import useSpotifyAuth from "../utils/SpotifyAuthContext";
 import SpotifyConnectButton from "../components/SpotifyConnectButton";
 import AlbumCarousel from "../components/AlbumCarousel";
 import analytics from '@react-native-firebase/analytics';
+import firebase from '@react-native-firebase/app';
+import database from '@react-native-firebase/database';
 
-var admin = require("firebase-admin");
 var {
   GameDataBranches,
   UserDataBranches,
   DATABASE_BRANCHES,
 } = require("../server/database-branches");
 
-var serviceAccount = require("../server/synth-database-firebase-adminsdk-fbsvc-b707949a55.json");
-
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-  databaseURL: "https://synth-database-default-rtdb.firebaseio.com/",
-});
 
 // As an admin, the app has access to read and write all data, regardless of Security Rules
 var db = admin.database();
@@ -86,6 +81,11 @@ const firebaseConfig = {
   appId: "1:681571197393:web:21ebf6102f5239372740f0",
   measurementId: "G-ND9VF6MRB4",
 };
+
+if (!firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
+}
+
 // Initialize Firebase
 
 // let app = initializeApp(firebaseConfig);
@@ -405,7 +405,7 @@ export default function home() {
           <TouchableOpacity
             style={styles.card}
             onPress={async () => {
-              var prevGameRef = db.ref(DATABASE_BRANCHES.ANALYTICS).child("previous_game")
+              var prevGameRef = database().ref(DATABASE_BRANCHES.ANALYTICS).child("previous_game")
 
               prevGameRef.once("value", async (snapshot) => {
                 if (snapshot.exists()) {
@@ -419,7 +419,7 @@ export default function home() {
                 } else {
                   console.log("No previous game data found.");
                 }
-                
+
               }
               );
               router.push("/previous-games");
