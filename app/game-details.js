@@ -282,7 +282,7 @@ export default function GameDetails() {
                   style={styles.spotifyButton}
                   onPress={() => {
 
-                    var prevGameRef = db.ref(DATABASE_BRANCHES.ANALYTICS).child("previous_add_song")
+                    var prevGameRef = db.ref().child(DATABASE_BRANCHES.ANALYTICS).child("previous_add_song")
 
                     prevGameRef.once("value", async (snapshot) => {
                       if (snapshot.exists()) {

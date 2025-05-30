@@ -394,7 +394,7 @@ export default function home() {
           <TouchableOpacity
             style={styles.card}
             onPress={async () => {
-              var prevGameRef = db.ref(DATABASE_BRANCHES.ANALYTICS).child("previous_game")
+              var prevGameRef = db.ref().child(DATABASE_BRANCHES.ANALYTICS).child("previous_game")
 
               prevGameRef.once("value", async (snapshot) => {
                 if (snapshot.exists()) {
