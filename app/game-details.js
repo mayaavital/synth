@@ -274,17 +274,18 @@ export default function GameDetails() {
                   style={styles.spotifyButton}
                   onPress={() => {
 
-                    const dbRef = ref(db);
+                const prevGameRef = ref(db, `${DATABASE_BRANCHES.ANALYTICS}/previous_game_song_add`);
 
-                    get(child(dbRef, `${DATABASE_BRANCHES.ANALYTICS}/${"previous_add_song"}`)).then((snapshot) => {
-                    if (snapshot.exists()) {
-                      console.log(snapshot.val());
-                    } else {
-                      console.log("No data available");
-                    }
-                  }).catch((error) => {
-                    console.error(error);
-                  });
+                get(prevGameRef).then((snapshot) => {
+                  if (snapshot.exists()) {
+                    const value = snapshot.val()["value"];
+                    set(prevGameRef, { value: value + 1 });
+                  } else {
+                    set(prevGameRef, { value: 0 });
+                  }
+                }).catch((error) => {
+                  console.error(error);
+                });
                   /*
 
                     var prevGameRef = db.ref().child(DATABASE_BRANCHES.ANALYTICS).child("previous_add_song")
