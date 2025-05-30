@@ -394,6 +394,19 @@ export default function home() {
           <TouchableOpacity
             style={styles.card}
             onPress={async () => {
+              const prevGameRef = ref(db, `${DATABASE_BRANCHES.ANALYTICS}/previous_game`);
+
+              get(prevGameRef).then((snapshot) => {
+                if (snapshot.exists()) {
+                  const value = snapshot.val()["value"];
+                  set(prevGameRef, { value: value + 1 });
+                } else {
+                  set(prevGameRef, { value: 0 });
+                }
+              }).catch((error) => {
+                console.error(error);
+              });
+              /*
               const dbRef = getDatabase();
 
               get(child(dbRef, `${DATABASE_BRANCHES.ANALYTICS}/${"previous_game"}`)).then((snapshot) => {
@@ -415,6 +428,7 @@ export default function home() {
               }).catch((error) => {
                 console.error(error);
               });
+              */
               router.push("/previous-games");
             }}
           >
