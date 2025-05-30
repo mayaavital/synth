@@ -17,23 +17,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { initializeApp } from "firebase/app";
 import { getDatabase } from "firebase/database";
 
-// web requires dynamic initialization on web prior to using firebase
-if (Platform.OS === 'web') {
-  const firebaseConfig = {
-    // ... config items pasted from firebase console for your web app here
-  };
-
-  initializeApp(firebaseConfig);
-}
-
-var db = getDatabase();
-
-
-var {
-  GameDataBranches,
-  UserDataBranches,
-  DATABASE_BRANCHES,
-} = require("../server/database-branches");
 
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
@@ -47,6 +30,18 @@ const firebaseConfig = {
   appId: "1:681571197393:web:21ebf6102f5239372740f0",
   measurementId: "G-ND9VF6MRB4",
 };
+
+var app = initializeApp(firebaseConfig);
+var db = getDatabase(app);
+
+
+var {
+  GameDataBranches,
+  UserDataBranches,
+  DATABASE_BRANCHES,
+} = require("../server/database-branches");
+
+
 
 if (!firebase.apps.length) {
   firebase.initializeApp(firebaseConfig);
