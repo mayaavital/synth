@@ -23,110 +23,21 @@ const LeaderboardScreen = ({
 
   // Update displayPoints whenever playerPoints or players change
   useEffect(() => {
-    console.log("[TRACK_SYNC] Raw player points in leaderboard:", playerPoints);
-    console.log("[TRACK_SYNC] Raw player data:", players.map(p => p && { id: p.id, username: p.username }));
+    console.log("[LEADERBOARD] Raw player points:", playerPoints);
+    console.log("[LEADERBOARD] Players:", players.map(p => p && { id: p.id, username: p.username }));
 
-    // Check if playerPoints has a special scoresWithUsernames property
-    if (playerPoints && playerPoints.scoresWithUsernames) {
-      console.log(
-        "[TRACK_SYNC] Using scoresWithUsernames directly:",
-        playerPoints.scoresWithUsernames
-      );
-      setDisplayPoints(playerPoints.scoresWithUsernames);
-      return;
-    }
-
-    // Check if playerPoints has playerMappings
-    if (playerPoints && playerPoints.playerMappings) {
-      console.log("[TRACK_SYNC] Using playerMappings to map scores");
-      const newDisplayPoints = {};
-
-      // Map socket IDs to usernames using the provided mapping
-      Object.entries(playerPoints.playerMappings).forEach(
-        ([username, socketId]) => {
-          if (
-            playerPoints.scores &&
-            playerPoints.scores[socketId] !== undefined
-          ) {
-            newDisplayPoints[username] = playerPoints.scores[socketId];
-            console.log(
-              `[TRACK_SYNC] Mapped ${socketId} to ${username} with score ${playerPoints.scores[socketId]}`
-            );
-          }
-        }
-      );
-
-      console.log(
-        "[TRACK_SYNC] Final mapped display points:",
-        newDisplayPoints
-      );
-      setDisplayPoints(newDisplayPoints);
-      return;
-    }
-
-    // Create comprehensive mappings
-    const socketIdToUsername = {};
-    const usernameToSocketId = {};
-
-    // Build mapping from players array
-    players
-      .filter((player) => player !== undefined && player.username)
-      .forEach((player) => {
-        socketIdToUsername[player.id] = player.username;
-        usernameToSocketId[player.username] = player.id;
-        console.log(
-          `[TRACK_SYNC] Player ID mapping: ${player.id} -> ${player.username}`
-        );
-      });
-
-    console.log(
-      "[TRACK_SYNC] Socket ID mapping:",
-      JSON.stringify(socketIdToUsername)
-    );
-
-    // Create display points mapping
+    // Since processPlayerPointsUpdate in game-play.js already converts scores to username-based keys,
+    // we can use playerPoints directly
     const newDisplayPoints = {};
-
-    // Handle different playerPoints structures
-    const scoresObject = playerPoints?.scores || playerPoints || {};
     
-    console.log("[TRACK_SYNC] Processing scores object:", scoresObject);
-
-    // Process each score entry
-    Object.entries(scoresObject).forEach(([key, score]) => {
-      console.log(`[TRACK_SYNC] Processing score: ${key} = ${score}`);
-      
-      // If key is already a username, use it directly
-      if (players.some(p => p.username === key)) {
-        newDisplayPoints[key] = score;
-        console.log(`[TRACK_SYNC] Direct username match: ${key} = ${score}`);
-        return;
-      }
-
-      // Try to map socket ID to username
-      if (socketIdToUsername[key]) {
-        const username = socketIdToUsername[key];
-        newDisplayPoints[username] = score;
-        console.log(`[TRACK_SYNC] Mapped socket ID ${key} to username ${username} with score ${score}`);
-        return;
-      }
-
-      // If we can't map it, keep the original key
-      console.log(`[TRACK_SYNC] Could not map key ${key}, keeping as-is`);
-      newDisplayPoints[key] = score;
-    });
-
     // Ensure all players have a score entry (default to 0)
     players
       .filter(p => p && p.username)
       .forEach((player) => {
-        if (newDisplayPoints[player.username] === undefined) {
-          newDisplayPoints[player.username] = 0;
-          console.log(`[TRACK_SYNC] Added missing score for ${player.username}: 0`);
-        }
+        newDisplayPoints[player.username] = playerPoints[player.username] || 0;
       });
 
-    console.log("[TRACK_SYNC] Final display points:", newDisplayPoints);
+    console.log("[LEADERBOARD] Final display points:", newDisplayPoints);
     setDisplayPoints(newDisplayPoints);
   }, [playerPoints, players]);
 
