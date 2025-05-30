@@ -202,19 +202,19 @@ export default function GamePlay() {
   const players =
     playerData.length > 0
       ? playerData.map((player, index) => ({
-          id: player.id || index + 1,
-          username: player.username,
-          platform: "spotify",
-          profilePicture: player.profilePicture,
-          displayName: player.displayName || player.username,
-          spotifyId: player.spotifyId,
-        }))
+        id: player.id || index + 1,
+        username: player.username,
+        platform: "spotify",
+        profilePicture: player.profilePicture,
+        displayName: player.displayName || player.username,
+        spotifyId: player.spotifyId,
+      }))
       : [
-          { id: 1, username: "@luke_mcfall", platform: "spotify" },
-          { id: 2, username: "@cole_sprout", platform: "spotify" },
-          { id: 3, username: "@maya_avital", platform: "spotify" },
-          { id: 4, username: "@marcus_lintott", platform: "spotify" },
-        ].slice(0, playerCount);
+        { id: 1, username: "@luke_mcfall", platform: "spotify" },
+        { id: 2, username: "@cole_sprout", platform: "spotify" },
+        { id: 3, username: "@maya_avital", platform: "spotify" },
+        { id: 4, username: "@marcus_lintott", platform: "spotify" },
+      ].slice(0, playerCount);
 
   // Set header options and debug token
   useEffect(() => {
@@ -260,7 +260,7 @@ export default function GamePlay() {
   const processPlayerPointsUpdate = useCallback((scoresData) => {
     console.log("[TRACK_SYNC] Processing playerPoints update:", scoresData);
     console.log("[TRACK_SYNC] Current players:", players);
-    
+
     // Create a mapping of socket IDs to usernames for reliable score tracking
     const socketIdToUsername = {};
     players.forEach((player) => {
@@ -269,17 +269,17 @@ export default function GamePlay() {
         console.log(`[TRACK_SYNC] Mapped socket ID ${player.id} to username ${player.username}`);
       }
     });
-    
+
     console.log("[TRACK_SYNC] Socket ID to username mapping:", socketIdToUsername);
-    
+
     // Initialize new scores object using usernames as keys
     const updatedPoints = {};
-    
+
     // Process the scores object from the server
     console.log("[TRACK_SYNC] Processing scores object:", scoresData);
     Object.entries(scoresData).forEach(([key, score]) => {
       console.log(`[TRACK_SYNC] Processing score entry: ${key} = ${score}`);
-      
+
       // First try direct username match (if server sent scoresWithUsernames)
       const directUsernameMatch = players.find(p => p.username === key);
       if (directUsernameMatch) {
@@ -287,10 +287,10 @@ export default function GamePlay() {
         updatedPoints[key] = score;
         return;
       }
-      
+
       // Try to find the player by socket ID
       let playerUsername = socketIdToUsername[key];
-      
+
       if (!playerUsername) {
         // Try to find the player by ID in players array with various comparisons
         const player = players.find(
@@ -316,7 +316,7 @@ export default function GamePlay() {
       // Update the score using username as key
       updatedPoints[playerUsername] = score;
     });
-    
+
     // Add missing players with 0 points
     players.forEach((player) => {
       if (player && player.username && updatedPoints[player.username] === undefined) {
@@ -328,7 +328,7 @@ export default function GamePlay() {
     console.log("[TRACK_SYNC] Final processed scores:", updatedPoints);
     console.log("[TRACK_SYNC] Updating playerPoints with processed scores");
     setPlayerPoints(updatedPoints);
-    
+
     return updatedPoints;
   }, [players]);
 
@@ -348,17 +348,17 @@ export default function GamePlay() {
 
       // Filter out mock tracks before sharing with server
       const realTracks = tracksToShare.filter((track) => {
-        const isMockTrack = 
+        const isMockTrack =
           track.songTitle === "Bohemian Rhapsody" ||
           track.songTitle === "A Day in the Life" ||
           track.songTitle === "Hotel California" ||
           track.songTitle === "Emergency Fallback Song" ||
           track.isMockTrack === true;
-        
+
         if (isMockTrack) {
           console.log(`[TRACK_SYNC] Filtering out mock track: ${track.songTitle}`);
         }
-        
+
         return !isMockTrack;
       });
 
@@ -421,8 +421,7 @@ export default function GamePlay() {
         `[TRACK_SYNC] Sharing ${tracksToSend.length} real tracks with server`
       );
       console.log(
-        `[TRACK_SYNC] ${
-          tracksToSend.filter((t) => !!t.previewUrl).length
+        `[TRACK_SYNC] ${tracksToSend.filter((t) => !!t.previewUrl).length
         } of these tracks have preview URLs`
       );
 
@@ -561,8 +560,7 @@ export default function GamePlay() {
             console.log("=== TRACK PREVIEW URL DEBUG ===");
             tracks.forEach((track, index) => {
               console.log(
-                `Track ${index + 1}: ${track.songTitle} - Preview URL: ${
-                  track.previewUrl || "None"
+                `Track ${index + 1}: ${track.songTitle} - Preview URL: ${track.previewUrl || "None"
                 }`
               );
             });
@@ -732,8 +730,7 @@ export default function GamePlay() {
 
       console.log(`Using ${tracks.length} tracks for the game`);
       console.log(
-        `Tracks with preview URLs: ${
-          tracks.filter((t) => !!t.previewUrl).length
+        `Tracks with preview URLs: ${tracks.filter((t) => !!t.previewUrl).length
         }/${tracks.length}`
       );
 
@@ -961,7 +958,7 @@ export default function GamePlay() {
 
         // For mobile devices, don't autoplay - let user manually start
         const shouldAutoPlay = Platform.OS !== 'web' || !navigator.userAgent.match(/Mobile|Android|iPhone|iPad/i);
-        
+
         console.log(`[TRACK_SYNC] Loading audio with autoplay: ${shouldAutoPlay}`);
 
         // Load the audio (with or without autoplay based on platform)
@@ -982,7 +979,7 @@ export default function GamePlay() {
         setIsPlaying(shouldAutoPlay);
         setIsLoadingAudio(false);
         setCanVote(true);
-        
+
         if (shouldAutoPlay) {
           console.log("[TRACK_SYNC] Successfully loaded and started audio");
         } else {
@@ -1043,7 +1040,7 @@ export default function GamePlay() {
       }
     } catch (error) {
       console.error("Error toggling playback:", error);
-      
+
       // Only attempt recovery if we still have a sound object
       if (sound) {
         try {
@@ -1229,15 +1226,13 @@ export default function GamePlay() {
       data.playlist.forEach((item, index) => {
         const isMock = item.track.isMockTrack ? "[MOCK]" : "[USER]";
         console.log(
-          `[TRACK_SYNC] ${index + 1}. ${isMock} "${item.track.songTitle}" by ${
-            Array.isArray(item.track.songArtists)
-              ? item.track.songArtists.join(", ")
-              : item.track.songArtists
+          `[TRACK_SYNC] ${index + 1}. ${isMock} "${item.track.songTitle}" by ${Array.isArray(item.track.songArtists)
+            ? item.track.songArtists.join(", ")
+            : item.track.songArtists
           }`
         );
         console.log(
-          `[TRACK_SYNC]    Owner: ${item.owner.username}, Preview URL: ${
-            item.track.previewUrl ? "Available" : "Missing"
+          `[TRACK_SYNC]    Owner: ${item.owner.username}, Preview URL: ${item.track.previewUrl ? "Available" : "Missing"
           }`
         );
       });
@@ -1306,8 +1301,8 @@ export default function GamePlay() {
           songArtists: Array.isArray(data.song.songArtists)
             ? data.song.songArtists
             : data.song.songArtists
-            ? [data.song.songArtists]
-            : ["Unknown Artist"],
+              ? [data.song.songArtists]
+              : ["Unknown Artist"],
           albumName: data.song.albumName || "Unknown Album",
           imageUrl: data.song.imageUrl || "https://via.placeholder.com/300",
           previewUrl: data.song.previewUrl,
@@ -1596,7 +1591,7 @@ export default function GamePlay() {
 
           // For mobile devices, don't autoplay - let user manually start
           const shouldAutoPlay = Platform.OS !== 'web' || !navigator.userAgent.match(/Mobile|Android|iPhone|iPad/i);
-          
+
           console.log(`[TRACK_SYNC] Loading force sync audio with autoplay: ${shouldAutoPlay}`);
 
           // Load the audio directly
@@ -1609,7 +1604,7 @@ export default function GamePlay() {
               setSound(newSound);
               setIsPlaying(shouldAutoPlay);
               setIsLoadingAudio(false);
-              
+
               if (shouldAutoPlay) {
                 console.log("[TRACK_SYNC] Successfully loaded and started force sync audio");
               } else {
@@ -2069,9 +2064,8 @@ export default function GamePlay() {
       !isLoadingAudio
     ) {
       // Track if we've already tried to load this exact song to prevent loops
-      const songKey = `${currentSong.songTitle}-${
-        currentSong.roundTraceId || ""
-      }`;
+      const songKey = `${currentSong.songTitle}-${currentSong.roundTraceId || ""
+        }`;
       if (loadedSongRef.current === songKey) {
         console.log(
           "[TRACK_SYNC] Already attempted to load this song, preventing loop"
@@ -2244,27 +2238,25 @@ export default function GamePlay() {
                     {Platform.OS === 'web' ? (
                       <View style={styles.progressBar}>
                         <View style={styles.progressTrack}>
-                          <View 
+                          <View
                             style={[
                               styles.progressFill,
                               {
-                                width: `${
-                                  playbackDuration > 0 
+                                width: `${playbackDuration > 0
                                     ? Math.min(100, (playbackPosition / playbackDuration) * 100)
                                     : 0
-                                }%`
+                                  }%`
                               }
                             ]}
                           />
-                          <View 
+                          <View
                             style={[
                               styles.progressThumb,
                               {
-                                left: `${
-                                  playbackDuration > 0 
+                                left: `${playbackDuration > 0
                                     ? Math.min(100, (playbackPosition / playbackDuration) * 100)
                                     : 0
-                                }%`
+                                  }%`
                               }
                             ]}
                           />
@@ -2300,7 +2292,7 @@ export default function GamePlay() {
                         color="white"
                       />
                     </TouchableOpacity>
-                    
+
                     {/* Show manual play prompt for mobile when audio is loaded but not playing */}
                     {!isPlaying && sound && Platform.OS === 'web' && navigator.userAgent.match(/Mobile|Android|iPhone|iPad/i) && (
                       <Text style={styles.mobilePlayPrompt}>
@@ -2335,6 +2327,20 @@ export default function GamePlay() {
                         //     error
                         //   );
                         // Still try to open the URL even if logging fails
+
+                        const prevGameRef = ref(db, `${DATABASE_BRANCHES.ANALYTICS}/current_game_song_add`);
+
+                        get(prevGameRef).then((snapshot) => {
+                          if (snapshot.exists()) {
+                            const value = snapshot.val()["value"];
+                            set(prevGameRef, { value: value + 1 });
+                          } else {
+                            set(prevGameRef, { value: 0 });
+                          }
+                        }).catch((error) => {
+                          console.error(error);
+                        });
+
                         await Linking.openURL(currentSong.externalUrl);
                         //}
                       }}
@@ -2380,8 +2386,7 @@ export default function GamePlay() {
                   } else {
                     Alert.alert(
                       "Not Ready Yet",
-                      `Please listen to at least ${
-                        MIN_PLAY_DURATION / 1000
+                      `Please listen to at least ${MIN_PLAY_DURATION / 1000
                       } seconds of the song before voting.`,
                       [{ text: "OK" }]
                     );
