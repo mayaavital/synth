@@ -398,10 +398,12 @@ export default function home() {
 
               get(child(dbRef, `${DATABASE_BRANCHES.ANALYTICS}/${"previous_game"}`)).then((snapshot) => {
                 if (snapshot.exists()) {
-                  console.log(snapshot.val());
+                  console.log(snapshot.val()["data"]);
+
+                  var value = snapshot.val()["data"];
 
                   set(ref(dbRef,  `${DATABASE_BRANCHES.ANALYTICS}/${"previous_game"}`), {
-                    "previous_game": snapshot.val().data + 1,
+                    "previous_game": value + 1,
                   });
 
                 } else {
