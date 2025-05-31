@@ -333,6 +333,106 @@ export const formatDeezerTrack = (deezerTrack, isMockData = false) => {
 };
 
 /**
+ * Normalize artist name for better matching
+ * @param {string} artistName - Raw artist name
+ * @returns {string} - Normalized artist name
+ */
+function normalizeArtistName(artistName) {
+  if (!artistName) return '';
+  
+  return artistName
+    .toLowerCase()
+    .trim()
+    // Remove common featuring indicators
+    .replace(/\s+(feat\.?|ft\.?|featuring)\s+.*/i, '')
+    // Normalize ampersands and "and"
+    .replace(/\s+&\s+/g, ' and ')
+    .replace(/\s+\+\s+/g, ' and ')
+    // Remove extra whitespace
+    .replace(/\s+/g, ' ')
+    // Remove common punctuation that might differ
+    .replace(/[.,;:!?'"]/g, '')
+    .trim();
+}
+
+/**
+ * Normalize song title for better matching
+ * @param {string} title - Raw song title
+ * @returns {string} - Normalized title
+ */
+function normalizeSongTitle(title) {
+  if (!title) return '';
+  
+  return title
+    .toLowerCase()
+    .trim()
+    // Remove common version indicators
+    .replace(/\s*\(.*?(remix|edit|version|remaster|live|acoustic|radio|explicit|clean).*?\)/gi, '')
+    .replace(/\s*\[.*?(remix|edit|version|remaster|live|acoustic|radio|explicit|clean).*?\]/gi, '')
+    // Remove extra whitespace
+    .replace(/\s+/g, ' ')
+    // Remove common punctuation that might differ
+    .replace(/[.,;:!?'"]/g, '')
+    .trim();
+}
+
+/**
+ * Compare durations to see if they're reasonably close
+ * @param {number} duration1 - Duration in seconds
+ * @param {number} duration2 - Duration in seconds
+ * @param {number} tolerancePercent - Tolerance percentage (default 15%)
+ * @returns {boolean} - Whether durations are close enough
+ */
+function durationsMatch(duration1, duration2, tolerancePercent = 15) {
+  if (!duration1 || !duration2) return true; // If we don't have duration data, don't filter
+  
+  const longer = Math.max(duration1, duration2);
+  const shorter = Math.min(duration1, duration2);
+  const difference = longer - shorter;
+  const tolerance = longer * (tolerancePercent / 100);
+  
+  return difference <= tolerance;
+}
+
+/**
+ * Calculate similarity score between two strings
+ * @param {string} str1 - First string
+ * @param {string} str2 - Second string
+ * @returns {number} - Similarity score between 0 and 1
+ */
+function calculateSimilarity(str1, str2) {
+  if (!str1 || !str2) return 0;
+  
+  const normalized1 = str1.toLowerCase().trim();
+  const normalized2 = str2.toLowerCase().trim();
+  
+  // Exact match
+  if (normalized1 === normalized2) return 1;
+  
+  // Check if one contains the other
+  if (normalized1.includes(normalized2) || normalized2.includes(normalized1)) {
+    return 0.8;
+  }
+  
+  // Simple character-based similarity (Jaccard similarity on character bigrams)
+  const bigrams1 = new Set();
+  const bigrams2 = new Set();
+  
+  for (let i = 0; i < normalized1.length - 1; i++) {
+    bigrams1.add(normalized1.substring(i, i + 2));
+  }
+  
+  for (let i = 0; i < normalized2.length - 1; i++) {
+    bigrams2.add(normalized2.substring(i, i + 2));
+  }
+  
+  const intersection = new Set([...bigrams1].filter(x => bigrams2.has(x)));
+  const union = new Set([...bigrams1, ...bigrams2]);
+  
+  return union.size > 0 ? intersection.size / union.size : 0;
+}
+
+/**
  * Search for a track on Deezer using Spotify track information
  * @param {Object} spotifyTrack - Spotify track object
  * @returns {Promise<Object|null>} - Formatted Deezer track or null if not found
@@ -342,42 +442,62 @@ export const findDeezerTrackFromSpotify = async (spotifyTrack) => {
     return null;
   }
   
-  // Extract artist name from track
-  const artistName = spotifyTrack.songArtists && spotifyTrack.songArtists.length > 0 
+  // Extract and normalize artist name from track
+  const rawArtistName = spotifyTrack.songArtists && spotifyTrack.songArtists.length > 0 
     ? spotifyTrack.songArtists[0] 
     : '';
+  const normalizedArtistName = normalizeArtistName(rawArtistName);
+  const normalizedSongTitle = normalizeSongTitle(spotifyTrack.songTitle);
+  
+  // Convert Spotify duration from ms to seconds for comparison
+  const spotifyDurationSeconds = spotifyTrack.duration ? Math.round(spotifyTrack.duration / 1000) : null;
+  
+  console.log(`Searching for: "${spotifyTrack.songTitle}" by "${rawArtistName}"`);
+  console.log(`Normalized: "${normalizedSongTitle}" by "${normalizedArtistName}"`);
+  if (spotifyDurationSeconds) {
+    console.log(`Expected duration: ${spotifyDurationSeconds} seconds`);
+  }
   
   // Try multiple search strategies to maximize chances of finding a match
   const searchStrategies = [
     // Strategy 1: Song title + artist (standard)
-    `${spotifyTrack.songTitle} ${artistName}`,
+    `${spotifyTrack.songTitle} ${rawArtistName}`,
     
-    // Strategy 2: Song title only (for when artist names might differ)
+    // Strategy 2: Normalized versions
+    `${normalizedSongTitle} ${normalizedArtistName}`,
+    
+    // Strategy 3: Song title only (for when artist names might differ)
     `${spotifyTrack.songTitle}`,
     
-    // Strategy 3: Use album name if available (helpful for compilations)
+    // Strategy 4: Use album name if available (helpful for compilations)
     ...(spotifyTrack.albumName ? [`${spotifyTrack.songTitle} ${spotifyTrack.albumName}`] : []),
     
-    // Strategy 4: Song title in quotes (exact match)
+    // Strategy 5: Song title in quotes (exact match)
     `"${spotifyTrack.songTitle}"`,
     
-    // Strategy 5: Artist only (as last resort, might find other tracks by same artist)
-    ...(artistName ? [`artist:"${artistName}"`] : [])
+    // Strategy 6: Artist only (as last resort, might find other tracks by same artist)
+    ...(rawArtistName ? [`artist:"${rawArtistName}"`] : [])
   ];
   
   // Try each search strategy in sequence until we find a match
   for (const query of searchStrategies) {
     try {
       console.log(`Searching Deezer with strategy: "${query}"`);
-      const searchResults = await searchDeezerTracks(query, 5);
+      const searchResults = await searchDeezerTracks(query, 8); // Increased limit for better matching
       
       if (searchResults && searchResults.length > 0) {
-        // Find the best match by comparing title similarity
-        const bestMatch = findBestMatch(searchResults, spotifyTrack.songTitle);
+        // Find the best match using improved matching logic
+        const bestMatch = findBestMatchImproved(
+          searchResults, 
+          spotifyTrack.songTitle, 
+          rawArtistName, 
+          spotifyDurationSeconds
+        );
         
         if (bestMatch) {
-          console.log(`Found matching Deezer track: "${bestMatch.title}" by ${bestMatch.artist}`);
-          console.log(`Preview URL available: ${bestMatch.preview ? 'YES' : 'NO'}`);
+          console.log(`✅ Found matching Deezer track: "${bestMatch.title}" by ${bestMatch.artist}`);
+          console.log(`   Duration match: Spotify ${spotifyDurationSeconds}s vs Deezer ${bestMatch.duration}s`);
+          console.log(`   Preview URL available: ${bestMatch.preview ? 'YES' : 'NO'}`);
           
           // Check if this is a mock track by comparing with known mock track titles
           const mockTrackTitles = [
@@ -402,9 +522,95 @@ export const findDeezerTrackFromSpotify = async (spotifyTrack) => {
     }
   }
   
-  console.log(`No Deezer match found for track: "${spotifyTrack.songTitle}"`);
+  console.log(`❌ No Deezer match found for track: "${spotifyTrack.songTitle}"`);
   return null;
 };
+
+/**
+ * Find the best matching track from search results with improved matching logic
+ * @param {Array} searchResults - Search results from Deezer
+ * @param {string} targetTitle - The title to match against
+ * @param {string} targetArtist - The artist to match against
+ * @param {number} targetDuration - The duration in seconds to match against
+ * @returns {Object|null} - Best matching track or null
+ */
+function findBestMatchImproved(searchResults, targetTitle, targetArtist, targetDuration) {
+  if (!searchResults || searchResults.length === 0) return null;
+  
+  const normalizedTargetTitle = normalizeSongTitle(targetTitle);
+  const normalizedTargetArtist = normalizeArtistName(targetArtist);
+  
+  console.log(`Looking for best match among ${searchResults.length} results`);
+  
+  // Score each result
+  const scoredResults = searchResults.map(track => {
+    const normalizedTrackTitle = normalizeSongTitle(track.title);
+    const normalizedTrackArtist = normalizeArtistName(track.artist);
+    
+    // Calculate similarity scores
+    const titleSimilarity = calculateSimilarity(normalizedTargetTitle, normalizedTrackTitle);
+    const artistSimilarity = calculateSimilarity(normalizedTargetArtist, normalizedTrackArtist);
+    
+    // Check duration match
+    const durationMatch = targetDuration && track.duration 
+      ? durationsMatch(targetDuration, track.duration) 
+      : true; // If no duration data, don't penalize
+    
+    // Calculate overall score
+    let score = (titleSimilarity * 0.6) + (artistSimilarity * 0.3);
+    
+    // Bonus points for having a preview URL
+    if (track.preview) {
+      score += 0.1;
+    }
+    
+    // Bonus points for duration match
+    if (durationMatch) {
+      score += 0.1;
+    } else if (targetDuration && track.duration) {
+      // Penalize duration mismatch only if we have both durations
+      score -= 0.2;
+    }
+    
+    // Exact title match gets a big bonus
+    if (normalizedTrackTitle === normalizedTargetTitle) {
+      score += 0.3;
+    }
+    
+    // Exact artist match gets a bonus
+    if (normalizedTrackArtist === normalizedTargetArtist) {
+      score += 0.2;
+    }
+    
+    console.log(`  "${track.title}" by ${track.artist} - Score: ${score.toFixed(3)} (title: ${titleSimilarity.toFixed(2)}, artist: ${artistSimilarity.toFixed(2)}, duration: ${durationMatch ? 'match' : 'mismatch'})`);
+    
+    return {
+      track,
+      score,
+      titleSimilarity,
+      artistSimilarity,
+      durationMatch
+    };
+  });
+  
+  // Sort by score (highest first)
+  scoredResults.sort((a, b) => b.score - a.score);
+  
+  // Return the best match if it meets minimum criteria
+  const bestResult = scoredResults[0];
+  
+  // Minimum thresholds for acceptance
+  const minTitleSimilarity = 0.5;
+  const minOverallScore = 0.4;
+  
+  if (bestResult.score >= minOverallScore && bestResult.titleSimilarity >= minTitleSimilarity) {
+    console.log(`✅ Selected best match: "${bestResult.track.title}" with score ${bestResult.score.toFixed(3)}`);
+    return bestResult.track;
+  } else {
+    console.log(`❌ No result met minimum criteria (best score: ${bestResult.score.toFixed(3)}, title similarity: ${bestResult.titleSimilarity.toFixed(3)})`);
+    return null;
+  }
+}
 
 /**
  * Find the best matching track from search results based on title similarity
@@ -413,39 +619,8 @@ export const findDeezerTrackFromSpotify = async (spotifyTrack) => {
  * @returns {Object|null} - Best matching track or null
  */
 function findBestMatch(searchResults, targetTitle) {
-  if (!searchResults || searchResults.length === 0) return null;
-  
-  // If only one result, use it
-  if (searchResults.length === 1) return searchResults[0];
-  
-  // First, search for exact title match (case insensitive)
-  const exactMatch = searchResults.find(
-    track => track.title.toLowerCase() === targetTitle.toLowerCase()
-  );
-  
-  if (exactMatch) return exactMatch;
-  
-  // Next, find tracks that include the target title
-  const partialMatches = searchResults.filter(
-    track => track.title.toLowerCase().includes(targetTitle.toLowerCase()) ||
-             targetTitle.toLowerCase().includes(track.title.toLowerCase())
-  );
-  
-  if (partialMatches.length > 0) {
-    // If we have partial matches, use the first one with a preview URL
-    const matchWithPreview = partialMatches.find(track => !!track.preview);
-    if (matchWithPreview) return matchWithPreview;
-    
-    // Otherwise use the first partial match
-    return partialMatches[0];
-  }
-  
-  // If no good matches, check if any result has a preview URL
-  const anyWithPreview = searchResults.find(track => !!track.preview);
-  if (anyWithPreview) return anyWithPreview;
-  
-  // Fall back to first result
-  return searchResults[0];
+  // Keep the old function for backward compatibility, but use the improved version
+  return findBestMatchImproved(searchResults, targetTitle, '', null);
 }
 
 /**
