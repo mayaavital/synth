@@ -45,7 +45,15 @@ export default function SoloDiscovery() {
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => router.replace("/")}
+            onPress={() => {
+              // Check if we can go back in the navigation stack
+              if (navigation.canGoBack()) {
+                navigation.goBack();
+              } else {
+                // Fallback to home if no previous screen
+                router.replace("/");
+              }
+            }}
           >
             <Ionicons name="arrow-back" size={28} color="white" />
           </TouchableOpacity>
@@ -58,7 +66,7 @@ export default function SoloDiscovery() {
         </View>
       ),
     });
-  }, [navigation]);
+  }, [navigation, router]);
 
   // Update seed song input
   const updateSeedSong = (index, value) => {
