@@ -393,6 +393,31 @@ export default function home() {
 
           <TouchableOpacity
             style={styles.card}
+            onPress={() => {
+              if (tokenStatus !== "valid") {
+                Alert.alert(
+                  "Spotify Required",
+                  "Please connect to Spotify to use Solo Discovery mode.",
+                  [{ text: "OK" }]
+                );
+                return;
+              }
+              router.push("/solo-discovery");
+            }}
+          >
+            <View style={styles.iconContainer}>
+              <Ionicons name="musical-notes" size={32} color="white" />
+            </View>
+            <View style={styles.textContainer}>
+              <Text style={styles.cardTitle}>Solo Discovery</Text>
+              <Text style={styles.cardSubtitle}>
+                Discover new music based on your top tracks or specific songs you love. Explore albums and artists you haven't heard before.
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.card}
             onPress={async () => {
               const dbRef = ref(db);
               const prevGameRef = child(dbRef, `${DATABASE_BRANCHES.ANALYTICS}/previous_game`);

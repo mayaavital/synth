@@ -305,50 +305,109 @@ export const getSpotifyUserProfile = async (token) => {
   }
 };
 
-// Add this new function to get user's saved albums
+/* Fetches your saved albums from the Spotify API. */
 export const getMySavedAlbums = async (token, limit = 20) => {
   try {
     const url = `https://api.spotify.com/v1/me/albums?limit=${limit}`;
     console.log("Fetching saved albums from:", url);
     
     const res = await fetcher(url, token);
-    console.log("Saved albums API response received");
+    console.log("Saved albums response received");
     
-    // The saved albums API returns a different format - albums are nested inside items
-    const items = res.data?.items;
-    console.log("Albums in response:", items?.length || 0);
+    const albums = res.data?.items?.map(item => ({
+      albumName: item.album?.name,
+      artistName: item.album?.artists?.[0]?.name,
+      imageUrl: item.album?.images?.[0]?.url,
+      externalUrl: item.album?.external_urls?.spotify,
+      albumId: item.album?.id,
+      totalTracks: item.album?.total_tracks,
+      releaseDate: item.album?.release_date,
+    }));
     
-    if (!items || items.length === 0) {
-      console.warn("No saved albums found");
+    console.log(`Formatted ${albums?.length || 0} saved albums`);
+    return albums || [];
+  } catch (e) {
+    console.error("Error in getMySavedAlbums:", e);
+    
+    if (e.response?.status === 401) {
+      throw e;
+    }
+    
+    return [];
+  }
+};
+
+/* Fetches recommendations from Spotify based on seed tracks */
+export const getSpotifyRecommendations = async (token, seedTracks, options = {}) => {
+  try {
+    // Validate inputs
+    if (!seedTracks || seedTracks.length === 0) {
+      throw new Error("At least one seed track is required");
+    }
+    
+    if (seedTracks.length > 5) {
+      console.warn("Spotify allows max 5 seed tracks, using first 5");
+      seedTracks = seedTracks.slice(0, 5);
+    }
+    
+    // Build the URL with seed tracks
+    const baseUrl = "https://api.spotify.com/v1/recommendations";
+    const params = new URLSearchParams();
+    
+    // Add seed tracks
+    params.append("seed_tracks", seedTracks.join(","));
+    
+    // Add limit (default to 10, max 100)
+    const limit = Math.min(options.limit || 10, 100);
+    params.append("limit", limit.toString());
+    
+    // Add optional audio feature filters
+    const audioFeatures = [
+      'target_energy', 'min_energy', 'max_energy',
+      'target_valence', 'min_valence', 'max_valence',
+      'target_danceability', 'min_danceability', 'max_danceability',
+      'target_acousticness', 'min_acousticness', 'max_acousticness',
+      'target_tempo', 'min_tempo', 'max_tempo',
+      'target_popularity', 'min_popularity', 'max_popularity',
+      'target_instrumentalness', 'min_instrumentalness', 'max_instrumentalness',
+      'target_liveness', 'min_liveness', 'max_liveness',
+      'target_speechiness', 'min_speechiness', 'max_speechiness'
+    ];
+    
+    audioFeatures.forEach(feature => {
+      if (options[feature] !== undefined) {
+        params.append(feature, options[feature].toString());
+      }
+    });
+    
+    const url = `${baseUrl}?${params.toString()}`;
+    console.log("Fetching recommendations from:", url);
+    console.log("Seed tracks:", seedTracks);
+    
+    const res = await fetcher(url, token);
+    console.log("Recommendations response received");
+    
+    const tracks = res.data?.tracks;
+    if (!tracks || tracks.length === 0) {
+      console.warn("No recommendations found");
       return [];
     }
     
-    // Extract album info and return formatted data
-    const albums = items.map(item => {
-      const album = item.album;
-      return {
-        id: album.id,
-        name: album.name,
-        artists: album.artists?.map(artist => artist.name) || [],
-        imageUrl: album.images && album.images.length > 0 ? album.images[0].url : null,
-        releaseDate: album.release_date,
-        totalTracks: album.total_tracks,
-        externalUrl: album.external_urls?.spotify,
-        uri: album.uri,
-        albumType: album.album_type
-      };
-    });
+    console.log(`Received ${tracks.length} recommendations`);
     
-    console.log("Formatted albums data:", albums.length, "albums");
-    return albums;
+    // Format the recommendations using the existing formatter
+    const formattedTracks = formatter(tracks);
+    
+    console.log(`Formatted ${formattedTracks.length} recommendation tracks`);
+    return formattedTracks;
+    
   } catch (e) {
-    console.error("Error fetching saved albums:", e);
+    console.error("Error in getSpotifyRecommendations:", e);
     
-    // Don't show alert directly, let the caller handle the error
     if (e.response?.status === 401) {
-      throw e; // Allow 401 errors to bubble up for token refresh handling
+      throw e;
     }
     
-    return null;
+    return [];
   }
 };
