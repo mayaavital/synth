@@ -20,6 +20,7 @@ import SpotifyConnectButton from "../components/SpotifyConnectButton";
 import AlbumCarousel from "../components/AlbumCarousel";
 import { initializeApp } from "firebase/app";
 import { getDatabase, ref, child, get, set } from "firebase/database";
+import { getAnalytics, logEvent } from "firebase/analytics";
 
 var {
   GameDataBranches,
