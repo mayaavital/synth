@@ -103,7 +103,7 @@ export default function home() {
     console.log("token from hook:", !!token);
     console.log("token length:", token ? token.length : 0);
     console.log("isTokenValid():", isTokenValid());
-    
+
     // Check AsyncStorage directly from home screen
     try {
       const AsyncStorage = require('@react-native-async-storage/async-storage').default;
@@ -118,7 +118,7 @@ export default function home() {
       console.error("Error checking AsyncStorage from home:", error);
     }
     console.log("=== END HOME SCREEN TOKEN DEBUG ===");
-    
+
     if (!token) {
       setTokenStatus("none");
       return;
@@ -249,7 +249,7 @@ export default function home() {
             onPress={() => {
               console.log("Menu button pressed!"); // Debug log
               console.log("Token status:", !!token); // Debug log
-              
+
               if (token) {
                 console.log("Showing sign out alert"); // Debug log
                 Alert.alert(
@@ -303,7 +303,7 @@ export default function home() {
 
   return (
     <SafeAreaView style={styles.safeAreaContainer}>
-      <ScrollView 
+      <ScrollView
         style={styles.container}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -321,8 +321,8 @@ export default function home() {
                     tokenStatus === "valid"
                       ? styles.statusConnected
                       : tokenStatus === "expired"
-                      ? styles.statusWarning
-                      : styles.statusDisconnected,
+                        ? styles.statusWarning
+                        : styles.statusDisconnected,
                   ]}
                 />
                 <Text style={styles.spotifyStatusText}>
@@ -419,30 +419,41 @@ export default function home() {
           <TouchableOpacity
             style={styles.card}
             onPress={async () => {
-              const dbRef = ref(db);
-              const prevGameRef = child(dbRef, `${DATABASE_BRANCHES.ANALYTICS}/previous_game`);
+              const prevGameRef = ref(db, `${DATABASE_BRANCHES.ANALYTICS}/previous_game`);
 
-              try {
-                const snapshot = await get(prevGameRef);
+              get(prevGameRef).then((snapshot) => {
                 if (snapshot.exists()) {
-                  const gameData = snapshot.val();
-                  console.log("Previous game data:", gameData);
-
-                  // Update the data
-                  await set(prevGameRef, {
-                    data: gameData.data + 1
-                  });
+                  const value = snapshot.val()["value"];
+                  set(prevGameRef, { value: value + 1 });
                 } else {
-                  console.log("No previous game data found.");
-                  // Initialize with default value if it doesn't exist
-                  await set(prevGameRef, {
-                    data: 1
+                  set(prevGameRef, { value: 0 });
+                }
+              }).catch((error) => {
+                console.error(error);
+              });
+              /*
+              const dbRef = getDatabase();
+
+              get(child(dbRef, `${DATABASE_BRANCHES.ANALYTICS}/${"previous_game"}`)).then((snapshot) => {
+                if (snapshot.exists()) {
+                  console.log(snapshot.val()["value"]);
+
+                  var value = snapshot.val()["value"];
+
+                  set(ref(dbRef,  `${DATABASE_BRANCHES.ANALYTICS}/${"previous_game"}`), {
+                    "value": value + 1,
+                  });
+
+                } else {
+                  console.log("No data available");
+                  set(ref(dbRef,  `${DATABASE_BRANCHES.ANALYTICS}/${"previous_game"}`), {
+                    "value": 0,
                   });
                 }
-              } catch (error) {
-                console.error("Error accessing previous game data:", error);
-              }
-
+              }).catch((error) => {
+                console.error(error);
+              });
+              */
               router.push("/previous-games");
             }}
           >
@@ -615,7 +626,7 @@ const styles = StyleSheet.create({
     // borderWidth: 1,
     // borderColor: "#8E44AD",
     shadowColor: "#542866", // light purple
-    shadowOffset: { width: 2, height: 2},
+    shadowOffset: { width: 2, height: 2 },
     shadowOpacity: 1,
     shadowRadius: 2,
   },
