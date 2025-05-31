@@ -17,6 +17,30 @@ import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
 import { useSpotifyAuth } from "../utils";
 import { enrichTracksWithDeezerPreviews } from "../utils/deezerApi";
+// Firebase imports for analytics
+import { initializeApp } from "firebase/app";
+import { getDatabase, ref, get, set } from "firebase/database";
+
+var {
+  GameDataBranches,
+  UserDataBranches,
+  DATABASE_BRANCHES,
+} = require("../server/database-branches");
+
+// Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyCJfNmkM43CH16qnRffvm78lJGK_3wPH9Y",
+  authDomain: "synth-database.firebaseapp.com",
+  databaseURL: "https://synth-database-default-rtdb.firebaseio.com",
+  projectId: "synth-database",
+  storageBucket: "synth-database.firebasestorage.app",
+  messagingSenderId: "681571197393",
+  appId: "1:681571197393:web:21ebf6102f5239372740f0",
+  measurementId: "G-ND9VF6MRB4",
+};
+
+var app = initializeApp(firebaseConfig);
+var db = getDatabase(app);
 
 export default function SoloDiscovery() {
   const navigation = useNavigation();
@@ -46,6 +70,32 @@ export default function SoloDiscovery() {
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => {
+              // Firebase Analytics: Track Solo Discovery exits
+              const exitRef = ref(db, `${DATABASE_BRANCHES.ANALYTICS}/solo_discovery_exits`);
+              get(exitRef).then((snapshot) => {
+                if (snapshot.exists()) {
+                  const currentData = snapshot.val();
+                  const totalExits = currentData.total || 0;
+                  const exitFromSetup = currentData.exit_from_setup || 0;
+                  const exitFromGame = currentData.exit_from_game || 0;
+                  
+                  set(exitRef, { 
+                    ...currentData,
+                    total: totalExits + 1,
+                    exit_from_setup: !gameStarted ? exitFromSetup + 1 : exitFromSetup,
+                    exit_from_game: gameStarted ? exitFromGame + 1 : exitFromGame
+                  });
+                } else {
+                  set(exitRef, { 
+                    total: 1,
+                    exit_from_setup: !gameStarted ? 1 : 0,
+                    exit_from_game: gameStarted ? 1 : 0
+                  });
+                }
+              }).catch((error) => {
+                console.error("Error tracking Solo Discovery exit:", error);
+              });
+              
               // Check if we can go back in the navigation stack
               if (navigation.canGoBack()) {
                 navigation.goBack();
@@ -645,7 +695,29 @@ export default function SoloDiscovery() {
                   styles.modeOption,
                   discoveryMode === "top_tracks" && styles.modeOptionSelected
                 ]}
-                onPress={() => setDiscoveryMode("top_tracks")}
+                onPress={() => {
+                  setDiscoveryMode("top_tracks");
+                  
+                  // Firebase Analytics: Track discovery mode selection
+                  const modeSelectionRef = ref(db, `${DATABASE_BRANCHES.ANALYTICS}/solo_discovery_mode_selection`);
+                  get(modeSelectionRef).then((snapshot) => {
+                    if (snapshot.exists()) {
+                      const currentData = snapshot.val();
+                      const topTracksCount = currentData.top_tracks || 0;
+                      set(modeSelectionRef, { 
+                        ...currentData,
+                        top_tracks: topTracksCount + 1 
+                      });
+                    } else {
+                      set(modeSelectionRef, { 
+                        top_tracks: 1,
+                        search_based: 0 
+                      });
+                    }
+                  }).catch((error) => {
+                    console.error("Error tracking discovery mode selection:", error);
+                  });
+                }}
               >
                 <View style={styles.modeOptionContent}>
                   <Ionicons 
@@ -672,7 +744,29 @@ export default function SoloDiscovery() {
                   styles.modeOption,
                   discoveryMode === "search_based" && styles.modeOptionSelected
                 ]}
-                onPress={() => setDiscoveryMode("search_based")}
+                onPress={() => {
+                  setDiscoveryMode("search_based");
+                  
+                  // Firebase Analytics: Track discovery mode selection
+                  const modeSelectionRef = ref(db, `${DATABASE_BRANCHES.ANALYTICS}/solo_discovery_mode_selection`);
+                  get(modeSelectionRef).then((snapshot) => {
+                    if (snapshot.exists()) {
+                      const currentData = snapshot.val();
+                      const searchBasedCount = currentData.search_based || 0;
+                      set(modeSelectionRef, { 
+                        ...currentData,
+                        search_based: searchBasedCount + 1 
+                      });
+                    } else {
+                      set(modeSelectionRef, { 
+                        top_tracks: 0,
+                        search_based: 1 
+                      });
+                    }
+                  }).catch((error) => {
+                    console.error("Error tracking discovery mode selection:", error);
+                  });
+                }}
               >
                 <View style={styles.modeOptionContent}>
                   <Ionicons 
@@ -719,7 +813,32 @@ export default function SoloDiscovery() {
                 styles.startButton,
                 isLoading && styles.disabledButton
               ]}
-              onPress={startDiscovery}
+              onPress={() => {
+                // Firebase Analytics: Track discovery start
+                const discoveryStartRef = ref(db, `${DATABASE_BRANCHES.ANALYTICS}/solo_discovery_starts`);
+                get(discoveryStartRef).then((snapshot) => {
+                  if (snapshot.exists()) {
+                    const currentData = snapshot.val();
+                    const totalStarts = currentData.total || 0;
+                    const modeStarts = currentData[discoveryMode] || 0;
+                    set(discoveryStartRef, { 
+                      ...currentData,
+                      total: totalStarts + 1,
+                      [discoveryMode]: modeStarts + 1
+                    });
+                  } else {
+                    set(discoveryStartRef, { 
+                      total: 1,
+                      top_tracks: discoveryMode === "top_tracks" ? 1 : 0,
+                      search_based: discoveryMode === "search_based" ? 1 : 0
+                    });
+                  }
+                }).catch((error) => {
+                  console.error("Error tracking discovery start:", error);
+                });
+                
+                startDiscovery();
+              }}
               disabled={isLoading}
             >
               {isLoading ? (
@@ -797,7 +916,35 @@ export default function SoloDiscovery() {
                       styles.playButton,
                       isLoadingAudio && styles.playButtonDisabled
                     ]}
-                    onPress={togglePlayPause}
+                    onPress={() => {
+                      // Firebase Analytics: Track audio playback interactions
+                      const audioInteractionRef = ref(db, `${DATABASE_BRANCHES.ANALYTICS}/solo_discovery_audio_interactions`);
+                      get(audioInteractionRef).then((snapshot) => {
+                        if (snapshot.exists()) {
+                          const currentData = snapshot.val();
+                          const totalInteractions = currentData.total || 0;
+                          const playActions = currentData.play_actions || 0;
+                          const pauseActions = currentData.pause_actions || 0;
+                          
+                          set(audioInteractionRef, { 
+                            ...currentData,
+                            total: totalInteractions + 1,
+                            play_actions: isPlaying ? playActions : playActions + 1,
+                            pause_actions: isPlaying ? pauseActions + 1 : pauseActions
+                          });
+                        } else {
+                          set(audioInteractionRef, { 
+                            total: 1,
+                            play_actions: isPlaying ? 0 : 1,
+                            pause_actions: isPlaying ? 1 : 0
+                          });
+                        }
+                      }).catch((error) => {
+                        console.error("Error tracking audio interaction:", error);
+                      });
+                      
+                      togglePlayPause();
+                    }}
                     disabled={isLoadingAudio}
                   >
                     {isLoadingAudio ? (
@@ -842,7 +989,32 @@ export default function SoloDiscovery() {
 
                 <TouchableOpacity
                   style={styles.spotifyButton}
-                  onPress={() => openInSpotify(currentTrack)}
+                  onPress={() => {
+                    // Firebase Analytics: Track Spotify link clicks
+                    const spotifyClickRef = ref(db, `${DATABASE_BRANCHES.ANALYTICS}/solo_discovery_spotify_clicks`);
+                    get(spotifyClickRef).then((snapshot) => {
+                      if (snapshot.exists()) {
+                        const currentData = snapshot.val();
+                        const totalClicks = currentData.total || 0;
+                        set(spotifyClickRef, { 
+                          ...currentData,
+                          total: totalClicks + 1,
+                          last_clicked_track: currentTrack?.songTitle || "Unknown",
+                          last_clicked_artist: currentTrack?.songArtists?.join(", ") || "Unknown"
+                        });
+                      } else {
+                        set(spotifyClickRef, { 
+                          total: 1,
+                          last_clicked_track: currentTrack?.songTitle || "Unknown",
+                          last_clicked_artist: currentTrack?.songArtists?.join(", ") || "Unknown"
+                        });
+                      }
+                    }).catch((error) => {
+                      console.error("Error tracking Spotify click:", error);
+                    });
+                    
+                    openInSpotify(currentTrack);
+                  }}
                 >
                   <Image
                     source={require("../assets/white-spotify-logo.png")}
@@ -859,7 +1031,35 @@ export default function SoloDiscovery() {
                     styles.navButton,
                     currentTrackIndex === 0 && styles.disabledNavButton
                   ]}
-                  onPress={previousTrack}
+                  onPress={() => {
+                    if (currentTrackIndex > 0) {
+                      // Firebase Analytics: Track navigation interactions
+                      const navigationRef = ref(db, `${DATABASE_BRANCHES.ANALYTICS}/solo_discovery_navigation`);
+                      get(navigationRef).then((snapshot) => {
+                        if (snapshot.exists()) {
+                          const currentData = snapshot.val();
+                          const totalNavigation = currentData.total || 0;
+                          const previousClicks = currentData.previous_clicks || 0;
+                          set(navigationRef, { 
+                            ...currentData,
+                            total: totalNavigation + 1,
+                            previous_clicks: previousClicks + 1
+                          });
+                        } else {
+                          set(navigationRef, { 
+                            total: 1,
+                            previous_clicks: 1,
+                            next_clicks: 0,
+                            finish_clicks: 0
+                          });
+                        }
+                      }).catch((error) => {
+                        console.error("Error tracking navigation:", error);
+                      });
+                      
+                      previousTrack();
+                    }
+                  }}
                   disabled={currentTrackIndex === 0}
                 >
                   <Ionicons 
@@ -877,7 +1077,38 @@ export default function SoloDiscovery() {
 
                 <TouchableOpacity
                   style={styles.navButton}
-                  onPress={nextTrack}
+                  onPress={() => {
+                    // Firebase Analytics: Track navigation interactions
+                    const navigationRef = ref(db, `${DATABASE_BRANCHES.ANALYTICS}/solo_discovery_navigation`);
+                    const isFinishing = currentTrackIndex === recommendations.length - 1;
+                    
+                    get(navigationRef).then((snapshot) => {
+                      if (snapshot.exists()) {
+                        const currentData = snapshot.val();
+                        const totalNavigation = currentData.total || 0;
+                        const nextClicks = currentData.next_clicks || 0;
+                        const finishClicks = currentData.finish_clicks || 0;
+                        
+                        set(navigationRef, { 
+                          ...currentData,
+                          total: totalNavigation + 1,
+                          next_clicks: isFinishing ? nextClicks : nextClicks + 1,
+                          finish_clicks: isFinishing ? finishClicks + 1 : finishClicks
+                        });
+                      } else {
+                        set(navigationRef, { 
+                          total: 1,
+                          previous_clicks: 0,
+                          next_clicks: isFinishing ? 0 : 1,
+                          finish_clicks: isFinishing ? 1 : 0
+                        });
+                      }
+                    }).catch((error) => {
+                      console.error("Error tracking navigation:", error);
+                    });
+                    
+                    nextTrack();
+                  }}
                 >
                   <Text style={styles.navButtonText}>
                     {currentTrackIndex === recommendations.length - 1 ? "Finish" : "Next"}
