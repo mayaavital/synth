@@ -18,8 +18,8 @@ import { Audio } from "expo-av";
 import { useSpotifyAuth } from "../utils";
 import { enrichTracksWithDeezerPreviews } from "../utils/deezerApi";
 // Firebase imports for analytics
-import { initializeApp } from "firebase/app";
 import { getDatabase, ref, get, set } from "firebase/database";
+import { db } from "../utils/firebaseConfig";
 
 var {
   GameDataBranches,
@@ -27,20 +27,9 @@ var {
   DATABASE_BRANCHES,
 } = require("../server/database-branches");
 
-// Firebase configuration
-const firebaseConfig = {
-  apiKey: "AIzaSyCJfNmkM43CH16qnRffvm78lJGK_3wPH9Y",
-  authDomain: "synth-database.firebaseapp.com",
-  databaseURL: "https://synth-database-default-rtdb.firebaseio.com",
-  projectId: "synth-database",
-  storageBucket: "synth-database.firebasestorage.app",
-  messagingSenderId: "681571197393",
-  appId: "1:681571197393:web:21ebf6102f5239372740f0",
-  measurementId: "G-ND9VF6MRB4",
-};
-
-var app = initializeApp(firebaseConfig);
-var db = getDatabase(app);
+// Use the centralized Firebase database instance
+// var app = initializeApp(firebaseConfig);
+// var db = getDatabase(app);
 
 export default function SoloDiscovery() {
   const navigation = useNavigation();

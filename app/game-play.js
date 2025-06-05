@@ -38,11 +38,10 @@ import ResultsStage from "./ResultsStage";
 // Import useWebSocket for multiplayer functionality
 import { useWebSocket, EVENTS } from "../utils/useWebSocket";
 import LeaderboardScreen from "./LeaderboardScreen";
-// import * as Analytics from "expo-firebase-analytics";
-// import { initializeApp } from "firebase/app";
+// Firebase imports - using centralized configuration
 import { getAnalytics, logEvent } from "firebase/analytics";
-import { initializeApp } from "firebase/app";
 import { getDatabase, ref, child, get } from "firebase/database";
+import { db, analytics } from "../utils/firebaseConfig";
 
 const ALBUM_ID = "2noRn2Aes5aoNVsU6iWThc";
 const MIN_PLAY_DURATION = 8000; // 8 seconds

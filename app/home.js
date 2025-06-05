@@ -18,9 +18,9 @@ import { useEffect, useState } from "react";
 import useSpotifyAuth from "../utils/SpotifyAuthContext";
 import SpotifyConnectButton from "../components/SpotifyConnectButton";
 import AlbumCarousel from "../components/AlbumCarousel";
-import { initializeApp } from "firebase/app";
 import { getDatabase, ref, child, get, set } from "firebase/database";
 import { getAnalytics, logEvent } from "firebase/analytics";
+import { db, analytics } from "../utils/firebaseConfig";
 
 var {
   GameDataBranches,
@@ -28,28 +28,9 @@ var {
   DATABASE_BRANCHES,
 } = require("../server/database-branches");
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyCJfNmkM43CH16qnRffvm78lJGK_3wPH9Y",
-  authDomain: "synth-database.firebaseapp.com",
-  databaseURL: "https://synth-database-default-rtdb.firebaseio.com",
-  projectId: "synth-database",
-  storageBucket: "synth-database.firebasestorage.app",
-  messagingSenderId: "681571197393",
-  appId: "1:681571197393:web:21ebf6102f5239372740f0",
-  measurementId: "G-ND9VF6MRB4",
-};
-
-var app = initializeApp(firebaseConfig);
-var db = getDatabase(app);
-
-//import * as Analytics from "expo-firebase-analytics";
-// Import the functions you need from the SDKs you need
-//  import { initializeApp } from "firebase/app";
-//  import { getAnalytics, logEvent } from "firebase/analytics";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
+// Use the centralized Firebase instances
+// var app = initializeApp(firebaseConfig);
+// var db = getDatabase(app);
 
 const windowWidth = Dimensions.get("window").width;
 const windowHeight = Dimensions.get("window").height;
@@ -80,8 +61,6 @@ if (Platform.OS === 'web') {
   `;
   document.head.appendChild(style);
 }
-
-
 
 export default function home() {
   const navigation = useNavigation();
